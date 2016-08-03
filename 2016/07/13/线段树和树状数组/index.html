@@ -68,7 +68,7 @@
 <link href="/css/main.css?v=5.0.1" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="Hexo, NexT" />
+  <meta name="keywords" content="ACM,线段树,树状数组," />
 
 
 
@@ -84,12 +84,16 @@
 
 
 
-<meta property="og:type" content="website">
-<meta property="og:title" content="Calvin's Marbles">
-<meta property="og:url" content="http://www.calvinneo.com/archives/2016/01/index.html">
+<meta name="description" content="理解线段树和树状数组">
+<meta property="og:type" content="article">
+<meta property="og:title" content="线段树和树状数组">
+<meta property="og:url" content="http://www.calvinneo.com/2016/07/13/线段树和树状数组/index.html">
 <meta property="og:site_name" content="Calvin's Marbles">
+<meta property="og:description" content="理解线段树和树状数组">
+<meta property="og:updated_time" content="2016-08-03T16:07:41.000Z">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Calvin's Marbles">
+<meta name="twitter:title" content="线段树和树状数组">
+<meta name="twitter:description" content="理解线段树和树状数组">
 
 
 
@@ -107,7 +111,7 @@
   };
 </script>
 
-  <title> 归档 | Calvin's Marbles </title>
+  <title> 线段树和树状数组 | Calvin's Marbles </title>
 </head>
 
 <body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
@@ -128,7 +132,7 @@
     
   
 
-  <div class="container one-collumn sidebar-position-left  page-archive  ">
+  <div class="container one-collumn sidebar-position-left page-post-detail ">
     <div class="headband"></div>
 
     <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
@@ -236,73 +240,197 @@
           <div id="content" class="content">
             
 
-  <section id="posts" class="posts-collapse">
-    <span class="archive-move-on"></span>
-
-    <span class="archive-page-counter">
-      
-      
-      
-        
-      
-      嗯..! 目前共计 16 篇日志。 继续努力。
-    </span>
-
+  <div id="posts" class="posts-expand">
     
 
-      
+  
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                线段树和树状数组
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            <span class="post-meta-item-icon">
+              <i class="fa fa-calendar-o"></i>
+            </span>
+            <span class="post-meta-item-text">发表于</span>
+            <time itemprop="dateCreated" datetime="2016-07-13T18:37:05+08:00" content="2016-07-13">
+              2016-07-13
+            </time>
+          </span>
+
+          
+
+          
+            
+              <span class="post-comments-count">
+                &nbsp; | &nbsp;
+                <a href="/2016/07/13/线段树和树状数组/#comments" itemprop="discussionUrl">
+                  <span class="post-comments-count ds-thread-count" data-thread-key="2016/07/13/线段树和树状数组/" itemprop="commentsCount"></span>
+                </a>
+              </span>
+            
+          
+
+          
+
+          
+          
+
+          
+        </div>
+      </header>
+    
+
+
+    <div class="post-body" itemprop="articleBody">
+
       
       
 
       
+        <p>理解线段树和树状数组<br><a id="more"></a></p>
+<h1 id="树状数组"><a href="#树状数组" class="headerlink" title="树状数组"></a>树状数组</h1><p>考虑求和A[n]=a[1..n]。首先有O(n)的朴素方法，树状数组则是O(logn)的方法。<br>理解树状数组，可以考虑对于任何一个十进制数，可以表示成按权展开的多项式，假设以2为底，则自然数x可以表示成：</p>
+<blockquote>
+<p>x = a<sub>0</sub>2<sup>0</sup> + a<sub>1</sub>2<sup>1</sup> + … + a<sub>n</sub>2<sup>n</sup>，</p>
+</blockquote>
+<p>其中a<sub>i</sub>可以取0或1。这样计算的复杂度为O(logn)。<br>类似地，计算上面的和A[n]，可以把n做上述的展开。例如计算A[13]，可以得到</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">十进制</th>
+<th style="text-align:center">二进制</th>
+<th style="text-align:center">区域和</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">13</td>
+<td style="text-align:center">1101B</td>
+<td style="text-align:center">a[13]</td>
+</tr>
+<tr>
+<td style="text-align:left">12</td>
+<td style="text-align:center">1100B</td>
+<td style="text-align:center">a[9..12]</td>
+</tr>
+<tr>
+<td style="text-align:left">8</td>
+<td style="text-align:center">1000B</td>
+<td style="text-align:center">a[1..8]</td>
+</tr>
+</tbody>
+</table>
+<p>下面来计算这些区域和，定义T[i]为区间a[lowbit(i)+1 .. i]共lowbit(i) = 2<sup>k</sup>个元素的和（其中k表示i二进制表示最后的0的个数，因此i最多能被2<sup>k</sup>整除）。</p>
+<h1 id="线段树"><a href="#线段树" class="headerlink" title="线段树"></a>线段树</h1><ol>
+<li><p>线段树的大小MAXN应当至少为4N<br>假设对[1..N]建立线段树，其中<code>2^n &lt;= N &lt;= 2^(n+1)</code>。容易得到树的底层至少需要<code>2^(n+1)</code>个节点，因此整个树需要<code>2^(n+2)</code>个节点，也就是必须满足<code>MAXN &gt;= 2^(n+2)</code> 。把<code>n</code>用<code>N</code>代替，得到<code>4N &gt;= 2^(n+2)</code>，显然对于任意<code>MAXN &gt;= 4N</code>，有<code>MAXN &gt;= 2^(n+2)</code>。</p>
+</li>
+<li><p>线段树查询</p>
+<ol>
+<li>为什么需要fr，to，l，r四个变量？<br> 线段树的查询开销在O(lgn)。假设我们要求[fr..to]之间的值，我们实际上是找寻长度为2^i的若干子树，它们能够</li>
+<li>开闭区间的问题<br> 首先要注意优先级，<code>&lt;&lt;</code>的优先级低于<code>+</code>，所以应当写成<code>(root &lt;&lt; 1) + 1</code>这样。</li>
+<li>Modify操作只需要更新一侧</li>
+</ol>
+</li>
+</ol>
+
+      
+    </div>
+
+    <div>
+      
         
-        <div class="collection-title">
-          <h2 class="archive-year motion-element" id="archive-year-2016">2016</h2>
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/ACM/" rel="tag">#ACM</a>
+          
+            <a href="/tags/线段树/" rel="tag">#线段树</a>
+          
+            <a href="/tags/树状数组/" rel="tag">#树状数组</a>
+          
         </div>
       
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2016/07/06/PAT/" rel="next" title="PAT解题报告">
+                <i class="fa fa-chevron-left"></i> PAT解题报告
+              </a>
+            
+          </div>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2016/07/22/语法分析/" rel="prev" title="语法分析">
+                语法分析 <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
       
 
       
-
-  <article class="post post-type-normal" itemscope itemtype="http://schema.org/Article">
-    <header class="post-header">
-
-      <h1 class="post-title">
-        
-            <a class="post-title-link" href="/2016/01/16/C-GCC-VS-pow/" itemprop="url">
-              
-                <span itemprop="name">GCC和VS在pow函数实现和类型转换上异同点的辨析</span>
-              
-            </a>
-        
-      </h1>
-
-      <div class="post-meta">
-        <time class="post-time" itemprop="dateCreated"
-              datetime="2016-01-16T19:20:33+08:00"
-              content="2016-01-16" >
-          01-16
-        </time>
-      </div>
-
-    </header>
+      
+    </footer>
   </article>
 
 
 
-    
-
-  </section>
-
-  
-
+    <div class="post-spread">
+      
+    </div>
+  </div>
 
 
           </div>
           
 
+  <p>热评文章</p>
+  <div class="ds-top-threads" data-range="weekly" data-num-items="4"></div>
+
 
           
+  <div class="comments" id="comments">
+    
+      <div class="ds-thread" data-thread-key="2016/07/13/线段树和树状数组/"
+           data-title="线段树和树状数组" data-url="http://www.calvinneo.com/2016/07/13/线段树和树状数组/">
+      </div>
+    
+  </div>
+
 
         </div>
         
@@ -322,8 +450,17 @@
       
 
       
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
 
-      <section class="site-overview sidebar-panel  sidebar-panel-active ">
+      <section class="site-overview sidebar-panel ">
         <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
           <img class="site-author-image" itemprop="image"
                src="/favicon.jpg"
@@ -395,6 +532,17 @@
 
       </section>
 
+      
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+            
+              
+            
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#树状数组"><span class="nav-number">1.</span> <span class="nav-text">树状数组</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#线段树"><span class="nav-number">2.</span> <span class="nav-text">线段树</span></a></li></ol></div>
+            
+          </div>
+        </section>
       
 
     </div>
@@ -498,11 +646,9 @@
   
 
   
-  
-    <script type="text/javascript" id="motion.page.archive">
-      $('.archive-year').velocity('transition.slideLeftIn');
-    </script>
-  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.0.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.0.1"></script>
+
 
 
   
