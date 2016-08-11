@@ -68,7 +68,7 @@
 <link href="/css/main.css?v=5.0.1" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="Hexo, NexT" />
+  <meta name="keywords" content="C++,智能指针," />
 
 
 
@@ -84,12 +84,16 @@
 
 
 
-<meta property="og:type" content="website">
-<meta property="og:title" content="Calvin's Marbles">
-<meta property="og:url" content="http://www.calvinneo.com/tags/VS/index.html">
+<meta name="description" content="对Effective C++在资源管理部分的内容进行总结。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="C++资源管理">
+<meta property="og:url" content="http://www.calvinneo.com/2016/08/05/cpp资源管理/index.html">
 <meta property="og:site_name" content="Calvin's Marbles">
+<meta property="og:description" content="对Effective C++在资源管理部分的内容进行总结。">
+<meta property="og:updated_time" content="2016-08-10T10:16:49.000Z">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Calvin's Marbles">
+<meta name="twitter:title" content="C++资源管理">
+<meta name="twitter:description" content="对Effective C++在资源管理部分的内容进行总结。">
 
 
 
@@ -107,7 +111,7 @@
   };
 </script>
 
-  <title> 标签: VS | Calvin's Marbles </title>
+  <title> C++资源管理 | Calvin's Marbles </title>
 </head>
 
 <body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
@@ -128,7 +132,7 @@
     
   
 
-  <div class="container one-collumn sidebar-position-left  ">
+  <div class="container one-collumn sidebar-position-left page-post-detail ">
     <div class="headband"></div>
 
     <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
@@ -236,53 +240,158 @@
           <div id="content" class="content">
             
 
-  <div id="posts" class="posts-collapse">
-    <div class="collection-title">
-      <h2 >
-        VS
-        <small>标签</small>
-      </h2>
-    </div>
+  <div id="posts" class="posts-expand">
+    
+
+  
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
 
     
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                C++资源管理
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            <span class="post-meta-item-icon">
+              <i class="fa fa-calendar-o"></i>
+            </span>
+            <span class="post-meta-item-text">发表于</span>
+            <time itemprop="dateCreated" datetime="2016-08-05T09:23:25+08:00" content="2016-08-05">
+              2016-08-05
+            </time>
+          </span>
+
+          
+
+          
+            
+              <span class="post-comments-count">
+                &nbsp; | &nbsp;
+                <a href="/2016/08/05/cpp资源管理/#comments" itemprop="discussionUrl">
+                  <span class="post-comments-count ds-thread-count" data-thread-key="2016/08/05/cpp资源管理/" itemprop="commentsCount"></span>
+                </a>
+              </span>
+            
+          
+
+          
+
+          
+          
+
+          
+        </div>
+      </header>
+    
+
+
+    <div class="post-body" itemprop="articleBody">
+
+      
       
 
-  <article class="post post-type-normal" itemscope itemtype="http://schema.org/Article">
-    <header class="post-header">
+      
+        <p>对Effective C++在资源管理部分的内容进行总结。<br><a id="more"></a></p>
+<h1 id="C-运行时内存"><a href="#C-运行时内存" class="headerlink" title="C++运行时内存"></a>C++运行时内存</h1><p>C++运行时内存主要分为常量区、全局/静态变量区、栈区、堆区和自由存储区。其中前两者存在于程序的整个生命周期，栈中的变量由编译器自动分配和清除，所以称作自动变量。堆区由new调用构造函数初始化，由delete调用析构函数回收。自由存储区由malloc分配一块指定大小的内存，由free释放。</p>
+<h1 id="RAII"><a href="#RAII" class="headerlink" title="RAII"></a>RAII</h1><p>可以看出对于动态分配的内存（堆和自由存储）必须能够在适当时机调用delete/free进行释放，否则会造成泄露，也有可能某处代码在先前已经delete/free了，造成悬空指针undefined behaviour。当然可以建立一张表（称为对象池）登记这些指针，当满足一些条件的时候进行删除的手动管理。不过最好的方法是通过RAII借助编译器管理指针。<br>编译器的自动回收机制包含了栈和对象两种。其中栈能够管理自动对象，但是它只会清除指针本身而非指针指向对象。</p>
+<h1 id="复制"><a href="#复制" class="headerlink" title="复制"></a>复制</h1><p>一般对象之间的复制行为分为4种：</p>
+<ol>
+<li>浅复制：浅复制也是默认复制构造函数的实现，将源对象中的成员复制到新的对象中。因此如果源对象中存在指针，那么实际上源对象和新对象是共享指针指向的对象的，这并不是一个错误的逻辑，但是问题在于新老对象都没有意识到自己和别的对象共享着资源，如果存在析构函数（除非使用手动管理，否则必然要有析构函数用来释放指针指向对象），那么必然会造成悬空指针。</li>
+<li>深复制：需要自定义复制构造函数，在复制行为发生时递归地建立对象成员以及指针指向对象的副本。</li>
+<li>资源控制权转移：资源占用具有排他性</li>
+<li>资源控制权共享：类似于浅复制，但是这种方案解决了资源释放的问题，对于需要共享的资源设置引用计数，当引用计数变为0时销毁对象，而不再通过构造函数。</li>
+</ol>
+<h2 id="深复制"><a href="#深复制" class="headerlink" title="深复制"></a>深复制</h2><p>在深复制中可能存在一个问题，假设有若干个派生类继承基类<code>Derived_i : public Base</code>，现在有一个<code>Base * d</code>，但是不知道具体类型，现在希望对这个基类进行深复制。直接调用基类的复制构造函数<code>Base p = new Base(d)</code>显然是行不通的，一方面C++没有提供虚复制构造函数。唯一的办法是自己定义一个clone函数。<br>对于没有使用继承或派生的类型，当然可以定义三个函数（复制、赋值、析构）进行深复制，假设复制对象obj，可以认为复制了一棵树，树中任何节点（成员）的析构都会导致该节点为树根的子树被删除，所以对于这棵树只能修改树根或叶子，否则会造成内存泄露。</p>
 
-      <h1 class="post-title">
+      
+    </div>
+
+    <div>
+      
         
-            <a class="post-title-link" href="/2016/01/16/C-GCC-VS-pow/" itemprop="url">
-              
-                <span itemprop="name">GCC和VS在pow函数实现和类型转换上异同点的辨析</span>
-              
-            </a>
+      
+    </div>
+
+    <div>
+      
         
-      </h1>
 
-      <div class="post-meta">
-        <time class="post-time" itemprop="dateCreated"
-              datetime="2016-01-16T19:20:33+08:00"
-              content="2016-01-16" >
-          01-16
-        </time>
-      </div>
+      
+    </div>
 
-    </header>
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/C/" rel="tag">#C++</a>
+          
+            <a href="/tags/智能指针/" rel="tag">#智能指针</a>
+          
+        </div>
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2016/07/29/flex和bison使用/" rel="next" title="flex和bison使用">
+                <i class="fa fa-chevron-left"></i> flex和bison使用
+              </a>
+            
+          </div>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
   </article>
 
 
-    
-  </div>
 
-  
+    <div class="post-spread">
+      
+    </div>
+  </div>
 
 
           </div>
           
 
+  <p>热评文章</p>
+  <div class="ds-top-threads" data-range="weekly" data-num-items="4"></div>
+
 
           
+  <div class="comments" id="comments">
+    
+      <div class="ds-thread" data-thread-key="2016/08/05/cpp资源管理/"
+           data-title="C++资源管理" data-url="http://www.calvinneo.com/2016/08/05/cpp资源管理/">
+      </div>
+    
+  </div>
+
 
         </div>
         
@@ -302,8 +411,17 @@
       
 
       
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
 
-      <section class="site-overview sidebar-panel  sidebar-panel-active ">
+      <section class="site-overview sidebar-panel ">
         <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
           <img class="site-author-image" itemprop="image"
                src="/favicon.jpg"
@@ -375,6 +493,17 @@
 
       </section>
 
+      
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+            
+              
+            
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#C-运行时内存"><span class="nav-number">1.</span> <span class="nav-text">C++运行时内存</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#RAII"><span class="nav-number">2.</span> <span class="nav-text">RAII</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#复制"><span class="nav-number">3.</span> <span class="nav-text">复制</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#深复制"><span class="nav-number">3.1.</span> <span class="nav-text">深复制</span></a></li></ol></li></ol></div>
+            
+          </div>
+        </section>
       
 
     </div>
@@ -478,6 +607,10 @@
   
 
   
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.0.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.0.1"></script>
+
+
 
   
 
