@@ -90,7 +90,7 @@
 <meta property="og:url" content="http://www.calvinneo.com/2016/08/21/二分图匹配/index.html">
 <meta property="og:site_name" content="Calvin's Marbles">
 <meta property="og:description" content="总结一下二分图匹配的匈牙利算法">
-<meta property="og:updated_time" content="2016-08-27T13:56:58.000Z">
+<meta property="og:updated_time" content="2016-08-31T10:23:06.000Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="二分图匹配">
 <meta name="twitter:description" content="总结一下二分图匹配的匈牙利算法">
@@ -311,7 +311,7 @@
         <p>总结一下二分图匹配的匈牙利算法<br><a id="more"></a></p>
 <h1 id="定义"><a href="#定义" class="headerlink" title="定义"></a>定义</h1><p>把图的顶点分为不相交集合U和V，不存在连接U或V内部点的边，这样的图成为二分图（bipartite graph）。<br>显然，二分图中不存在奇数条边的环，因为环必须首尾相接的，奇数条边必定会使首和尾分处于U和V中。<br><strong>匹配</strong>是对于边而言的，表示在所有的边中，任意两条边都没有公共顶点。如果一个图中的所有顶点都能够构成匹配，则称这个图存在<strong>完美匹配</strong>，否则这个图只存在<strong>最大匹配</strong>，含有尽可能多的匹配边数。</p>
 <h1 id="匈牙利算法"><a href="#匈牙利算法" class="headerlink" title="匈牙利算法"></a>匈牙利算法</h1><p>匈牙利算法试图优化当前的匹配，得到边数+1的匹配。构造的方式是从一个非匹配点（也称为非饱和点）开始，依次通过非匹配边、匹配边、非匹配边…（这样非匹配边和匹配边交替形成的路径叫做<strong>交替路</strong>）。容易发现这样的路径总结束于一个到非匹配点的非匹配边，因为到达于一个匹配点，如果轮到走该点关联的那条匹配边，这样要么走完完美匹配，要么到达另一个匹配点。如果轮到走非匹配边，则可能到达一个匹配点（回到上个情况），也可能到达一个非匹配点，但是非匹配点肯定是不能继续走匹配边形成更长的交替路的。可以发现，这样走下来非匹配边始终比匹配边多一条，并且除了一头一尾的两个节点，中间节点全部是匹配点，如果反向匹配边和非匹配边，就能够得到边数+1的匹配。因此把这条交替路称为<strong>增广路</strong>。可以发现这样的增广路中每个点至多出现一次，因此反向匹配边和非匹配边后不会出现一个点有两个匹配边连接的情况。根据berge定理，如果图G中不存在对匹配M的增广路，那么该匹配M是最大匹配。</p>
-<h1 id="算法实现"><a href="#算法实现" class="headerlink" title="算法实现"></a>算法实现</h1><p>在实现匈牙利算法时，并不需要显式地去建立交替路，交替路的扩展和反转通过dfs或者bfs隐式地表现出来。这样的算法复杂度O(EV)，经过优化的Hopcroft-Karp算法复杂度可达到O(E<em>sqrt(V))。<br>首先实现寻找增广路径的算法。从节点U（大写表示二分图左部）进行dfs寻找从U开始的增广路（因为从U开始，所以U必然要是非匹配点）。对于U的所有<em>*出边</em></em>(U, v)，假如v是非匹配点，那么可以直接匹配U和v，显然匹配数会增加1。假如v已经和W匹配，但是能够为W在右部找到另一个匹配点，那么就将U和v匹配。即对于这一种情况，匹配数同样是增加1的，假设原先(W, v)是匹配的，如果现在匹配U和v，则W失去匹配，匹配数并没有增加，但是如果能够找到另一个x能够和W匹配，那匹配数增加1，当然这个过程是递归的，x和W匹配同样可能导致x的原配失配，因此这个算法的返回值是个表示是否存在增广路的布尔量，如果在递归的末端存在x的匹配Y不能找到新的匹配，也就是不存在从x开始的增广路，那么也不存在从v开始的增广路。对于其他情况就不存在从U开始的增广路。<br>因此整个算法可以枚举二分图左边的点x，寻找是否存在增广路，从而得到匹配。在实现算法的时候需要注意对于有向图邻接矩阵不能设置m[dest][src]。</p>
+<h1 id="算法实现"><a href="#算法实现" class="headerlink" title="算法实现"></a>算法实现</h1><p>在实现匈牙利算法时，并不需要显式地去建立交替路，交替路的扩展和反转通过dfs或者bfs隐式地表现出来。这样的算法复杂度O(EV)，经过优化的Hopcroft-Karp算法复杂度可达到O(E*sqrt(V))。<br>首先实现寻找增广路径的算法。从节点U（大写表示二分图左部）进行dfs寻找从U开始的增广路（因为从U开始，所以U必然要是非匹配点）。对于U的所有<strong>出边</strong>(U, v)，假如v是非匹配点，那么可以直接匹配U和v，显然匹配数会增加1。假如v已经和W匹配，但是能够为W在右部找到另一个匹配点，那么就将U和v匹配。即对于这一种情况，匹配数同样是增加1的，假设原先(W, v)是匹配的，如果现在匹配U和v，则W失去匹配，匹配数并没有增加，但是如果能够找到另一个x能够和W匹配，那匹配数增加1，当然这个过程是递归的，x和W匹配同样可能导致x的原配失配，因此这个算法的返回值是个表示是否存在增广路的布尔量，如果在递归的末端存在x的匹配Y不能找到新的匹配，也就是不存在从x开始的增广路，那么也不存在从v开始的增广路。对于其他情况就不存在从U开始的增广路。<br>因此整个算法可以枚举二分图左边的点x，寻找是否存在增广路，从而得到匹配。在实现算法的时候需要注意对于有向图邻接矩阵不能设置m[dest][src]。</p>
 
       
     </div>
@@ -351,6 +351,10 @@
           </div>
 
           <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2016/10/01/表达式求值HDU5553/" rel="prev" title="HDU 5553 Advanced Calculator 表达式求值">
+                HDU 5553 Advanced Calculator 表达式求值 <i class="fa fa-chevron-right"></i>
+              </a>
             
           </div>
         </div>
@@ -425,7 +429,7 @@
         <nav class="site-state motion-element">
           <div class="site-state-item site-state-posts">
             <a href="/archives">
-              <span class="site-state-item-count">20</span>
+              <span class="site-state-item-count">22</span>
               <span class="site-state-item-name">日志</span>
             </a>
           </div>
