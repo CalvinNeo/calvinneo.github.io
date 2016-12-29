@@ -68,7 +68,7 @@
 <link href="/css/main.css?v=5.0.2" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="C++,VS,GCC,ACM,卡精度," />
+  <meta name="keywords" content="C++,ACM,VS,GCC,卡精度," />
 
 
 
@@ -86,7 +86,7 @@
 
 <meta name="description" content="ACM中常常遇到卡精度的问题，卡精度可能因为取整、比较相等、高精度等多种原因。这里通过一个例子试图探讨两个编译器的浮点数运算实现机制以及类型转换的机制，以及使用不同编译器和使用不同指令集在取整上的卡精度的问题。">
 <meta property="og:type" content="article">
-<meta property="og:title" content="GCC和VS在pow函数实现和类型转换比较">
+<meta property="og:title" content="GCC和MSVC在pow函数实现和类型转换比较">
 <meta property="og:url" content="http://www.calvinneo.com/2016/01/16/C-GCC-VS-pow/index.html">
 <meta property="og:site_name" content="Calvin's Marbles">
 <meta property="og:description" content="ACM中常常遇到卡精度的问题，卡精度可能因为取整、比较相等、高精度等多种原因。这里通过一个例子试图探讨两个编译器的浮点数运算实现机制以及类型转换的机制，以及使用不同编译器和使用不同指令集在取整上的卡精度的问题。">
@@ -114,9 +114,9 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/gccvspow/od_win7_main_2a3.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/gccvspow/od_win7_main_after_pow.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/gccvspow/od_win7_main_ff1c.png">
-<meta property="og:updated_time" content="2016-12-18T09:57:52.000Z">
+<meta property="og:updated_time" content="2016-12-23T09:33:51.000Z">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="GCC和VS在pow函数实现和类型转换比较">
+<meta name="twitter:title" content="GCC和MSVC在pow函数实现和类型转换比较">
 <meta name="twitter:description" content="ACM中常常遇到卡精度的问题，卡精度可能因为取整、比较相等、高精度等多种原因。这里通过一个例子试图探讨两个编译器的浮点数运算实现机制以及类型转换的机制，以及使用不同编译器和使用不同指令集在取整上的卡精度的问题。">
 <meta name="twitter:image" content="http://www.calvinneo.com/img/gccvspow/gccvspow_gcc1.png">
 
@@ -142,7 +142,7 @@
   <link rel="canonical" href="http://www.calvinneo.com/2016/01/16/C-GCC-VS-pow/"/>
 
 
-  <title> GCC和VS在pow函数实现和类型转换比较 | Calvin's Marbles </title>
+  <title> GCC和MSVC在pow函数实现和类型转换比较 | Calvin's Marbles </title>
 </head>
 
 <body itemscope itemtype="//schema.org/WebPage" lang="zh-Hans">
@@ -292,7 +292,7 @@
             
             
               
-                GCC和VS在pow函数实现和类型转换比较
+                GCC和MSVC在pow函数实现和类型转换比较
               
             
           </h1>
@@ -353,9 +353,9 @@
 <p>下面，我们分别比较对pow函数的实现以及类型转换机制。</p>
 <h2 id="VS对pow的实现"><a href="#VS对pow的实现" class="headerlink" title="VS对pow的实现"></a>VS对pow的实现</h2><p>VS中我们实际上使用的是<br><code>double pow&lt;int, int&gt;(int _Left, int _Right);</code> 这个重载版本。<br>首先定位到头文件<code>xtgmath.h</code>：<br><figure class="highlight cpp"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div></pre></td><td class="code"><pre><div class="line"><span class="comment">//xtgmath.h</span></div><div class="line"><span class="number">_</span>C_STD_BEGIN</div><div class="line"><span class="comment">// #define _STD ::std::</span></div><div class="line"><span class="comment">// #define _CSTD ::</span></div><div class="line"><span class="keyword">template</span>&lt;<span class="keyword">class</span> <span class="number">_</span>Ty1, <span class="keyword">class</span> <span class="number">_</span>Ty2&gt; <span class="keyword">inline</span></div><div class="line">	<span class="keyword">typename</span> <span class="number">_</span>STD enable_if&lt; <span class="number">_</span>STD is_arithmetic&lt;<span class="number">_</span>Ty1&gt;::value &amp;&amp; <span class="number">_</span>STD is_arithmetic&lt;<span class="number">_</span>Ty2&gt;::value		</div><div class="line">	,<span class="keyword">typename</span> <span class="number">_</span>STD <span class="number">_</span>Common_float_type&lt;<span class="number">_</span>Ty1, <span class="number">_</span>Ty2&gt;::type&gt;::<span class="function">type</span></div><div class="line">	<span class="title">pow</span><span class="params">(<span class="keyword">const</span> <span class="number">_</span>Ty1 <span class="number">_L</span>eft, <span class="keyword">const</span> <span class="number">_</span>Ty2 <span class="number">_</span>Right)</span></div><div class="line">	&#123;	<span class="comment">// bring mixed types to a common type</span></div><div class="line">	<span class="keyword">typedef</span> <span class="keyword">typename</span> <span class="number">_</span>STD <span class="number">_</span>Common_float_type&lt;<span class="number">_</span>Ty1, <span class="number">_</span>Ty2&gt;::type type;</div><div class="line">	<span class="keyword">return</span> (<span class="number">_</span>CSTD <span class="built_in">pow</span>(type(<span class="number">_L</span>eft), type(<span class="number">_</span>Right)));</div><div class="line">	&#125;</div></pre></td></tr></table></figure></p>
 <p>可以看到最后调用一个参数是<code>_Common_float_type</code>的pow函数，那这个函数在哪里呢，我们首先来看一下<code>_Common_float_type</code>这个类型。<br><figure class="highlight cpp"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div></pre></td><td class="code"><pre><div class="line"><span class="comment">//xtr1common.h	</span></div><div class="line"><span class="keyword">typedef</span> integral_constant&lt;<span class="keyword">bool</span>, <span class="literal">false</span>&gt; false_type;</div><div class="line"><span class="comment">// integral_constant is convenient template for integral constant types</span></div><div class="line"></div><div class="line"><span class="comment">//xtgmath.h	</span></div><div class="line"><span class="keyword">template</span>&lt;<span class="keyword">class</span> <span class="number">_</span>Ty&gt;</div><div class="line">	<span class="keyword">struct</span> <span class="number">_</span>Promote_to_float</div><div class="line">	&#123;	<span class="comment">// promote integral to double</span></div><div class="line">	<span class="keyword">typedef</span> <span class="keyword">typename</span> conditional&lt;is_integral&lt;<span class="number">_</span>Ty&gt;::value,</div><div class="line">		<span class="keyword">double</span>, <span class="number">_</span>Ty&gt;::type type;</div><div class="line">	&#125;;</div><div class="line">	</div><div class="line"><span class="keyword">template</span>&lt;<span class="keyword">class</span> <span class="number">_</span>Ty1, <span class="keyword">class</span> <span class="number">_</span>Ty2&gt;</div><div class="line">	<span class="keyword">struct</span> <span class="number">_</span>Common_float_type</div><div class="line">	&#123;	<span class="comment">// find type for two-argument math function</span></div><div class="line">	<span class="keyword">typedef</span> <span class="keyword">typename</span> <span class="number">_</span>Promote_to_float&lt;<span class="number">_</span>Ty1&gt;::type <span class="number">_</span>Ty1f;</div><div class="line">	<span class="keyword">typedef</span> <span class="keyword">typename</span> <span class="number">_</span>Promote_to_float&lt;<span class="number">_</span>Ty2&gt;::type <span class="number">_</span>Ty2f;</div><div class="line">	<span class="keyword">typedef</span> <span class="keyword">typename</span> conditional&lt;is_same&lt;<span class="number">_</span>Ty1f, <span class="keyword">long</span> <span class="keyword">double</span>&gt;::value || is_same&lt;<span class="number">_</span>Ty2f, <span class="keyword">long</span> <span class="keyword">double</span>&gt;::value, <span class="keyword">long</span> <span class="keyword">double</span>,</div><div class="line">		<span class="keyword">typename</span> conditional&lt;is_same&lt;<span class="number">_</span>Ty1f, <span class="keyword">double</span>&gt;::value || is_same&lt;<span class="number">_</span>Ty2f, <span class="keyword">double</span>&gt;::value, <span class="keyword">double</span>,</div><div class="line">			<span class="keyword">float</span>&gt;::type&gt;::type type;</div><div class="line">	&#125;;</div></pre></td></tr></table></figure></p>
-<p>这边说明一下这段代码：<br><code>std::is_integral</code>用来判断一个类型是否是整数<br><code>std::conditional</code>有三个参数，其作用相当于_Test? _Ty1: _Ty2，其中_Ty1和_Ty2都是类型，而<code>std::enable_if</code>相对<code>std::conditional</code>省略了假的情况。<code>std::is_same</code>用来判断_Ty1和_Ty2是否相同类型。这个是模板编程里面常用到的元函数。<br><code>_Promote_to_float</code>用来将integral（整数）类型扩成double类型，如果是浮点数则不变。<br><code>_Common_float_type</code>意思就是<br><figure class="highlight d"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">if</span> (_Ty1 <span class="keyword">is</span> <span class="built_in">long</span> <span class="built_in">double</span> || _Ty2 <span class="keyword">is</span> <span class="built_in">long</span> <span class="built_in">double</span>)</div><div class="line">	<span class="keyword">typedef</span> type <span class="built_in">long</span> <span class="built_in">double</span></div><div class="line"><span class="keyword">else</span> <span class="keyword">if</span>(_Ty1 <span class="keyword">is</span> <span class="built_in">double</span> || _Ty2 <span class="keyword">is</span> <span class="built_in">double</span>)</div><div class="line">	<span class="keyword">typedef</span> type <span class="built_in">double</span></div><div class="line"><span class="keyword">else</span></div><div class="line">	<span class="keyword">typedef</span> type <span class="built_in">float</span></div></pre></td></tr></table></figure></p>
+<p>这边说明一下这段代码：<br><code>std::is_integral</code>用来判断一个类型是否是整数<br><code>std::conditional</code>有三个参数，其作用相当于<code>_Test? _Ty1: _Ty2</code>，其中<code>_Ty1</code>和<code>_Ty2</code>都是类型，而<code>std::enable_if</code>相对<code>std::conditional</code>省略了假的情况。<code>std::is_same</code>用来判断<code>_Ty1</code>和<code>_Ty2</code>是否相同类型。这个是模板编程里面常用到的元函数。<br><code>_Promote_to_float</code>用来将integral（整数）类型扩成double类型，如果是浮点数则不变。<br><code>_Common_float_type</code>意思就是<br><figure class="highlight d"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">if</span> (_Ty1 <span class="keyword">is</span> <span class="built_in">long</span> <span class="built_in">double</span> || _Ty2 <span class="keyword">is</span> <span class="built_in">long</span> <span class="built_in">double</span>)</div><div class="line">	<span class="keyword">typedef</span> type <span class="built_in">long</span> <span class="built_in">double</span></div><div class="line"><span class="keyword">else</span> <span class="keyword">if</span>(_Ty1 <span class="keyword">is</span> <span class="built_in">double</span> || _Ty2 <span class="keyword">is</span> <span class="built_in">double</span>)</div><div class="line">	<span class="keyword">typedef</span> type <span class="built_in">double</span></div><div class="line"><span class="keyword">else</span></div><div class="line">	<span class="keyword">typedef</span> type <span class="built_in">float</span></div></pre></td></tr></table></figure></p>
 <p>用来解决浮点数之间运算结果的精度问题</p>
-<p>下面我们开启调试，跟踪pow函数执行。在调试中，在断点<code>_CSTD pow(type(_Left), type(_Right))</code>处发现type(_Left)和type(_Right)都已经通过<code>_Common_float_type</code>变成了<code>double</code>，继续跟踪发现直接调用了math.h中的pow。<br>特别地，对于c mode，<code>pow</code>实际直接调用了<code>pow(double, double)</code>;。<br>此外还注意到<code>&lt;cmath&gt;</code>中有一个的<code>_Check_return_ inline double pow(_In_ double _Xx, _In_ int _Yx)</code>函数，而这个函数实际上调用了<code>&lt;cmath&gt;</code>中的<code>_Pow_int</code>函数，该函数如下：</p>
+<p>下面我们开启调试，跟踪pow函数执行。在调试中，在断点<code>_CSTD pow(type(_Left), type(_Right))</code>处发现<code>type(_Left)</code>和<code>type(_Right)</code>都已经通过<code>_Common_float_type</code>变成了<code>double</code>，继续跟踪发现直接调用了math.h中的pow。<br>特别地，对于c mode，<code>pow</code>实际直接调用了<code>pow(double, double)</code>。<br>此外还注意到<code>&lt;cmath&gt;</code>中有一个的<code>_Check_return_ inline double pow(_In_ double _Xx, _In_ int _Yx)</code>函数，而这个函数实际上调用了<code>&lt;cmath&gt;</code>中的<code>_Pow_int</code>函数，该函数如下：</p>
 <figure class="highlight cpp"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">template</span>&lt;<span class="keyword">class</span> <span class="number">_</span>Ty&gt;</div><div class="line">	<span class="number">_</span>Check_return_ <span class="keyword">inline</span> <span class="number">_</span>Ty <span class="number">_</span>Pow_int(<span class="number">_</span>Ty <span class="number">_</span>Xx, <span class="keyword">int</span> <span class="number">_</span>Yx) <span class="number">_</span>NOEXCEPT</div><div class="line">	&#123;</div><div class="line">	<span class="keyword">unsigned</span> <span class="keyword">int</span> <span class="number">_</span>Nx;</div><div class="line">	<span class="keyword">if</span> (<span class="number">_</span>Yx &gt;= <span class="number">0</span>)</div><div class="line">		<span class="number">_</span>Nx = <span class="keyword">static_cast</span>&lt;<span class="keyword">unsigned</span> <span class="keyword">int</span>&gt;(<span class="number">_</span>Yx);</div><div class="line">	<span class="keyword">else</span></div><div class="line">		<span class="number">_</span>Nx = <span class="keyword">static_cast</span>&lt;<span class="keyword">unsigned</span> <span class="keyword">int</span>&gt;(<span class="number">-_</span>Yx);</div><div class="line"></div><div class="line">	<span class="keyword">for</span> (<span class="number">_</span>Ty <span class="number">_</span>Zx = <span class="keyword">static_cast</span>&lt;<span class="number">_</span>Ty&gt;(<span class="number">1</span>); ; <span class="number">_</span>Xx *= <span class="number">_</span>Xx)</div><div class="line">		&#123;</div><div class="line">		<span class="keyword">if</span> ((<span class="number">_</span>Nx &amp; <span class="number">1</span>) != <span class="number">0</span>)</div><div class="line">			<span class="number">_</span>Zx *= <span class="number">_</span>Xx;</div><div class="line">		<span class="keyword">if</span> ((<span class="number">_</span>Nx &gt;&gt;= <span class="number">1</span>) == <span class="number">0</span>)</div><div class="line">			<span class="keyword">return</span> (<span class="number">_</span>Yx &lt; <span class="number">0</span> ? <span class="keyword">static_cast</span>&lt;<span class="number">_</span>Ty&gt;(<span class="number">1</span>) / <span class="number">_</span>Zx : <span class="number">_</span>Zx);</div><div class="line">		&#125;</div><div class="line">	&#125;</div></pre></td></tr></table></figure>
 <p>这段代码主要就是处理指数为int的情况，其使用的是类似于快速幂的方法得到的结果。不过经过测试，这段代码始终没有被调用的情况，为什么标准库不使用这个重载版本，我想附录里面的一段答案应该能够给我们启发。<br>对于以上代码，我想最重要的就是<code>_Common_float_type</code>，<del>它避免了GCC472版本的类型二次转换的错误，</del>直接调用对应类型的重载版本。</p>
 <h2 id="VS对类型转换的实现"><a href="#VS对类型转换的实现" class="headerlink" title="VS对类型转换的实现"></a>VS对类型转换的实现</h2><p>为了分析<code>_pow</code>函数，需要先了解一下VS对于类型转换的实现方案</p>
@@ -553,11 +553,11 @@
           
             <a href="/tags/C/" rel="tag">#C++</a>
           
+            <a href="/tags/ACM/" rel="tag">#ACM</a>
+          
             <a href="/tags/VS/" rel="tag">#VS</a>
           
             <a href="/tags/GCC/" rel="tag">#GCC</a>
-          
-            <a href="/tags/ACM/" rel="tag">#ACM</a>
           
             <a href="/tags/卡精度/" rel="tag">#卡精度</a>
           
@@ -608,7 +608,7 @@
   <div class="comments" id="comments">
     
       <div class="ds-thread" data-thread-key="2016/01/16/C-GCC-VS-pow/"
-           data-title="GCC和VS在pow函数实现和类型转换比较" data-url="http://www.calvinneo.com/2016/01/16/C-GCC-VS-pow/">
+           data-title="GCC和MSVC在pow函数实现和类型转换比较" data-url="http://www.calvinneo.com/2016/01/16/C-GCC-VS-pow/">
       </div>
     
   </div>
@@ -653,7 +653,7 @@
         <nav class="site-state motion-element">
           <div class="site-state-item site-state-posts">
             <a href="/archives">
-              <span class="site-state-item-count">54</span>
+              <span class="site-state-item-count">55</span>
               <span class="site-state-item-name">日志</span>
             </a>
           </div>
@@ -740,7 +740,7 @@
         <div class="copyright" >
   
   &copy;  2015 - 
-  <span itemprop="copyrightYear">2016</span>
+  <span itemprop="copyrightYear">2017</span>
   <span class="with-love">
     <i class="fa fa-heart"></i>
   </span>
