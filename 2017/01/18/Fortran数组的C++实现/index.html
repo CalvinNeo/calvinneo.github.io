@@ -68,7 +68,7 @@
 <link href="/css/main.css?v=5.0.2" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="C++,编译原理,fortran," />
+  <meta name="keywords" content="C++,fortran,编译原理," />
 
 
 
@@ -90,7 +90,7 @@
 <meta property="og:url" content="http://www.calvinneo.com/2017/01/18/Fortran数组的C++实现/index.html">
 <meta property="og:site_name" content="Calvin's Marbles">
 <meta property="og:description" content="最近在写CFortranTranslator，一个从Fortran77/Fortran90到C++的工具，其中涉及到为Fortran设计一个数组，对此我做出了一些尝试">
-<meta property="og:updated_time" content="2017-01-19T04:01:18.000Z">
+<meta property="og:updated_time" content="2017-01-22T16:11:14.000Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Fortran数组的C++实现">
 <meta name="twitter:description" content="最近在写CFortranTranslator，一个从Fortran77/Fortran90到C++的工具，其中涉及到为Fortran设计一个数组，对此我做出了一些尝试">
@@ -313,9 +313,24 @@
 
       
         <p>最近在写CFortranTranslator，一个从Fortran77/Fortran90到C++的工具，其中涉及到为Fortran设计一个数组，对此我做出了一些尝试<br><a id="more"></a></p>
-<h1 id="for1array"><a href="#for1array" class="headerlink" title="for1array"></a>for1array<t></t></h1><p><code>for1array&lt;T&gt;</code>是一个1维的数组，可以理解为对C++原生数组的一个包装，使得数组能够自定义上下界，和列优先的存储模式。事实上这种嵌套(nested)数组在实现Fortran的内在函数时存在相当大的麻烦。<br>例如将初始化序列按列映射到一个嵌套的数组<code>for1array&lt;for1array&lt;...for1array&lt;T&gt;...&gt;&gt;</code>中，如果通过通常的递归来做，那么就要从结构最里面的<code>for1array&lt;T&gt;</code>进行递归，然而这是比较难于实现的。<br>但是对于transpose这样的函数使用嵌套数组实现的代价就相当大了</p>
-<h1 id="farray"><a href="#farray" class="headerlink" title="farray"></a>farray<t, d=""></t,></h1><p>在Fortran77标准中，数组的维数，上下界都是确定的。对于Fortran90标准中出现的可调数组（类似于C99中的VLA）、假定形状数组（仅给出维/秩数）和假定大小数组（最后），因此Fortran多维数组并不需要锯齿数组，也不需要实现类似动态表的自扩</p>
-<h1 id="farray-1"><a href="#farray-1" class="headerlink" title="farray"></a>farray<t></t></h1><p>fortran有一个slice操作，它返回的维数是不固定的，例如<code>a(:, 1, 1:2)</code>返回一个2维的数组，但是<code>a(:, 1, 1:1)</code>返回一个三维的数组，虽然这两个数组所承载的数据是一样的。</p>
+<h1 id="for1array-lt-typename-T-gt"><a href="#for1array-lt-typename-T-gt" class="headerlink" title="for1array&lt;typename T&gt;"></a>for1array&lt;typename T&gt;</h1><p><code>for1array&lt;T&gt;</code>是一个1维的数组，可以理解为对C++原生数组的一个包装，使得数组能够自定义上下界，和列优先的存储模式。事实上这种嵌套(nested)数组在实现Fortran的内在函数时存在相当大的麻烦。<br>例如将初始化序列按列映射到一个嵌套的数组<code>for1array&lt;for1array&lt;...for1array&lt;T&gt;...&gt;&gt; farr</code>中，如果通过通常的递归来做，那么就要从结构最里面的<code>for1array&lt;T&gt;</code>进行递归，然而这是比较难于实现的。实际上解决方案对于嵌套的<code>for1array</code>数组按照通常一样从外到内进行递归遍历，而计算<code>farr[a1][a2]...[an]</code>时对应的一维数组中的位置。对于<code>farr</code>数组中的第k层的指针增加1，实际上相当于一维数组中向后移动<code>size[1] * size[2] * ... size[k-1]</code>，其中<code>size[i]</code>为<code>farr</code>中第i层的大小。<br>但是对于<code>transpose</code>这样的函数使用嵌套数组实现的代价就相当大了，特别地，fortran90标准对转置秩大于2的数组并没有规定行为：</p>
+<blockquote>
+<p>13.13.109 TRANSPOSE (MATRIX)<br>Description. Transpose an array of rank two.<br>Class. Transformational function.<br>Argument. MATRIX may be of any type and must have rank two.</p>
+</blockquote>
+<p>因此实际上对于一个N维/秩数组$X$，假设第$i$维的取值范围是$[0, n_i]$，定义转置$X^T$，满足$X[a_1][a_2]…[a_n] = X^T[a_n][a_{n-1}]…[a_1]$。所以<code>transpose</code>函数主要是通过变换$n_i$，使得得到的$X^T$满足上面式子</p>
+<h1 id="farray-lt-typename-T-int-D-gt"><a href="#farray-lt-typename-T-int-D-gt" class="headerlink" title="farray&lt;typename T, int D&gt;"></a>farray&lt;typename T, int D&gt;</h1><p>Fortran90标准中数组的维数，上下界都是确定的，即使出现的可调数组（类似于C99中的VLA）、假定形状数组（仅给出维/秩数）和假定大小数组（最后一维的上下界是不定的）也是作为哑元（形参的）。Fortran77标准更是使用完全静态环境(fully static environment)的运行时（编译原理及实践§7），因此都不支持递归调用。因此Fortran多维数组并不需要锯齿数组，也不需要实现类似动态表的自扩。<br>因为要尽可能保证和源代码一致性，所以不能将上界统一改为0开始，在设计时需要使用在对象中维护每一维的上下界。有一些方法可以使得表示上下界的数组称为编译期常量，例如<a href="http://stackoverflow.com/questions/27083755/copy-array-in-constexpr-constructor" target="_blank" rel="external">使用constexpr构造函数</a>，不过我选择了牺牲一点空间，因为我使用的MSVC2015尚不支持<a href="https://isocpp.org/wiki/faq/cpp14-language#extended-constexpr" target="_blank" rel="external">Extended Constexpr</a>。</p>
+<h2 id="实现transpose"><a href="#实现transpose" class="headerlink" title="实现transpose"></a>实现transpose</h2><p>现在实现<code>transpose</code>函数，对于$X[a_1][a_2]…[a_n]$，它可以映射到一维数组的第$\sum_{i=1}^{N}{(a_i \times \prod_{j = i + 1}}^{N}{n_j})$项，令$\prod_{N + 1}^{N}{} = 1  $；<br>对于$X^T[a_n][a_{n-1}]…[a_1]$，可以映射到$X$对应的一维数组第$\sum_{i=1}^{N}{(a_{N + 1 - i} \times \prod_{j = 1}}^{i - 1}{n_j})$，令$b_i = a_{N + 1 - i}$，则$X^T[b_1][b_2]…[b_n]$ 可以映射到$X$对应的一维数组 $\sum_{i=1}^{N}{(b_{i} \times \prod_{j = i + 1}}^{N}{n’_j})$项，令$\prod_{1}^{0}{} = 1 $。<br>由此可以得到$\forall i, \prod_{j = i + 1}^{N}{n’_j} = \prod_{j = 1}^{i - 1}{n_j}$，显然将$n_j$逆序搞一下就行了。</p>
+<h2 id="slice数组片段"><a href="#slice数组片段" class="headerlink" title="slice数组片段"></a>slice数组片段</h2><p>fortran中的slice是by reference的，对slice的修改也是对原数组的修改，于是要实现一个<code>forslice</code>函数，其返回的slice应当是数组片段的引用。对于这种情况，首先可以考虑使用<code>vector&lt;shared_ptr&lt;T&gt;&gt; data</code>来存储，但是这样会产生不必要的空间开销。因为虽然每一个slice是不一样的，没办法对<code>shared_ptr&lt;vector&lt;T&gt;&gt; data</code>，但是每个slice的data部分是作为一个整体的。所以还是使用的裸指针RAII，对于从<code>forslice</code>函数构造的<code>farray</code>，在构造时加一个tag，析构时不释放指针即可。考虑到Fortran77标准本身的完全静态环境，Fortran90可能是基于栈的，所以不会出现悬挂指针导致的AV错误。</p>
+<h2 id="数组的秩"><a href="#数组的秩" class="headerlink" title="数组的秩"></a>数组的秩</h2><p>此外fortran中有使用到数组的秩作为参数（通常参数名为dim）的函数，要注意秩是从1开始计算的。</p>
+<h1 id="farray-lt-typename-T-gt"><a href="#farray-lt-typename-T-gt" class="headerlink" title="farray&lt;typename T&gt;"></a>farray&lt;typename T&gt;</h1><p>fortran有一个slice操作，它返回的维数是不固定的，例如<code>a(:, 1, 1:2)</code>返回一个2维的数组，但是<code>a(:, 1, 1:1)</code>返回一个三维的数组，虽然这两个数组所承载的数据是一样的。这给实现带来了困难，因为返回类型是根据<code>slice_info</code>的初始化列表来决定的，为了追求语法尽可能简单，贴近fortran源码，对<code>slice_info</code>这样的工具类模板开洞我觉得是不太好的，因此决定将维数参数也移出模板参数。</p>
+<h1 id="array-builder"><a href="#array-builder" class="headerlink" title="array builder"></a>array builder</h1><p>Fortran中的数组构造器(array constructor)我认为是一个很方便实用的功能，根据Fortran90标准，数组构造器使用下面的语法</p>
+<blockquote>
+<p>array-constructor is (/ ac-value-list /)<br>R432 ac-value is expr or ac-implied-do<br>R433 ac-implied-do is ( ac-value-list , ac-implied-do-control )<br>R434 ac-implied-do-control is ac-do-variable = scalar-int-expr , scalar-int-expr [ , scalar-int-expr ]<br>R435 ac-do-variable is scalar-int-variable</p>
+</blockquote>
+<p>在翻译时，数组构造器应当被当作一个一维的数组。注意数组构造器在赋值和构造时都可能用到，所以比较方便的方法是对<code>(/ /)</code>直接生成<code>farray</code>而不是一个brace-init-list：</p>
+<blockquote>
+<p>An array constructor is defined as a sequence of specified scalar values and is interpreted as a rank-one array<br>whose element values are those specified in the sequence.</p>
+</blockquote>
 
       
     </div>
@@ -340,9 +355,9 @@
           
             <a href="/tags/C/" rel="tag">#C++</a>
           
-            <a href="/tags/编译原理/" rel="tag">#编译原理</a>
-          
             <a href="/tags/fortran/" rel="tag">#fortran</a>
+          
+            <a href="/tags/编译原理/" rel="tag">#编译原理</a>
           
         </div>
       
@@ -500,7 +515,7 @@
               
             
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#for1array"><span class="nav-number">1.</span> <span class="nav-text">for1array</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#farray"><span class="nav-number">2.</span> <span class="nav-text">farray</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#farray-1"><span class="nav-number">3.</span> <span class="nav-text">farray</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#for1array-lt-typename-T-gt"><span class="nav-number">1.</span> <span class="nav-text">for1array<typename T></span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#farray-lt-typename-T-int-D-gt"><span class="nav-number">2.</span> <span class="nav-text">farray<typename T, int D></span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#实现transpose"><span class="nav-number">2.1.</span> <span class="nav-text">实现transpose</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#slice数组片段"><span class="nav-number">2.2.</span> <span class="nav-text">slice数组片段</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#数组的秩"><span class="nav-number">2.3.</span> <span class="nav-text">数组的秩</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#farray-lt-typename-T-gt"><span class="nav-number">3.</span> <span class="nav-text">farray<typename T></span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#array-builder"><span class="nav-number">4.</span> <span class="nav-text">array builder</span></a></li></ol></div>
             
           </div>
         </section>
@@ -788,6 +803,26 @@
 
 
   
+  <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+      tex2jax: {
+        inlineMath: [ ['$','$'], ["\\(","\\)"]  ],
+        processEscapes: true,
+        skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      }
+    });
+  </script>
+
+  <script type="text/x-mathjax-config">
+    MathJax.Hub.Queue(function() {
+      var all = MathJax.Hub.getAllJax(), i;
+      for (i=0; i < all.length; i += 1) {
+        all[i].SourceElement().parentNode.className += ' has-jax';
+      }
+    });
+  </script>
+  <script type="text/javascript" src="//cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+
 
   
 
