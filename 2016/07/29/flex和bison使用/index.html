@@ -91,7 +91,7 @@
 <meta property="og:site_name" content="Calvin's Marbles">
 <meta property="og:description" content="flex/bison是对lex/yacc的开源实现，可以方便地进行编译器构造。本文主要总结了VS下的flex和bison使用。">
 <meta property="og:image" content="http://www.calvinneo.com/img/flexbison_memory.png">
-<meta property="og:updated_time" content="2016-11-11T11:13:27.000Z">
+<meta property="og:updated_time" content="2017-02-06T14:06:25.000Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="flex和bison使用">
 <meta name="twitter:description" content="flex/bison是对lex/yacc的开源实现，可以方便地进行编译器构造。本文主要总结了VS下的flex和bison使用。">
@@ -327,8 +327,24 @@
 </ol>
 <p><strong>关于bison的说明</strong><br>bison提供了获取终结符行号和光标位置的功能。可以使用@n访问第n个文法符号的first_line、first_column、last_line、last_column属性，所以如果只需要这四个属性，可以不定义自己的struct。</p>
 <h2 id="yymore"><a href="#yymore" class="headerlink" title="yymore"></a>yymore</h2><p>yymore用来读入下一个字符串。可以参照下面代码的运行结果：<br><figure class="highlight cpp"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div></pre></td><td class="code"><pre><div class="line">%&#123;</div><div class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></div><div class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;string&gt;</span></span></div><div class="line">%&#125;</div><div class="line">%option yymore</div><div class="line">%%</div><div class="line"><span class="string">"1"</span>    &#123; yymore(); ECHO; <span class="built_in">putchar</span>(<span class="string">'\n'</span>); <span class="built_in">printf</span>(<span class="string">"yytext %s\n"</span>, yytext); &#125;</div><div class="line"><span class="string">"2"</span>    &#123;  ECHO; <span class="built_in">putchar</span>(<span class="string">'\n'</span>); &#125;</div><div class="line">\n   &#123;  <span class="built_in">putchar</span>(<span class="string">'\n'</span>); &#125;</div><div class="line">%%</div><div class="line"><span class="function"><span class="keyword">int</span> <span class="title">yywrap</span><span class="params">()</span> </span></div><div class="line">&#123; </div><div class="line">   <span class="keyword">return</span>(<span class="number">1</span>); </div><div class="line">&#125;</div><div class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</div><div class="line">	yylex();</div><div class="line">	<span class="built_in">puts</span>(<span class="string">""</span>);</div><div class="line">&#125;</div></pre></td></tr></table></figure></p>
-<p>运行结果<br><figure class="highlight lsl"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div></pre></td><td class="code"><pre><div class="line"><span class="number">111</span></div><div class="line"><span class="number">1</span></div><div class="line">yytext <span class="number">1</span></div><div class="line"><span class="number">11</span></div><div class="line">yytext <span class="number">11</span></div><div class="line"><span class="number">111</span></div><div class="line">yytext <span class="number">111</span></div><div class="line"></div><div class="line"><span class="number">222</span></div><div class="line"><span class="number">2</span></div><div class="line"><span class="number">2</span></div><div class="line"><span class="number">2</span></div><div class="line"></div><div class="line"><span class="number">233</span></div><div class="line"><span class="number">2</span></div><div class="line"><span class="number">33</span></div></pre></td></tr></table></figure></p>
-<p>常常希望在bison中使用yymore去处理区分<code>else</code>和<code>else if</code>的情况，然而往往每次的yytext并没有和上次叠加，原因主要有两点：1. 规则中出现了return。2. 空格没有yymore，导致打断。</p>
+<p>运行结果</p>
+<pre><code>111
+1
+yytext 1
+11
+yytext 11
+111
+yytext 111
+
+222
+2
+2
+2
+
+233
+2
+33
+</code></pre><p>常常希望在bison中使用yymore去处理区分<code>else</code>和<code>else if</code>的情况，然而往往每次的yytext并没有和上次叠加，原因主要有两点：1. 规则中出现了return。2. 空格没有yymore，导致打断。</p>
 <h2 id="特殊情况的处理"><a href="#特殊情况的处理" class="headerlink" title="特殊情况的处理"></a>特殊情况的处理</h2><ol>
 <li>假如读入字符不属于任意规则<br> 如果不加处理，这个字符会被保留，例如<code>,www</code>如果定义了<code>[A-Za-z]</code>规则但没有定义<code>,www</code>规则会直接返回<code>,www</code>,但是匹配长度还是3。虽然可以再次截取出正确的字符，但是显然这是没有必要的。因此可以在<strong>最后</strong>为任意字符<code>.</code>加上规则。</li>
 <li>假如到达读入字符串尾端<br> 此时yylex函数返回0</li>
@@ -340,8 +356,10 @@
 <h1 id="bison使用说明"><a href="#bison使用说明" class="headerlink" title="bison使用说明"></a>bison使用说明</h1><p>可以参考<a href="http://www.gnu.org/software/bison/manual/html_node/index.html#SEC_Contents" target="_blank" rel="external">Bison的帮助文档</a>或者<a href="http://www.tldp.org/HOWTO/Lex-YACC-HOWTO.html#toc6" target="_blank" rel="external">Lex and YACC primer</a>或者<a href="http://dinosaur.compilertools.net/yacc/" target="_blank" rel="external">YACC文档</a></p>
 <h2 id="部分元素的意义"><a href="#部分元素的意义" class="headerlink" title="部分元素的意义"></a>部分元素的意义</h2><ol>
 <li><p>%left、%right、%token、%nonassoc<br> %token用来声明一个终结符号的类型（META_INTEGER、META_FLOAT等），这个函数将被放到<code>.tab.h</code>文件中供flex程序引用，上文提到的yylex返回的int值，实际上就是在这里定义的。<br> 此外，%left和%right用来描述运算符的优先级和结合性。考虑二义性文法：<code>E : E + E| E - E| E * E| E / E| i</code>，我们当然可以写成以下的无二义性文法避免<code>+-</code>和<code>*/</code>之间的移进归约冲突，当然这样带来了比较多的归约步骤，</p>
- <figure class="highlight r"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div></pre></td><td class="code"><pre><div class="line">E : E + <span class="literal">T</span>| E - <span class="literal">T</span>| <span class="literal">T</span></div><div class="line"><span class="literal">T</span> : <span class="literal">T</span> * <span class="literal">F</span>| <span class="literal">T</span> / <span class="literal">F</span>| <span class="literal">F</span></div><div class="line"><span class="literal">F</span> : i</div></pre></td></tr></table></figure>
-<p> 因此我们规定每个操作符的优先级，方法是较上行的%left（%right，%nonassoc）定义比较下行的%left（%right，%nonassoc）定义优先级要低，这样解决了不同操作符的优先级问题，而且相对于引入TF终结符，我们可以少定义一些非终结符和产生式（参加下例）。<br> 但是对于<code>1-2+3</code>，分析程序仍然是不知道按照<code>(1-2)+3</code>还是<code>1-(2+3)</code>归约。因此对于同优先级的符号，用%left和%right来规定结合性。<br> %nonassoc表示当前操作符op是没有结合性的，也就是说不可能出现<code>x op y op z</code>的这种情况。</p>
+<pre><code>E : E + T| E - T| T
+T : T * F| T / F| F
+F : i
+</code></pre><p> 因此我们规定每个操作符的优先级，方法是较上行的%left（%right，%nonassoc）定义比较下行的%left（%right，%nonassoc）定义优先级要低，这样解决了不同操作符的优先级问题，而且相对于引入TF终结符，我们可以少定义一些非终结符和产生式（参加下例）。<br> 但是对于<code>1-2+3</code>，分析程序仍然是不知道按照<code>(1-2)+3</code>还是<code>1-(2+3)</code>归约。因此对于同优先级的符号，用%left和%right来规定结合性。<br> %nonassoc表示当前操作符op是没有结合性的，也就是说不可能出现<code>x op y op z</code>的这种情况。</p>
 </li>
 <li><p>yylval，%type，YYSTYLE，%union<br> 前面说到yylex返回值是一个int，这对于语法分析是足够的，但是对于之后的语义分析是不够的。例如对于属性文法<code>E.val-&gt;T1.val + T2.val</code>，我们还需要语法分析时候顺便把属性也提取出来，相比扩充状态栈，yacc提供了一个YYSTYPE类型的全局变量yylval。YYSTYPE的类型是可以自定义的。<br> 同时，对于不同的属性，bison可以直接给出parse之后的类型。例如对于浮点123.4，yacc能够解析出123.4。这是因为bison通过%union来列出yylval返回值类型，通过%type规定对于什么非终结符返回什么类型。例如，</p>
  <figure class="highlight crystal"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div></pre></td><td class="code"><pre><div class="line">%<span class="class"><span class="keyword">union</span>&#123;</span></div><div class="line">	int intval;</div><div class="line">	double floatval;</div><div class="line">	char word[<span class="number">20</span>];</div><div class="line">&#125;</div><div class="line">%<span class="keyword">type</span> &lt;intval&gt; YY_INTEGER</div><div class="line">%<span class="keyword">type</span> &lt;floatval&gt; YY_FLOAT</div><div class="line">%<span class="keyword">type</span> &lt;identname&gt; YY_WORD</div></pre></td></tr></table></figure>
@@ -507,7 +525,7 @@
         <nav class="site-state motion-element">
           <div class="site-state-item site-state-posts">
             <a href="/archives">
-              <span class="site-state-item-count">58</span>
+              <span class="site-state-item-count">60</span>
               <span class="site-state-item-name">日志</span>
             </a>
           </div>
@@ -517,7 +535,7 @@
           
             <div class="site-state-item site-state-tags">
               <a href="/tags">
-                <span class="site-state-item-count">75</span>
+                <span class="site-state-item-count">76</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
