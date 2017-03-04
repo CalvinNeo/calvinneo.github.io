@@ -1,0 +1,820 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.4.0" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.0.2" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="python," />
+
+
+
+
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.0.2" />
+
+
+
+
+
+
+<meta name="description" content="最近在做毕业论文，其中涉及到一项是检验某个为有限元程序优化参数的遗传算法的正确性。deap是Python上的一个遗传算法库，主要封装了和遗传算法相关的生成population、select、mutant这些相关的操作。比较方便的是deap框架允许自定义个体类型、种群生成方法、评价函数等，所以灵活性比较高">
+<meta property="og:type" content="article">
+<meta property="og:title" content="使用deap实现遗传算法">
+<meta property="og:url" content="http://www.calvinneo.com/2017/03/02/使用deap实现遗传算法/index.html">
+<meta property="og:site_name" content="Calvin's Marbles">
+<meta property="og:description" content="最近在做毕业论文，其中涉及到一项是检验某个为有限元程序优化参数的遗传算法的正确性。deap是Python上的一个遗传算法库，主要封装了和遗传算法相关的生成population、select、mutant这些相关的操作。比较方便的是deap框架允许自定义个体类型、种群生成方法、评价函数等，所以灵活性比较高">
+<meta property="og:updated_time" content="2017-03-04T07:10:27.000Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="使用deap实现遗传算法">
+<meta name="twitter:description" content="最近在做毕业论文，其中涉及到一项是检验某个为有限元程序优化参数的遗传算法的正确性。deap是Python上的一个遗传算法库，主要封装了和遗传算法相关的生成population、select、mutant这些相关的操作。比较方便的是deap框架允许自定义个体类型、种群生成方法、评价函数等，所以灵活性比较高">
+
+
+
+<script type="text/javascript" id="hexo.configuration">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post"},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    }
+  };
+</script>
+
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2017/03/02/使用deap实现遗传算法/"/>
+
+
+  <title> 使用deap实现遗传算法 | Calvin's Marbles </title>
+</head>
+
+<body itemscope itemtype="//schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container one-collumn sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="//schema.org/WPHeader">
+      <div class="header-inner"><div class="site-meta ">
+  
+
+  <div class="custom-logo-site-title">
+    <a href="/"  class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <span class="site-title">Calvin's Marbles</span>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+  <p class="site-subtitle"></p>
+</div>
+
+<div class="site-nav-toggle">
+  <button>
+    <span class="btn-bar"></span>
+    <span class="btn-bar"></span>
+    <span class="btn-bar"></span>
+  </button>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup">
+ <span class="search-icon fa fa-search"></span>
+ <input type="text" id="local-search-input">
+ <div id="local-search-result"></div>
+ <span class="popup-btn-close">close</span>
+</div>
+
+
+    </div>
+  
+</nav>
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="//schema.org/Article">
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                使用deap实现遗传算法
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            <span class="post-meta-item-icon">
+              <i class="fa fa-calendar-o"></i>
+            </span>
+            <span class="post-meta-item-text">发表于</span>
+            <time itemprop="dateCreated" datetime="2017-03-02T15:03:17+08:00" content="2017-03-02">
+              2017-03-02
+            </time>
+          </span>
+
+          
+
+          
+            
+              <span class="post-comments-count">
+                &nbsp; | &nbsp;
+                <a href="/2017/03/02/使用deap实现遗传算法/#comments" itemprop="discussionUrl">
+                  <span class="post-comments-count ds-thread-count" data-thread-key="2017/03/02/使用deap实现遗传算法/" itemprop="commentsCount"></span>
+                </a>
+              </span>
+            
+          
+
+          
+
+          
+          
+
+          
+              &nbsp; | &nbsp;
+              <span class="page-pv"><i class="fa fa-file-o"></i>
+              <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+              </span>
+          
+        </div>
+      </header>
+    
+
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>最近在做毕业论文，其中涉及到一项是检验某个为有限元程序优化参数的遗传算法的正确性。<br>deap是Python上的一个遗传算法库，主要封装了和遗传算法相关的生成population、select、mutant这些相关的操作。比较方便的是deap框架允许自定义个体类型、种群生成方法、评价函数等，所以灵活性比较高<br><a id="more"></a></p>
+<h1 id="任务简述"><a href="#任务简述" class="headerlink" title="任务简述"></a>任务简述</h1><p>可以把有限元程序想象成一个有六个参数的黑箱函数<code>f(X | args)</code>，现在对于数据<code>X</code>计算得结果<code>Y = f(X | args)</code>和实际值<code>T</code>有偏差，现在希望通过参数优化（参数值必须在一定范围内）使得计算值尽可能接近实际值。不考虑泛化能力等问题，</p>
+<h1 id="deap框架"><a href="#deap框架" class="headerlink" title="deap框架"></a>deap框架</h1><h2 id="前期工作"><a href="#前期工作" class="headerlink" title="前期工作"></a>前期工作</h2><p>安装deap，<code>pip install</code>一如既往地失败了，幸亏还可以通过setup.py安装。</p>
+<h2 id="creator和register"><a href="#creator和register" class="headerlink" title="creator和register"></a>creator和register</h2><p>这两个模块起到语法糖的作用</p>
+<p><code>creator</code>基于给定的类创建一个派生类，生成的类通过<code>creator.ClassName</code>访问</p>
+<p>不同于<code>creator</code>，<code>register</code>创建为一个函数创建别名，并且可以绑定其中的一些参数，生成的函数通过<code>tools.func_name</code>访问<br><figure class="highlight stylus"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">toolbox.register(<span class="string">"select"</span>, tools<span class="selector-class">.selTournament</span>, tournsize=<span class="number">3</span>)</div></pre></td></tr></table></figure></p>
+<p>表示注册一个<code>tools.select</code>作为<code>tools.selTournament</code>的别名，并绑定<code>tools.selTournament</code>的参数<code>tournsize</code>为3</p>
+<h2 id="评价函数"><a href="#评价函数" class="headerlink" title="评价函数"></a>评价函数</h2><h3 id="定义评价值类"><a href="#定义评价值类" class="headerlink" title="定义评价值类"></a>定义评价值类</h3><p>我们希望用一个scalar或者一组scalar来量化对个体的评价，它的值由评价函数<code>tools.evaluate</code>计算得到。在使用deap时，评价值应当继承自<code>base.Fitness</code>，这个类包含一个<code>values</code>字段，它是一个<strong>tuple</strong>，实际上是评价值。<br>下面创建一个评价值类<br><figure class="highlight stylus"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">creator.create(<span class="string">"FitnessMin"</span>, base<span class="selector-class">.Fitness</span>, weights=(-<span class="number">1.0</span>,))</div></pre></td></tr></table></figure></p>
+<p>这里的<code>weights</code>表示每个scalar的权重，当<code>weights=(-1.0,)</code>时说明评价值是一个scalar，并且值越小，评价越高。<br>所以我们看到不直接使用元组，而选择继承封装元组的的<code>Fitness</code>类是为了更方便地比较评价值</p>
+<h3 id="评价函数-1"><a href="#评价函数-1" class="headerlink" title="评价函数"></a>评价函数</h3><p>使用均方误差作为评价函数。整个评价函数的实现流程应当是：</p>
+<ol>
+<li>使用当前参数值调用有限元程序（fortran77）</li>
+<li>获得有限元程序中返回结果</li>
+<li>计算均方误差<br>由于整个源程序是5000+行的比较乱的fortran77代码，还要外部link一个obj文件，所以无论是强行转换到C++还是在上面继续实现都比较麻烦，所以使用Python通过管道来调用fortran77程序中的有限元函数，并获得返回结果。</li>
+</ol>
+<h2 id="定义初始化个体"><a href="#定义初始化个体" class="headerlink" title="定义初始化个体"></a>定义初始化个体</h2><p>一个个体应该包含若干数量的基因，也就是我们要优化的参数，通常可以用一个<code>list</code>来存储，类似于<code>Fitness</code>类的方法，我们不直接使用这个<code>list</code>，而是通过<code>creator</code>来创建一个继承自<code>list</code>的类<br>    creator.create(“Individual”, list, fitness=creator.FitnessMin)<br>这个类包含有<code>fitness</code>字段，也就是它的评价值<br>下面我们使用这个类生成若干个体，这可以分解为两步：</p>
+<ol>
+<li><p><code>individual</code>函数为某个个体的基因提供随机的初始值<br> 可以使用<code>tools.initIterate</code>函数，这个函数在/tools/init.py中定义如下</p>
+ <figure class="highlight ruby"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line"><span class="function"><span class="keyword">def</span> <span class="title">initIterate</span><span class="params">(container, generator)</span></span>:</div><div class="line">	<span class="keyword">return</span> container(generator())</div></pre></td></tr></table></figure>
+<p> 其中<code>container</code>就是你定义个体的类<code>Individual</code><br> <code>generator</code>是一个生成器来提供初始值。假设一个个体有6个基因，可以参照以下代码</p>
+ <figure class="highlight ruby"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div></pre></td><td class="code"><pre><div class="line"><span class="function"><span class="keyword">def</span> <span class="title">f</span><span class="params">()</span></span>:</div><div class="line">	<span class="keyword">for</span> gene_index <span class="keyword">in</span> xrange(<span class="number">6</span>):</div><div class="line">		<span class="keyword">yield</span> random_value_for_gene_index</div></pre></td></tr></table></figure>
+</li>
+<li><p><code>population</code>通过调用若干次<code>individual</code>函数生成种群<br> 方便起见可以使用/tools/init.py钟提供的另一个<code>tools.initRepeat</code>函数：</p>
+ <figure class="highlight autoit"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line">def initRepeat(container, <span class="function"><span class="keyword">func</span>, <span class="title">n</span>):</span></div><div class="line">	<span class="keyword">return</span> container(<span class="function"><span class="keyword">func</span><span class="params">()</span> <span class="title">for</span> <span class="title">_</span> <span class="title">in</span> <span class="title">xrange</span><span class="params">(n)</span>)</span></div></pre></td></tr></table></figure>
+<p> 这个函数将<code>func</code>执行<code>n</code>次</p>
+</li>
+</ol>
+<h2 id="运行遗传算法"><a href="#运行遗传算法" class="headerlink" title="运行遗传算法"></a>运行遗传算法</h2><p>在deap的文档中，可以下载到deap_onemax的源码<br>这份代码使用了定义的四个函数，分别是<code>evaluate</code>、<code>mate</code>、<code>mutant</code>、<code>select</code>，分别对应计算评价值、交配、突变、选择等四个原子操作<br><figure class="highlight maxima"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div><div class="line">24</div><div class="line">25</div><div class="line">26</div><div class="line">27</div><div class="line">28</div><div class="line">29</div><div class="line">30</div><div class="line">31</div><div class="line">32</div><div class="line">33</div><div class="line">34</div><div class="line">35</div><div class="line">36</div><div class="line">37</div><div class="line">38</div><div class="line">39</div><div class="line">40</div><div class="line">41</div><div class="line">42</div><div class="line">43</div><div class="line">44</div><div class="line">45</div><div class="line">46</div><div class="line">47</div><div class="line">48</div><div class="line">49</div><div class="line">50</div><div class="line">51</div><div class="line">52</div><div class="line">53</div><div class="line">54</div></pre></td><td class="code"><pre><div class="line"><span class="built_in">pop</span> = toolbox.population(n=<span class="number">20</span>)</div><div class="line">CXPB, MUTPB, NGEN = <span class="number">0.5</span>, <span class="number">0.2</span>, <span class="number">4</span></div><div class="line"># Evaluate the entire population</div><div class="line"># fitnesses = list(<span class="built_in">map</span>(toolbox.evaluate, <span class="built_in">pop</span>))</div><div class="line">fitnesses = []</div><div class="line"><span class="keyword">for</span> (i, <span class="literal">ind</span>) <span class="keyword">in</span> zip(count(<span class="number">0</span>), <span class="built_in">pop</span>):</div><div class="line">	mse = toolbox.evaluate(<span class="literal">ind</span>)</div><div class="line">	fitnesses.<span class="built_in">append</span>(mse)</div><div class="line"><span class="keyword">for</span> <span class="literal">ind</span>, fit <span class="keyword">in</span> zip(<span class="built_in">pop</span>, fitnesses):</div><div class="line">	<span class="literal">ind</span>.fitness.<span class="built_in">values</span> = fit	</div><div class="line"># <span class="built_in">print</span>(<span class="string">"  Evaluated %i individuals"</span> <span class="symbol">%</span> len(<span class="built_in">pop</span>))</div><div class="line"><span class="built_in">print</span> <span class="string">"Start GA Loop"</span>	</div><div class="line"><span class="keyword">for</span> g <span class="keyword">in</span> <span class="built_in">range</span>(NGEN):</div><div class="line">	<span class="built_in">print</span>(<span class="string">"-- Generation %i --"</span> <span class="symbol">%</span> g)</div><div class="line">	offspring = toolbox.select(<span class="built_in">pop</span>, len(<span class="built_in">pop</span>))</div><div class="line">	offspring = list(<span class="built_in">map</span>(toolbox.clone, offspring))</div><div class="line">	</div><div class="line">	# offspring是个体组成的`list`</div><div class="line">	<span class="keyword">for</span> child1, child2 <span class="keyword">in</span> zip(offspring[::<span class="number">2</span>], offspring[<span class="number">1</span>::<span class="number">2</span>]):</div><div class="line"></div><div class="line">		<span class="keyword">if</span> <span class="built_in">random</span>.<span class="built_in">random</span>() &lt; CXPB:</div><div class="line">			toolbox.mate(child1, child2)</div><div class="line">			<span class="built_in">del</span> child1.fitness.<span class="built_in">values</span></div><div class="line">			<span class="built_in">del</span> child2.fitness.<span class="built_in">values</span></div><div class="line"></div><div class="line">	<span class="keyword">for</span> mutant <span class="keyword">in</span> offspring:</div><div class="line">		<span class="keyword">if</span> <span class="built_in">random</span>.<span class="built_in">random</span>() &lt; MUTPB:</div><div class="line">			toolbox.mutate(mutant)</div><div class="line">			<span class="built_in">del</span> mutant.fitness.<span class="built_in">values</span></div><div class="line"></div><div class="line">	invalid_ind = [<span class="literal">ind</span> <span class="keyword">for</span> <span class="literal">ind</span> <span class="keyword">in</span> offspring <span class="keyword">if</span> <span class="keyword">not</span> <span class="literal">ind</span>.fitness.valid]</div><div class="line">	fitnesses = <span class="built_in">map</span>(toolbox.evaluate, invalid_ind)</div><div class="line">	<span class="keyword">for</span> <span class="literal">ind</span>, fit <span class="keyword">in</span> zip(invalid_ind, fitnesses):</div><div class="line">		<span class="literal">ind</span>.fitness.<span class="built_in">values</span> = fit</div><div class="line">	</div><div class="line">	# <span class="built_in">print</span>(<span class="string">"  Evaluated %i individuals"</span> <span class="symbol">%</span> len(invalid_ind))</div><div class="line">	</div><div class="line">	<span class="built_in">pop</span>[:] = offspring</div><div class="line">	fits = [<span class="literal">ind</span>.fitness.<span class="built_in">values</span>[<span class="number">0</span>] <span class="keyword">for</span> <span class="literal">ind</span> <span class="keyword">in</span> <span class="built_in">pop</span>]</div><div class="line">	</div><div class="line">	<span class="built_in">length</span> = len(<span class="built_in">pop</span>)</div><div class="line">	<span class="built_in">mean</span> = <span class="built_in">sum</span>(fits) / <span class="built_in">length</span></div><div class="line">	sum2 = <span class="built_in">sum</span>(x*x <span class="keyword">for</span> x <span class="keyword">in</span> fits)</div><div class="line">	<span class="built_in">std</span> = <span class="built_in">abs</span>(sum2 / <span class="built_in">length</span> - <span class="built_in">mean</span>**<span class="number">2</span>)**<span class="number">0.5</span></div><div class="line">	</div><div class="line">	<span class="built_in">print</span>(<span class="string">"  Min %s"</span> <span class="symbol">%</span> <span class="built_in">min</span>(fits))</div><div class="line">	<span class="built_in">print</span>(<span class="string">"  Max %s"</span> <span class="symbol">%</span> <span class="built_in">max</span>(fits))</div><div class="line">	<span class="built_in">print</span>(<span class="string">"  Avg %s"</span> <span class="symbol">%</span> <span class="built_in">mean</span>)</div><div class="line">	<span class="built_in">print</span>(<span class="string">"  Std %s"</span> <span class="symbol">%</span> <span class="built_in">std</span>)</div><div class="line">	best_ind = tools.selBest(<span class="built_in">pop</span>, <span class="number">1</span>)[<span class="number">0</span>]</div><div class="line"></div><div class="line">best_ind = tools.selBest(<span class="built_in">pop</span>, <span class="number">1</span>)[<span class="number">0</span>]</div><div class="line"><span class="built_in">print</span>(<span class="string">"Best individual is %s, %s"</span> <span class="symbol">%</span> (best_ind, best_ind.fitness.<span class="built_in">values</span>))</div><div class="line"><span class="built_in">return</span> best_ind</div></pre></td></tr></table></figure></p>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/python/" rel="tag">#python</a>
+          
+        </div>
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2017/02/28/haskell学习笔记/" rel="next" title="Haskell学习笔记">
+                <i class="fa fa-chevron-left"></i> Haskell学习笔记
+              </a>
+            
+          </div>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+  <p>热评文章</p>
+  <div class="ds-top-threads" data-range="weekly" data-num-items="4"></div>
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div class="ds-thread" data-thread-key="2017/03/02/使用deap实现遗传算法/"
+           data-title="使用deap实现遗传算法" data-url="http://www.calvinneo.com/2017/03/02/使用deap实现遗传算法/">
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel ">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="//schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+          <p class="site-description motion-element" itemprop="description"></p>
+        </div>
+        <nav class="site-state motion-element">
+          <div class="site-state-item site-state-posts">
+            <a href="/archives">
+              <span class="site-state-item-count">63</span>
+              <span class="site-state-item-name">日志</span>
+            </a>
+          </div>
+
+          
+
+          
+            <div class="site-state-item site-state-tags">
+              <a href="/tags">
+                <span class="site-state-item-count">79</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+
+      </section>
+
+      
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+            
+              
+            
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#任务简述"><span class="nav-number">1.</span> <span class="nav-text">任务简述</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#deap框架"><span class="nav-number">2.</span> <span class="nav-text">deap框架</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#前期工作"><span class="nav-number">2.1.</span> <span class="nav-text">前期工作</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#creator和register"><span class="nav-number">2.2.</span> <span class="nav-text">creator和register</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#评价函数"><span class="nav-number">2.3.</span> <span class="nav-text">评价函数</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#定义评价值类"><span class="nav-number">2.3.1.</span> <span class="nav-text">定义评价值类</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#评价函数-1"><span class="nav-number">2.3.2.</span> <span class="nav-text">评价函数</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#定义初始化个体"><span class="nav-number">2.4.</span> <span class="nav-text">定义初始化个体</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#运行遗传算法"><span class="nav-number">2.5.</span> <span class="nav-text">运行遗传算法</span></a></li></ol></li></ol></div>
+            
+          </div>
+        </section>
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright" >
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2017</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+</div>
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse
+  </a>
+</div>
+
+        
+
+<div class="busuanzi-count">
+
+  <script async src="https://dn-lbstatics.qbox.me/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+  
+    <span class="site-uv"><i class="fa fa-user"></i><span class="busuanzi-value" id="busuanzi_value_site_uv"></span></span>
+  
+
+  
+    <span class="site-pv"><i class="fa fa-eye"></i><span class="busuanzi-value" id="busuanzi_value_site_pv"></span></span>
+  
+  
+</div>
+
+
+
+        
+      </div>
+    </footer>
+
+    <div class="back-to-top">
+      <i class="fa fa-arrow-up"></i>
+    </div>
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.0.2"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.0.2"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.0.2"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.0.2"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.0.2"></script>
+
+
+
+  
+
+  
+    
+  
+
+  <script type="text/javascript">
+    var duoshuoQuery = {short_name:"calvinneoorg"};
+    (function() {
+      var ds = document.createElement('script');
+      ds.type = 'text/javascript';ds.async = true;
+      ds.id = 'duoshuo-script';
+      ds.src = (document.location.protocol == 'https:' ? 'https:' : 'http:') + '//static.duoshuo.com/embed.js';
+      ds.charset = 'UTF-8';
+      (document.getElementsByTagName('head')[0]
+      || document.getElementsByTagName('body')[0]).appendChild(ds);
+    })();
+  </script>
+
+  
+    
+    <script src="/lib/ua-parser-js/dist/ua-parser.min.js?v=0.7.9"></script>
+    <script src="/js/src/hook-duoshuo.js"></script>
+  
+
+
+
+
+
+
+  
+  
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length == 0) {
+       search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    function proceedsearch() {
+      $("body").append('<div class="popoverlay">').css('overflow', 'hidden');
+      $('.popup').toggle();
+
+    }
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+    'use strict';
+    $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+            // get the contents from search data
+            isfetched = true;
+            $('.popup').detach().appendTo('.header-inner');
+            var datas = $( "entry", xmlResponse ).map(function() {
+                return {
+                    title: $( "title", this ).text(),
+                    content: $("content",this).text(),
+                    url: $( "url" , this).text()
+                };
+            }).get();
+            var $input = document.getElementById(search_id);
+            var $resultContent = document.getElementById(content_id);
+            $input.addEventListener('input', function(){
+                var matchcounts = 0;
+                var str='<ul class=\"search-result-list\">';
+                var keywords = this.value.trim().toLowerCase().split(/[\s\-]+/);
+                $resultContent.innerHTML = "";
+                if (this.value.trim().length > 1) {
+                // perform local searching
+                datas.forEach(function(data) {
+                    var isMatch = false;
+                    var content_index = [];
+                    var data_title = data.title.trim().toLowerCase();
+                    var data_content = data.content.trim().replace(/<[^>]+>/g,"").toLowerCase();
+                    var data_url = decodeURIComponent(data.url);
+                    var index_title = -1;
+                    var index_content = -1;
+                    var first_occur = -1;
+                    // only match artiles with not empty titles and contents
+                    if(data_title != '') {
+                        keywords.forEach(function(keyword, i) {
+                            index_title = data_title.indexOf(keyword);
+                            index_content = data_content.indexOf(keyword);
+                            if( index_title >= 0 || index_content >= 0 ){
+                                isMatch = true;
+								if (i == 0) {
+                                    first_occur = index_content;
+                                }
+                            } 
+							
+                        });
+                    }
+                    // show search results
+                    if (isMatch) {
+                        matchcounts += 1;
+                        str += "<li><a href='"+ data_url +"' class='search-result-title'>"+ data_title +"</a>";
+                        var content = data.content.trim().replace(/<[^>]+>/g,"");
+                        if (first_occur >= 0) {
+                            // cut out 100 characters
+                            var start = first_occur - 20;
+                            var end = first_occur + 80;
+                            if(start < 0){
+                                start = 0;
+                            }
+                            if(start == 0){
+                                end = 50;
+                            }
+                            if(end > content.length){
+                                end = content.length;
+                            }
+                            var match_content = content.substring(start, end);
+                            // highlight all keywords
+                            keywords.forEach(function(keyword){
+                                var regS = new RegExp(keyword, "gi");
+                                match_content = match_content.replace(regS, "<b class=\"search-keyword\">"+keyword+"</b>");
+                            });
+
+                            str += "<p class=\"search-result\">" + match_content +"...</p>"
+                        }
+                        str += "</li>";
+                    }
+                })};
+                str += "</ul>";
+                if (matchcounts == 0) { str = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>' }
+                if (keywords == "") { str = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>' }
+                $resultContent.innerHTML = str;
+            });
+            proceedsearch();
+        }
+    });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched == false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+
+    });
+
+    $('.popup-btn-close').click(function(e){
+      $('.popup').hide();
+      $(".popoverlay").remove();
+      $('body').css('overflow', '');
+    });
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+  </script>
+
+
+  
+
+  
+
+  
+
+  
+
+
+</body>
+</html>
