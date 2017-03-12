@@ -90,7 +90,7 @@
 <meta property="og:url" content="http://www.calvinneo.com/2017/02/28/haskell学习笔记/index.html">
 <meta property="og:site_name" content="Calvin's Marbles">
 <meta property="og:description" content="使用Programming in Haskell和Channel 9上面的视频学习Haskell，Slides和Codes可以在http://www.cs.nott.ac.uk/~pszgmh/上下载">
-<meta property="og:updated_time" content="2017-03-09T09:06:45.000Z">
+<meta property="og:updated_time" content="2017-03-12T10:55:33.000Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Haskell学习笔记">
 <meta name="twitter:description" content="使用Programming in Haskell和Channel 9上面的视频学习Haskell，Slides和Codes可以在http://www.cs.nott.ac.uk/~pszgmh/上下载">
@@ -403,17 +403,19 @@ method receiver arguments
 <li><p>函数调用</p>
 <ol>
 <li>使用空格而不是括号+逗号来分离函数名以及参数</li>
-<li>函数调用比其他运算符，如<code>+</code>具有更高的优先级（毕竟你连括号都没有），如果都是函数调用，需要把内层参数括起来<pre><code>Mathematics    : f(g(x))
+<li>函数调用比其他运算符，如<code>+</code>具有<strong>更高的</strong>优先级（毕竟你连括号都没有），因此比较好的书写习惯是，如果都是函数调用，需要把内层参数括起来<pre><code>Mathematics    : f(g(x))
 Haskell        : f (g x)            
 Mathematics    : f(x, g(y))
-Haskell        : f x (g y)
+Haskell        : f x (g y)    
+Mathematics    : f(x + 1, y - 1)
+Haskell     : f (x + 1) (y - 1)
 </code></pre> 这样写有最少的语法噪音</li>
 </ol>
 </li>
 <li><p>自定义函数</p>
 <pre><code>quadruple x = double (double x)
 double x = x + x
-</code></pre><p> 更Haskell一点的方法，使用composition</p>
+</code></pre><p> 更Haskell一点的方法，使用composition(fusion)</p>
 <pre><code>quadruple = double . double
 (f . g) x = f (g x)
 </code></pre><p> 注意这里面的类型是静态的而不是动态的，编译器/解释器会自动进行类型推导，对于第一个语句，其类型为</p>
@@ -459,7 +461,7 @@ Float         | 浮点数
 (t1, ..., tn) | 元组
 </code></pre><p> 特别地，使用中括号括起数据生成列表时，中括号称为data constructor，括起类型生成列表类型是，称为type constructor</p>
 </li>
-<li><p>函数的类型<br> 函数也就是映射，Haskell中使用<code>t1 -&gt; t2</code>表示函数将<code>t1</code>类型映射到<code>t2</code>类型<br> 这里是使用的type form表示的函数，也可以使用value form来表示函数，做法是在最前面加一个反斜杠，<code>\x -&gt; y</code>，这其实就是Haskell里面的lambda表达式<br> 由此看出，由于Haskell的类型推导机制，函数的type form在具备value form是并不是强制的，这和C++等命令式语言强制性的函数签名是不一样的。当然有时候会写上type form用来限定参数的类型</p>
+<li><p>函数的类型<br> 函数也就是映射，Haskell中使用<code>t1 -&gt; t2</code>表示函数将<code>t1</code>类型映射到<code>t2</code>类型<br> 这里是使用的type form表示的函数，也可以使用value form来表示函数，做法是在最前面加一个反斜杠，<code>\x -&gt; y</code>，这其实就是Haskell里面的lambda表达式，对于多元的lambda表达式，可以写成<code>\x y -&gt; x + y</code><br> 由此看出，由于Haskell的类型推导机制，函数的type form在具备value form是并不是强制的，这和C++等命令式语言强制性的函数签名是不一样的。当然有时候会写上type form用来限定参数的类型</p>
 </li>
 <li><p>unit<br><code>()</code>称为unit，类似于<code>void</code>，会在monad中用到</p>
 </li>
@@ -488,7 +490,7 @@ add x = \y -&gt; x + y
 <pre><code>if cond then exp1 else exp2
 </code></pre><p> 但是<code>else</code>分支是<strong>必须</strong>的，毕竟是强类型语言</p>
 </li>
-<li><p>guarded equations<br> 这里的guard指的是<code>|</code>符号，注意<code>|</code>在list comprehension另有用途<br> guarded equations是Haskell比较独特的一种表示条件分支的办法，有点类似于数学公式里面的条件，或者说其他语言中的<code>select case</code>的用法</p>
+<li><p>guarded equations<br> 这个名字还挺熟悉的，原来是在程序设计语言原理上看到过，当时翻译成守卫<br> 这里的guard指的是<code>|</code>符号，注意<code>|</code>在list comprehension另有用途<br> guarded equations是Haskell比较独特的一种表示条件分支的办法，有点类似于数学公式里面的条件，或者说其他语言中的<code>select case</code>的用法</p>
 <pre><code>abs n | n &gt;= 0 = n
       | otherwise = -n
 </code></pre></li>
@@ -534,9 +536,15 @@ tail :: [a] -&gt; [a]
 tail (_:xs) = xs
 </code></pre><p> 注意点：</p>
 <ol>
-<li>用<code>x:xs</code>pattern matching空list是未定义行为    </li>
+<li>用<code>x:xs</code>去pattern matching空list是未定义行为    </li>
 <li><code>x:xs</code>一定要用括号括起来，因为函数调用(application)的优先级比<code>:</code>的优先级要高</li>
-<li>注意区分<code>**(x:y)**</code>和<code>**[x:y]**</code><br> <code>[x:y]</code>匹配具有<strong>一个</strong>参数的list，这个参数满足匹配<code>x:y</code><br> <code>(x:y)</code>匹配具有<code>x</code>作为head和<code>y</code>作为tail的list<br> 总之，<code>[]</code>匹配是固定个数的    </li>
+<li><p>注意区分<code>**(x:y)**</code>和<code>**[x:y]**</code><br> <code>[x:y]</code>匹配具有<strong>一个</strong>参数的list，这个参数满足匹配<code>x:y</code><br> <code>(x:y)</code>匹配具有<code>x</code>作为head和<code>y</code>作为tail的list<br> 总之，<code>[]</code>匹配是固定个数的，可以利用这个来匹配终结条件，例如</p>
+<pre><code>product [] = 1
+product (x:xs) = x * product xs
+</code></pre><p> 或</p>
+<pre><code>product [x] = x
+product (x:xs) = x * product xs
+</code></pre></li>
 </ol>
 </li>
 <li><p>integer pattern<br> 这是一个类似数列递推公式的pattern，可以使用<code>n + k</code>这样的形式使用。这时候<code>n</code>是一个变量，而<code>k</code>是一个常数</p>
@@ -598,7 +606,131 @@ primes n = [x | x &lt;- [2..n], prime x]
 </code></pre></li>
 <li>string<br> <code>string</code>是Char的list</li>
 </ol>
-<h1 id="Ch6-Recursive-Functions"><a href="#Ch6-Recursive-Functions" class="headerlink" title="Ch6 Recursive Functions"></a>Ch6 Recursive Functions</h1><p>【未完待续】</p>
+<h1 id="Ch6-Recursive-Functions"><a href="#Ch6-Recursive-Functions" class="headerlink" title="Ch6 Recursive Functions"></a>Ch6 Recursive Functions</h1><ol>
+<li><p>证明</p>
+<pre><code>product [1..n] = recfac n
+</code></pre></li>
+<li><p>递归的作用</p>
+<ol>
+<li>容易</li>
+<li>自然</li>
+<li>能够使用数学方法induction</li>
+</ol>
+</li>
+<li><p>lazy evaluation和purity<br> 这块讲得比较抽象，实际上就是不同的函数有一些相似点可以提炼成一个大操作，这个大操作中包含着若干实现不同的小操作（初始条件，迭代更新规则），由于小操作是不互相影响的(purity)，所以可以只实现提炼出的大操作，然后对于每个函数实现对应的小操作。这些在下一章会有详细说明</p>
+</li>
+<li><p>多元函数的递归</p>
+<pre><code>zip :: [a] -&gt; [b] -&gt; [(a,b)]
+zip [] _ = []
+zip _ [] = []
+zip (x:xs) (y:ys) = (x,y) : zip xs ys
+</code></pre></li>
+<li><p>drop<br> drop需要处理两个初始条件</p>
+<pre><code>drop :: Int -&gt; [a] -&gt; [a]
+drop 0 xs = xs
+drop _ [] = []
+drop n (_:xs) = drop (n-1) xs
+</code></pre></li>
+<li><p>quick sort<br> 下面是出现在整个课程开头的快速排序</p>
+<pre><code>qsort :: Ord a ⇒ [a] -&gt; [a]
+qsort [] = []
+qsort (x:xs) =
+    qsort smaller ++ [x] ++ qsort larger
+    where
+        smaller = [a | a &lt;- xs, a &lt;= x]
+        larger = [b | b &lt;- xs, b &gt; x]
+</code></pre></li>
+</ol>
+<h1 id="Ch7-Higher-Order-Functions"><a href="#Ch7-Higher-Order-Functions" class="headerlink" title="Ch7 Higher-Order Functions"></a>Ch7 Higher-Order Functions</h1><p>上一章讲了如何使用递归来实现某些函数，这章学习通过高阶函数如<code>map</code>、<code>filter</code>、<code>foldr</code>来实现它们<br>高阶函数(Higher-Order Functions)指的是接受一个函数作为参数，或者返回一个函数的函数（然而Haskell天生自带Currying，所以参数大于等于2就一定是高阶函数了啊）</p>
+<ol>
+<li>介绍一些关于Combinator的书</li>
+<li><p>用途</p>
+<ol>
+<li>common programming idiom<br> 写出更短小精炼的程序</li>
+<li><p>DSL<br> 可以方便地定义领域特定语言(DSL)，例如一个简单的加法器的语法</p>
+<pre><code>data expr
+    = value
+    = add expr expr
+</code></pre><p> 然后再实现一个eval函数即可</p>
+<pre><code>eval :: expr -&gt; Int
+</code></pre><p> 要是C++的话可能会想着自己撸个逆波兰式或者LL解释器啥的<br> 另外Haskell的模式匹配也在这方面有比较大的作用</p>
+</li>
+<li>algebra properties<br> 高阶函数具有一定的代数性质可以进行宏观变换，而不要担心实现细节，类似于上一章讲到的分为大操作小操作</li>
+</ol>
+</li>
+<li>map<br> map接受一个函数和一个列表，并返回一个列表<pre><code>map :: (a -&gt; b) -&gt; [a] -&gt; [b]
+</code></pre> 注意不要错写成<pre><code>map :: a -&gt; b -&gt; [a] -&gt; [b]
+</code></pre></li>
+<li>filter<br> 可以通过guard或者list comprehension来实现filter</li>
+<li><p>fold<br> Haskell或者C++17中的fold expression，类似于python等语言中的<code>reduce</code>函数。这两者的区别在reduce只能处理一个相同类型（fold前），但是fold可以处理两个不同类型（fold前和fold的结果）<br> Haskell中分为<code>foldl</code>和<code>foldr</code><br> <code>foldr</code>将归约到的值作为运算f的右操作数</p>
+<pre><code>foldr :: Foldable t =&gt; (a -&gt; b -&gt; b) -&gt; b -&gt; t a -&gt; b
+foldr f v [] = v
+foldr f v (x:xs) = f x (foldr f v xs)
+</code></pre><p> 它接受三个参数：<br> <code>(a -&gt; b -&gt; b)</code>：一个接受<code>a</code>和<code>b</code>类型参数并返回<code>b</code>类型参数的函数<br> <code>b</code>：归约到的类型<br> <code>t</code>：一个<code>Foldable</code>的类型<br> <code>t a</code>：这个用法应该在后面会被讲到，现在可以近似理解成由<code>a</code>产生的<code>t</code>类型，特别地，当<code>t</code>为list时，<code>t a</code>就是<code>[a]</code><br> 因此这个函数可以理解为</p>
+<pre><code>foldr f 列表中的每一项 当前归约的结果
+</code></pre><p> <code>reduce</code>可以用<code>fold</code>来实现，例如</p>
+<pre><code>print reduce(lambda x, y: x + [y], [1,2,3,4], [])
+</code></pre><p> 可以用<code>foldr</code>实现为</p>
+<pre><code>main = print (foldr (\x -&gt; \y -&gt; [x] ++ y) [] [1,2,3,4])
+</code></pre><p> 类似的有<code>foldl</code>函数</p>
+<pre><code>foldl :: Foldable t =&gt; (b -&gt; a -&gt; b) -&gt; b -&gt; t a -&gt; b
+</code></pre><p> 上面的reduce可以用<code>foldl</code>实现为</p>
+<pre><code>main = print (foldl (\x -&gt; \y -&gt; x ++ [y]) [] [1,2,3,4])
+</code></pre></li>
+<li><p>使用fold实现函数<br> fold是被提炼出的一种“大操作”，利用foldr可以实现很多函数，之前这些函数往往要递归地通过guard、if或者list comprehension来实现</p>
+<pre><code>sum = foldr (+) 0
+</code></pre><p> 这是因为</p>
+<pre><code>  sum [1,2,3]
+= foldr (+) 0 [1,2,3]
+= foldr (+) 0 (1:(2:(3:[])))
+= 1+(2+(3+0))
+</code></pre><p> 类似地可以定义</p>
+<pre><code>product = foldr (*) 1
+or = foldr (||) 1
+and = foldr (&amp;&amp;) 1
+</code></pre><p> 对于<code>length</code>函数可以如此定义</p>
+<pre><code>length = foldr (\_ n -&gt; 1 + n) 0
+length = sum . map (\_ -&gt; 1)
+</code></pre><p> 对于<code>reverse</code>函数可以如此定义</p>
+<pre><code>reverse = foldr (\x xs -&gt; xs ++ [x]) []
+</code></pre><p> 这是因为</p>
+<pre><code>  reverse [1,2,3]
+= reverse (1:(2:(3:[])))
+= (([] ++ [3]) ++ [2]) ++ [1]
+</code></pre><p> 所以可以看到<code>foldr</code>接受<code>a</code>类型的<code>x</code>和<code>b</code>类型的<code>xs</code>，然后反向地去连接<code>xs</code>和<code>[x]</code>，最后得到的是另一个列表，这和上面的<code>length</code>函数是不一样的<br> 特别地，可以重新定义<code>++</code></p>
+<pre><code>(++ ys) = foldr (:) ys
+</code></pre><p> 这是因为</p>
+<pre><code>(xs ++ ys) = foldr (:) ys xs
+</code></pre><p> 这表示把<code>Foldable</code>类型的<code>xs</code>中的每个元素<code>:</code>到<code>ys</code>的前面，这就相当于</p>
+<pre><code>  foldr (:) ys [1,2,3]
+= foldr (:) ys (1:(2:(3:[])))
+= (1:(2:(3:[ys])))
+</code></pre><p> 继续改写    </p>
+<pre><code>  (xs ++ ys)
+= (++) xs ys -- 这里原版写的是(++) ys xs但是我觉得应该是(++) xs ys
+= foldr (:) ys xs
+</code></pre><p> 因此可以得到</p>
+<pre><code>  (++) ys = foldr (:) ys
+= (++ ys) = foldr (:) ys
+</code></pre></li>
+<li><p>fold的作用</p>
+<ol>
+<li>有些递归函数用foldr更容易实现（可以从之前的讨论中看出）</li>
+<li>有些函数的性质可以通过foldr的代数性质推导得到，例如fusion规则和banana split规则<ul>
+<li>fusion<br>  fusion(composition)是之前讨论过的<code>.</code>运算符，用来实现<strong>复合函数</strong>，例如<pre><code>length = sum . map (\_ -&gt; 1)
+</code></pre>  这同样是因为Haskell是lazy的，所以看到map时，并不立即计算map<br>  特别地，<code>.</code>也可以理解为一个函数，它的定义可以看做<pre><code>(.) :: (b -&gt; c) -&gt; (a -&gt; b) -&gt; (a -&gt; c)
+f . g = \x -&gt; f (g x)
+</code></pre></li>
+<li>banana split<br>  这个会在后面提及</li>
+</ul>
+</li>
+<li>使用foldr而不是递归，可以方便进行优化</li>
+</ol>
+</li>
+<li><p>更多的高阶函数<br> all、any、takeWhile（常常被用来读无尽列表）、dropWhile</p>
+</li>
+</ol>
+<h1 id="Ch8-Declaring-Types-and-Classes"><a href="#Ch8-Declaring-Types-and-Classes" class="headerlink" title="Ch8 Declaring Types and Classes"></a>Ch8 Declaring Types and Classes</h1><p>【未完待续】</p>
 
       
     </div>
@@ -773,6 +905,28 @@ primes n = [x | x &lt;- [2..n], prime x]
 
         
         
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://wenwenla.github.io/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
 
       </section>
 
@@ -783,7 +937,7 @@ primes n = [x | x &lt;- [2..n], prime x]
               
             
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Ch0"><span class="nav-number">1.</span> <span class="nav-text">Ch0</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#配置Haskell环境"><span class="nav-number">1.1.</span> <span class="nav-text">配置Haskell环境</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Ch1-Introduction"><span class="nav-number">2.</span> <span class="nav-text">Ch1 Introduction</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Ch2-First-Steps"><span class="nav-number">3.</span> <span class="nav-text">Ch2 First Steps</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Ch3-Types-and-Classes"><span class="nav-number">4.</span> <span class="nav-text">Ch3 Types and Classes</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Ch4-Defining-Functions"><span class="nav-number">5.</span> <span class="nav-text">Ch4 Defining Functions</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Ch5-List-Comprehensions"><span class="nav-number">6.</span> <span class="nav-text">Ch5 List Comprehensions</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Ch6-Recursive-Functions"><span class="nav-number">7.</span> <span class="nav-text">Ch6 Recursive Functions</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Ch0"><span class="nav-number">1.</span> <span class="nav-text">Ch0</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#配置Haskell环境"><span class="nav-number">1.1.</span> <span class="nav-text">配置Haskell环境</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Ch1-Introduction"><span class="nav-number">2.</span> <span class="nav-text">Ch1 Introduction</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Ch2-First-Steps"><span class="nav-number">3.</span> <span class="nav-text">Ch2 First Steps</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Ch3-Types-and-Classes"><span class="nav-number">4.</span> <span class="nav-text">Ch3 Types and Classes</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Ch4-Defining-Functions"><span class="nav-number">5.</span> <span class="nav-text">Ch4 Defining Functions</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Ch5-List-Comprehensions"><span class="nav-number">6.</span> <span class="nav-text">Ch5 List Comprehensions</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Ch6-Recursive-Functions"><span class="nav-number">7.</span> <span class="nav-text">Ch6 Recursive Functions</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Ch7-Higher-Order-Functions"><span class="nav-number">8.</span> <span class="nav-text">Ch7 Higher-Order Functions</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Ch8-Declaring-Types-and-Classes"><span class="nav-number">9.</span> <span class="nav-text">Ch8 Declaring Types and Classes</span></a></li></ol></div>
             
           </div>
         </section>
