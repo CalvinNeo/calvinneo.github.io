@@ -5,16 +5,22 @@
   
 
 
-<html class="theme-next muse use-motion">
+<html class="theme-next muse use-motion" lang="zh-Hans">
 <head>
   <meta charset="UTF-8"/>
-<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
 
 
 
 <meta http-equiv="Cache-Control" content="no-transform" />
 <meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
 
 
 
@@ -63,9 +69,9 @@
 
 
 
-<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.4.0" rel="stylesheet" type="text/css" />
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
 
-<link href="/css/main.css?v=5.0.2" rel="stylesheet" type="text/css" />
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
 
 
   <meta name="keywords" content="编译原理,编译器," />
@@ -77,7 +83,7 @@
 
 
 
-  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.0.2" />
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
 
 
 
@@ -92,7 +98,7 @@
 <meta property="og:description" content="flex/bison是对lex/yacc的开源实现，可以方便地进行编译器构造。MSVC下的flex和bison有着win_flex和win_bison这两个封装，用起来比较方便。本文就使用flex和bison进行编译器构造时出现的一些问题进行说明，并讨论一些进阶技巧，例如重定向输入流，处理大小写不敏感代码串，yymore，代码定位，错误信息及恢复，start condition，扩栈，push p">
 <meta property="og:image" content="http://www.calvinneo.com/img/flex_bison_cpu_ana.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/flexbison_memory.png">
-<meta property="og:updated_time" content="2017-03-04T08:23:15.000Z">
+<meta property="og:updated_time" content="2017-07-20T02:02:41.000Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="flex和bison使用">
 <meta name="twitter:description" content="flex/bison是对lex/yacc的开源实现，可以方便地进行编译器构造。MSVC下的flex和bison有着win_flex和win_bison这两个封装，用起来比较方便。本文就使用flex和bison进行编译器构造时出现的一些问题进行说明，并讨论一些进阶技巧，例如重定向输入流，处理大小写不敏感代码串，yymore，代码定位，错误信息及恢复，start condition，扩栈，push p">
@@ -100,32 +106,46 @@
 
 
 
-<script type="text/javascript" id="hexo.configuration">
+<script type="text/javascript" id="hexo.configurations">
   var NexT = window.NexT || {};
   var CONFIG = {
+    root: '/',
     scheme: 'Muse',
-    sidebar: {"position":"left","display":"post"},
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
     fancybox: true,
     motion: true,
     duoshuo: {
       userId: '0',
       author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
     }
   };
 </script>
 
 
 
-
   <link rel="canonical" href="http://www.calvinneo.com/2016/07/29/flex和bison使用/"/>
 
 
-  <title> flex和bison使用 | Calvin's Marbles </title>
+
+
+
+  <title>flex和bison使用 | Calvin's Marbles</title>
 </head>
 
-<body itemscope itemtype="//schema.org/WebPage" lang="zh-Hans">
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
 
   
+
+
+
+
 
 
 
@@ -141,29 +161,33 @@
     
   
 
-  <div class="container one-collumn sidebar-position-left page-post-detail ">
+  <div class="container sidebar-position-left page-post-detail ">
     <div class="headband"></div>
 
-    <header id="header" class="header" itemscope itemtype="//schema.org/WPHeader">
-      <div class="header-inner"><div class="site-meta ">
-  
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
 
-  <div class="custom-logo-site-title">
-    <a href="/"  class="brand" rel="start">
-      <span class="logo-line-before"><i></i></span>
-      <span class="site-title">Calvin's Marbles</span>
-      <span class="logo-line-after"><i></i></span>
-    </a>
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
   </div>
-  <p class="site-subtitle"></p>
-</div>
 
-<div class="site-nav-toggle">
-  <button>
-    <span class="btn-bar"></span>
-    <span class="btn-bar"></span>
-    <span class="btn-bar"></span>
-  </button>
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
 </div>
 
 <nav class="site-nav">
@@ -179,6 +203,16 @@
               <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
             
             首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
           </a>
         </li>
       
@@ -221,17 +255,30 @@
   
     <div class="site-search">
       
-  <div class="popup">
- <span class="search-icon fa fa-search"></span>
- <input type="text" id="local-search-input">
- <div id="local-search-result"></div>
- <span class="popup-btn-close">close</span>
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
 </div>
+
 
 
     </div>
   
 </nav>
+
+
 
  </div>
     </header>
@@ -246,13 +293,23 @@
     
 
   
-  
 
   
   
   
 
-  <article class="post post-type-normal " itemscope itemtype="//schema.org/Article">
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2016/07/29/flex和bison使用/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
 
     
       <header class="post-header">
@@ -271,13 +328,21 @@
 
         <div class="post-meta">
           <span class="post-time">
-            <span class="post-meta-item-icon">
-              <i class="fa fa-calendar-o"></i>
-            </span>
-            <span class="post-meta-item-text">发表于</span>
-            <time itemprop="dateCreated" datetime="2016-07-29T16:57:19+08:00" content="2016-07-29">
-              2016-07-29
-            </time>
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2016-07-29T16:57:19+08:00">
+                2016-07-29
+              </time>
+            
+
+            
+
+            
           </span>
 
           
@@ -285,29 +350,34 @@
           
             
               <span class="post-comments-count">
-                &nbsp; | &nbsp;
-                <a href="/2016/07/29/flex和bison使用/#comments" itemprop="discussionUrl">
-                  <span class="post-comments-count ds-thread-count" data-thread-key="2016/07/29/flex和bison使用/" itemprop="commentsCount"></span>
+                <span class="post-meta-divider">|</span>
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-comment-o"></i>
+                </span>
+                <a class="cloud-tie-join-count" href="/2016/07/29/flex和bison使用/#comments" itemprop="discussionUrl">
+                  <span class="post-comments-count join-count" itemprop="commentCount"></span>
                 </a>
               </span>
             
           
 
           
-
-          
           
 
           
-              &nbsp; | &nbsp;
-              <span class="page-pv"><i class="fa fa-file-o"></i>
-              <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
-              </span>
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
           
+
+          
+
+          
+
         </div>
       </header>
     
-
 
     <div class="post-body" itemprop="articleBody">
 
@@ -357,10 +427,13 @@ normal: 333
 </code></pre><p>在实际处理fortran的format语句过程中，还遇到了Syntax Error的错误，产生在将整个format语句作为一个<code>YY_FORMAT_STMT</code>终结符return，后来发现这是因为我在<code>word_parse</code>函数中处理<code>format</code>前缀时调用<code>get_flex_external_context().begin_external_scanner(&quot;format&quot;);</code>来开启start condition之后并没有<code>return YY_IGNORE_THIS</code>所致，因为这个format前缀仍然是作为<strong>普通规则</strong>而不是<strong>start condition</strong>处理的。加上C++本身的“不是所有路径都返回值”导致的UB错误。</p>
 <h2 id="bison的定位功能"><a href="#bison的定位功能" class="headerlink" title="bison的定位功能"></a>bison的定位功能</h2><p><a href="http://www.ibm.com/developerworks/cn/linux/l-flexbison.html" target="_blank" rel="external">bison提供了获取终结符行号和光标位置的功能</a>。可以使用@n访问第n个文法符号的first_line、first_column、last_line、last_column属性，所以如果只需要这四个属性，可以不定义自己的<code>struct</code>，而使用bison提供的<code>YYLTYPE</code>。<br><figure class="highlight cpp"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">typedef</span> <span class="keyword">struct</span> YYLTYPE</div><div class="line">&#123;</div><div class="line">  <span class="keyword">int</span> first_line;</div><div class="line">  <span class="keyword">int</span> first_column;</div><div class="line">  <span class="keyword">int</span> last_line;</div><div class="line">  <span class="keyword">int</span> last_column;</div><div class="line">&#125; YYLTYPE;</div></pre></td></tr></table></figure></p>
 <p>但是我仍然建议自己处理定位信息，这样的好处是在词法分析阶段就可以对源语言中与目标语言关键字冲突的符号进行转义，而不影响语法分析阶段对代码的定位。例如如果fortran中声明<code>int</code>变量，那会和C++中的<code>int</code>类型声明产生冲突，这个问题宜在词法阶段直接替换解决，但是这会带来长度的变化，因此需要单独维护原来文本的长度。</p>
+<h2 id="重命名yylex"><a href="#重命名yylex" class="headerlink" title="重命名yylex"></a>重命名yylex</h2><p>我们知道bison会调用<code>yylex</code>来获得tokenizer返回的结果，而<code>yylex</code>是有flex直接生成的。有时候我们不希望直接把<code>yylex</code>函数产生的原始结果喂给bison，而是进行加工。这时候我们可以自己定义<code>yylex</code>函数，而给flex自动生成的函数进行重命名</p>
+<pre><code>#define YY_DECL int pure_yylex(void)
+</code></pre><p>此时我们就可以自定义<code>yylex</code>函数了，bison会调用我们自定义的<code>yylex</code>函数，而我们的<code>yylex</code>函数可以通过<code>pure_yylex</code>去调用flex进行分析。</p>
 <h2 id="特殊情况的处理"><a href="#特殊情况的处理" class="headerlink" title="特殊情况的处理"></a>特殊情况的处理</h2><ol>
 <li>读入字符不属于任意规则<br> 如果不加处理，这个字符会被保留，例如<code>,www</code>如果定义了<code>[A-Za-z]</code>规则但没有定义<code>,www</code>规则会直接返回<code>,www</code>,但是匹配长度还是3。虽然可以再次截取出正确的字符，但是显然这是没有必要的。因此可以在<strong>最后</strong>为任意字符<code>.</code>加上规则。</li>
-<li>到达读入字符串尾端<br> 此时<code>yylex</code>函数返回0</li>
-<li>用正则表达式表达字符串<br> <code>\&quot;(\\.|[^&quot;])*\&quot;</code><br> 注意在方括号内部引号自动转义</li>
+<li>到达读入字符串尾端<br> 此时<code>yylex</code>函数返回0，这是为了配合bison端的yyparse函数设置的</li>
+<li>用正则表达式表达字符串<br> <code>\&quot;(\\.|[^&quot;])*\&quot;</code><br> 在flex的正则表达式语法中，方括号内部引号自动转义</li>
 <li>yymore_used_but_not_detected<br> 需要在l文件第一部分使用<code>%token yymore</code>显式说明需要<code>yymore</code>函数。</li>
 <li>根据<a href="http://flex.sourceforge.net/manual/Options-Affecting-Scanner-Behavior.html" target="_blank" rel="external">manual</a>，可使用一些语法来指定大小写不敏感的规则，但是要求flex的版本要高于2.5.3，配置时，在项目属性页选择Flex Files-&gt;FlexOptions-&gt;Case-insensitive mode</li>
 <li>找不到入口点(main函数)<br> 注意要将flex生成的cpp文件添加进MSVC项目中</li>
@@ -437,7 +510,8 @@ program : suite
 <h2 id="bison常见错误及调试方法"><a href="#bison常见错误及调试方法" class="headerlink" title="bison常见错误及调试方法"></a>bison常见错误及调试方法</h2><h3 id="使用debug模式调试"><a href="#使用debug模式调试" class="headerlink" title="使用debug模式调试"></a>使用debug模式调试</h3><figure class="highlight cpp"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line"><span class="meta">#<span class="meta-keyword">define</span> YYDEBUG 1</span></div><div class="line"><span class="meta">#<span class="meta-keyword">define</span> YYERROR_VERBOSE</span></div></pre></td></tr></table></figure>
 <p>注意<code>yymsgp</code>是<code>const char*</code>，所以如果重新定义<code>yyerror</code>参数要注意。<br><figure class="highlight cpp"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div></pre></td><td class="code"><pre><div class="line"><span class="meta"># <span class="meta-keyword">define</span> YYSYNTAX_ERROR yysyntax_error (&amp;yymsg_alloc, &amp;yymsg, \</span></div><div class="line">										yyssp, yytoken)</div><div class="line">	  &#123;</div><div class="line">		<span class="comment">/* 以上省略 */</span></div><div class="line">		yyerror (yymsgp);</div><div class="line">		<span class="keyword">if</span> (yysyntax_error_status == <span class="number">2</span>)</div><div class="line">		  <span class="keyword">goto</span> yyexhaustedlab;</div><div class="line">	  &#125;</div></pre></td></tr></table></figure></p>
 <p>此外还可以在项目属性页选择Flex Files-&gt;FlexOption或对应的Bison标签页中开启DEBUG模式。</p>
-<h4 id="使用output文件分析语法冲突"><a href="#使用output文件分析语法冲突" class="headerlink" title="使用output文件分析语法冲突"></a>使用output文件分析语法冲突</h4><p>在bison生成的时候可以在输出中看到类似的语句：<br>    1&gt;       BisonTarget:<br>    1&gt;         Process “for90.y” bison file<br>    1&gt;         for90.y: conflicts: 132 shift/reduce, 33 reduce/reduce<br>这表明有132个移进归约冲突和33个归约归约冲突，这在二义性部分已经有相关的论述<br>当出现冲突的时候可以使用<code>bison -v xxx.y</code>命令来查看具体的冲突。该命令会生成一个xxx.output文件<br>在output文件中，所有因为冲突无用的产生式会被中括号<code>[]</code>括起，通过分析，可以解决一部分的冲突</p>
+<h4 id="使用output文件分析语法冲突"><a href="#使用output文件分析语法冲突" class="headerlink" title="使用output文件分析语法冲突"></a>使用output文件分析语法冲突</h4><p>在bison生成的时候可以在输出中看到类似的语句：<br><figure class="highlight erlang-repl"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div></pre></td><td class="code"><pre><div class="line"><span class="meta">1&gt; </span>      BisonTarget:</div><div class="line"><span class="meta">1&gt; </span>        Process <span class="string">"for90.y"</span> bison file</div><div class="line"><span class="meta">1&gt; </span>        for90.y: conflicts: <span class="number">132</span> shift/reduce, <span class="number">33</span> reduce/reduce</div></pre></td></tr></table></figure></p>
+<p>这表明有132个移进归约冲突和33个归约归约冲突，这在二义性部分已经有相关的论述<br>当出现冲突的时候可以使用<code>bison -v xxx.y</code>命令来查看具体的冲突。该命令会生成一个xxx.output文件<br>在output文件中，所有因为冲突无用的产生式会被中括号<code>[]</code>括起，通过分析，可以解决一部分的冲突</p>
 <h3 id="m4sugar-m4"><a href="#m4sugar-m4" class="headerlink" title="m4sugar.m4"></a>m4sugar.m4</h3><p>win_bison: …\data/m4sugar/m4sugar.m4: cannot open: No such file or directory<br>这个文件在和<strong>custom_build_rules</strong>文件夹同层的<strong>data</strong>文件夹中，所以注意是否将<strong>data</strong>文件夹加入路径</p>
 <h3 id="yylex-identifier-not-found"><a href="#yylex-identifier-not-found" class="headerlink" title="yylex identifier not found"></a>yylex identifier not found</h3><p>注意在y文件中第一部分extern yylex声明。</p>
 <h3 id="memory-exhausted错误"><a href="#memory-exhausted错误" class="headerlink" title="memory exhausted错误"></a>memory exhausted错误</h3><p><img src="/img/flexbison_memory.png" alt=""><br>首先检查语法是否出现冲突，通常出现在语法嵌套比较深，从而出现间接的无限递归的情况。例如：<br><figure class="highlight 1c"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div></pre></td><td class="code"><pre><div class="line">suite : stmt</div><div class="line">	<span class="string">| stmt suite</span></div><div class="line">	<span class="string">|</span></div><div class="line">		</div><div class="line">program : YY_PROGRAM _optional_name crlf suite YY_END YY_PROGRAM _optional_name crlf</div><div class="line"></div><div class="line">wrapper :  function_decl</div><div class="line">	<span class="string">| program</span></div><div class="line">	<span class="string">| suite</span></div><div class="line"></div><div class="line">fortran_program : wrapper</div><div class="line">	<span class="string">| wrapper fortran_program</span></div></pre></td></tr></table></figure></p>
@@ -472,15 +546,26 @@ program : suite
       
     </div>
 
+    <div>
+      
+        
+
+      
+    </div>
+
     <footer class="post-footer">
       
         <div class="post-tags">
           
-            <a href="/tags/编译原理/" rel="tag">#编译原理</a>
+            <a href="/tags/编译原理/" rel="tag"># 编译原理</a>
           
-            <a href="/tags/编译器/" rel="tag">#编译器</a>
+            <a href="/tags/编译器/" rel="tag"># 编译器</a>
           
         </div>
+      
+
+      
+        
       
 
       
@@ -492,6 +577,8 @@ program : suite
               </a>
             
           </div>
+
+          <span class="post-nav-divider"></span>
 
           <div class="post-nav-prev post-nav-item">
             
@@ -519,16 +606,11 @@ program : suite
           </div>
           
 
-  <p>热评文章</p>
-  <div class="ds-top-threads" data-range="weekly" data-num-items="4"></div>
-
 
           
   <div class="comments" id="comments">
     
-      <div class="ds-thread" data-thread-key="2016/07/29/flex和bison使用/"
-           data-title="flex和bison使用" data-url="http://www.calvinneo.com/2016/07/29/flex和bison使用/">
-      </div>
+      <div id="cloud-tie-wrapper" class="cloud-tie-wrapper"></div>
     
   </div>
 
@@ -561,28 +643,35 @@ program : suite
         </ul>
       
 
-      <section class="site-overview sidebar-panel ">
-        <div class="site-author motion-element" itemprop="author" itemscope itemtype="//schema.org/Person">
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
           <img class="site-author-image" itemprop="image"
                src="/favicon.jpg"
                alt="Calvin Neo" />
           <p class="site-author-name" itemprop="name">Calvin Neo</p>
-          <p class="site-description motion-element" itemprop="description"></p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
         </div>
         <nav class="site-state motion-element">
-          <div class="site-state-item site-state-posts">
-            <a href="/archives">
-              <span class="site-state-item-count">65</span>
-              <span class="site-state-item-name">日志</span>
-            </a>
-          </div>
 
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">77</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
           
 
           
+
+          
+            
+            
             <div class="site-state-item site-state-tags">
-              <a href="/tags">
-                <span class="site-state-item-count">82</span>
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">97</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -653,19 +742,29 @@ program : suite
           </div>
         
 
+        
+
+
       </section>
 
       
+      <!--noindex-->
         <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
           <div class="post-toc">
+
             
               
             
+
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#在VS2015下配置"><span class="nav-number">1.</span> <span class="nav-text">在VS2015下配置</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#flex使用说明"><span class="nav-number">2.</span> <span class="nav-text">flex使用说明</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#如何重定向输入流yyin"><span class="nav-number">2.1.</span> <span class="nav-text">如何重定向输入流yyin</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#如何实现迭代读取"><span class="nav-number">2.2.</span> <span class="nav-text">如何实现迭代读取</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#yymore"><span class="nav-number">2.3.</span> <span class="nav-text">yymore</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#使用flex处理非正则的文法"><span class="nav-number">2.4.</span> <span class="nav-text">使用flex处理非正则的文法</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#bison的定位功能"><span class="nav-number">2.5.</span> <span class="nav-text">bison的定位功能</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#特殊情况的处理"><span class="nav-number">2.6.</span> <span class="nav-text">特殊情况的处理</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#bison使用说明"><span class="nav-number">3.</span> <span class="nav-text">bison使用说明</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#部分元素的意义"><span class="nav-number">3.1.</span> <span class="nav-text">部分元素的意义</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#bison的二义性问题解决方法"><span class="nav-number">3.2.</span> <span class="nav-text">bison的二义性问题解决方法</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#部分语法的翻译方法"><span class="nav-number">3.3.</span> <span class="nav-text">部分语法的翻译方法</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#换行符和空规则"><span class="nav-number">3.3.1.</span> <span class="nav-text">换行符和空规则</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#控制结构"><span class="nav-number">3.3.2.</span> <span class="nav-text">控制结构</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#终结符"><span class="nav-number">3.3.3.</span> <span class="nav-text">终结符</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#自定义类型的yylval"><span class="nav-number">3.4.</span> <span class="nav-text">自定义类型的yylval</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#实现non-trivial的YYSTYPE"><span class="nav-number">3.4.1.</span> <span class="nav-text">实现non-trivial的YYSTYPE</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#左递归和右递归的选择"><span class="nav-number">3.5.</span> <span class="nav-text">左递归和右递归的选择</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#bison常见错误及调试方法"><span class="nav-number">3.6.</span> <span class="nav-text">bison常见错误及调试方法</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#使用debug模式调试"><span class="nav-number">3.6.1.</span> <span class="nav-text">使用debug模式调试</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#使用output文件分析语法冲突"><span class="nav-number">3.6.1.1.</span> <span class="nav-text">使用output文件分析语法冲突</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#m4sugar-m4"><span class="nav-number">3.6.2.</span> <span class="nav-text">m4sugar.m4</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#yylex-identifier-not-found"><span class="nav-number">3.6.3.</span> <span class="nav-text">yylex identifier not found</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#memory-exhausted错误"><span class="nav-number">3.6.4.</span> <span class="nav-text">memory exhausted错误</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#bison生成代码-tab-cpp分析"><span class="nav-number">3.7.</span> <span class="nav-text">bison生成代码.tab.cpp分析</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#bison的GLR-parser"><span class="nav-number">3.8.</span> <span class="nav-text">bison的GLR parser</span></a></li></ol></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#在VS2015下配置"><span class="nav-number">1.</span> <span class="nav-text">在VS2015下配置</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#flex使用说明"><span class="nav-number">2.</span> <span class="nav-text">flex使用说明</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#如何重定向输入流yyin"><span class="nav-number">2.1.</span> <span class="nav-text">如何重定向输入流yyin</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#如何实现迭代读取"><span class="nav-number">2.2.</span> <span class="nav-text">如何实现迭代读取</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#yymore"><span class="nav-number">2.3.</span> <span class="nav-text">yymore</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#使用flex处理非正则的文法"><span class="nav-number">2.4.</span> <span class="nav-text">使用flex处理非正则的文法</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#bison的定位功能"><span class="nav-number">2.5.</span> <span class="nav-text">bison的定位功能</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#重命名yylex"><span class="nav-number">2.6.</span> <span class="nav-text">重命名yylex</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#特殊情况的处理"><span class="nav-number">2.7.</span> <span class="nav-text">特殊情况的处理</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#bison使用说明"><span class="nav-number">3.</span> <span class="nav-text">bison使用说明</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#部分元素的意义"><span class="nav-number">3.1.</span> <span class="nav-text">部分元素的意义</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#bison的二义性问题解决方法"><span class="nav-number">3.2.</span> <span class="nav-text">bison的二义性问题解决方法</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#部分语法的翻译方法"><span class="nav-number">3.3.</span> <span class="nav-text">部分语法的翻译方法</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#换行符和空规则"><span class="nav-number">3.3.1.</span> <span class="nav-text">换行符和空规则</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#控制结构"><span class="nav-number">3.3.2.</span> <span class="nav-text">控制结构</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#终结符"><span class="nav-number">3.3.3.</span> <span class="nav-text">终结符</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#自定义类型的yylval"><span class="nav-number">3.4.</span> <span class="nav-text">自定义类型的yylval</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#实现non-trivial的YYSTYPE"><span class="nav-number">3.4.1.</span> <span class="nav-text">实现non-trivial的YYSTYPE</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#左递归和右递归的选择"><span class="nav-number">3.5.</span> <span class="nav-text">左递归和右递归的选择</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#bison常见错误及调试方法"><span class="nav-number">3.6.</span> <span class="nav-text">bison常见错误及调试方法</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#使用debug模式调试"><span class="nav-number">3.6.1.</span> <span class="nav-text">使用debug模式调试</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#使用output文件分析语法冲突"><span class="nav-number">3.6.1.1.</span> <span class="nav-text">使用output文件分析语法冲突</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#m4sugar-m4"><span class="nav-number">3.6.2.</span> <span class="nav-text">m4sugar.m4</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#yylex-identifier-not-found"><span class="nav-number">3.6.3.</span> <span class="nav-text">yylex identifier not found</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#memory-exhausted错误"><span class="nav-number">3.6.4.</span> <span class="nav-text">memory exhausted错误</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#bison生成代码-tab-cpp分析"><span class="nav-number">3.7.</span> <span class="nav-text">bison生成代码.tab.cpp分析</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#bison的GLR-parser"><span class="nav-number">3.8.</span> <span class="nav-text">bison的GLR parser</span></a></li></ol></li></ol></div>
             
+
           </div>
         </section>
+      <!--/noindex-->
+      
+
       
 
     </div>
@@ -688,6 +787,7 @@ program : suite
   <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
 </div>
 
+
 <div class="powered-by">
   由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
 </div>
@@ -698,32 +798,44 @@ program : suite
     NexT.Muse
   </a>
 </div>
+<div>
+<p>Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></p>
+</div>
+
 
         
-
 <div class="busuanzi-count">
-
   <script async src="https://dn-lbstatics.qbox.me/busuanzi/2.3/busuanzi.pure.mini.js"></script>
 
   
-    <span class="site-uv"><i class="fa fa-user"></i><span class="busuanzi-value" id="busuanzi_value_site_uv"></span></span>
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
   
 
   
-    <span class="site-pv"><i class="fa fa-eye"></i><span class="busuanzi-value" id="busuanzi_value_site_pv"></span></span>
-  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
   
 </div>
-
 
 
         
       </div>
     </footer>
 
-    <div class="back-to-top">
-      <i class="fa fa-arrow-up"></i>
-    </div>
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
   </div>
 
   
@@ -743,6 +855,15 @@ program : suite
 
 
   
+
+
+
+
+
+
+
+
+
 
 
 
@@ -768,188 +889,363 @@ program : suite
   
 
 
-  <script type="text/javascript" src="/js/src/utils.js?v=5.0.2"></script>
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
 
-  <script type="text/javascript" src="/js/src/motion.js?v=5.0.2"></script>
-
-
-
-  
-  
-
-  
-  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.0.2"></script>
-<script type="text/javascript" src="/js/src/post-details.js?v=5.0.2"></script>
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
 
 
 
   
+  
 
-
-  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.0.2"></script>
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
 
 
 
   
 
-  
-    
-  
 
-  <script type="text/javascript">
-    var duoshuoQuery = {short_name:"calvinneoorg"};
-    (function() {
-      var ds = document.createElement('script');
-      ds.type = 'text/javascript';ds.async = true;
-      ds.id = 'duoshuo-script';
-      ds.src = (document.location.protocol == 'https:' ? 'https:' : 'http:') + '//static.duoshuo.com/embed.js';
-      ds.charset = 'UTF-8';
-      (document.getElementsByTagName('head')[0]
-      || document.getElementsByTagName('body')[0]).appendChild(ds);
-    })();
-  </script>
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
 
   
-    
-    <script src="/lib/ua-parser-js/dist/ua-parser.min.js?v=0.7.9"></script>
-    <script src="/js/src/hook-duoshuo.js"></script>
+
+
   
 
+
+
+
+	
 
 
 
 
 
   
+    
+    <script>
+      var cloudTieConfig = {
+        url: document.location.href, 
+        sourceId: "",
+        productKey: "37598a3a99864bacb6bf78f7fbcbc3d6",
+        target: "cloud-tie-wrapper"
+      };
+    </script>
+    <script src="https://img1.ws.126.net/f2e/tie/yun/sdk/loader.js"></script>
   
+
+
+
+
+
+
+
+
+
+
+  
+
   <script type="text/javascript">
     // Popup Window;
     var isfetched = false;
     // Search DB path;
     var search_path = "search.xml";
-    if (search_path.length == 0) {
-       search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
     }
     var path = "/" + search_path;
     // monitor main search box;
 
-    function proceedsearch() {
-      $("body").append('<div class="popoverlay">').css('overflow', 'hidden');
-      $('.popup').toggle();
-
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
     }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
     // search function;
     var searchFunc = function(path, search_id, content_id) {
-    'use strict';
-    $.ajax({
+      'use strict';
+      $.ajax({
         url: path,
         dataType: "xml",
         async: true,
         success: function( xmlResponse ) {
-            // get the contents from search data
-            isfetched = true;
-            $('.popup').detach().appendTo('.header-inner');
-            var datas = $( "entry", xmlResponse ).map(function() {
-                return {
-                    title: $( "title", this ).text(),
-                    content: $("content",this).text(),
-                    url: $( "url" , this).text()
-                };
-            }).get();
-            var $input = document.getElementById(search_id);
-            var $resultContent = document.getElementById(content_id);
-            $input.addEventListener('input', function(){
-                var matchcounts = 0;
-                var str='<ul class=\"search-result-list\">';
-                var keywords = this.value.trim().toLowerCase().split(/[\s\-]+/);
-                $resultContent.innerHTML = "";
-                if (this.value.trim().length > 1) {
-                // perform local searching
-                datas.forEach(function(data) {
-                    var isMatch = false;
-                    var content_index = [];
-                    var data_title = data.title.trim().toLowerCase();
-                    var data_content = data.content.trim().replace(/<[^>]+>/g,"").toLowerCase();
-                    var data_url = decodeURIComponent(data.url);
-                    var index_title = -1;
-                    var index_content = -1;
-                    var first_occur = -1;
-                    // only match artiles with not empty titles and contents
-                    if(data_title != '') {
-                        keywords.forEach(function(keyword, i) {
-                            index_title = data_title.indexOf(keyword);
-                            index_content = data_content.indexOf(keyword);
-                            if( index_title >= 0 || index_content >= 0 ){
-                                isMatch = true;
-								if (i == 0) {
-                                    first_occur = index_content;
-                                }
-                            } 
-							
-                        });
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
                     }
-                    // show search results
-                    if (isMatch) {
-                        matchcounts += 1;
-                        str += "<li><a href='"+ data_url +"' class='search-result-title'>"+ data_title +"</a>";
-                        var content = data.content.trim().replace(/<[^>]+>/g,"");
-                        if (first_occur >= 0) {
-                            // cut out 100 characters
-                            var start = first_occur - 20;
-                            var end = first_occur + 80;
-                            if(start < 0){
-                                start = 0;
-                            }
-                            if(start == 0){
-                                end = 50;
-                            }
-                            if(end > content.length){
-                                end = content.length;
-                            }
-                            var match_content = content.substring(start, end);
-                            // highlight all keywords
-                            keywords.forEach(function(keyword){
-                                var regS = new RegExp(keyword, "gi");
-                                match_content = match_content.replace(regS, "<b class=\"search-keyword\">"+keyword+"</b>");
-                            });
 
-                            str += "<p class=\"search-result\">" + match_content +"...</p>"
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
                         }
-                        str += "</li>";
+                      }
                     }
-                })};
-                str += "</ul>";
-                if (matchcounts == 0) { str = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>' }
-                if (keywords == "") { str = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>' }
-                $resultContent.innerHTML = str;
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
             });
-            proceedsearch();
+          }
+          proceedsearch();
         }
-    });}
+      });}
 
     // handle and trigger popup window;
     $('.popup-trigger').click(function(e) {
       e.stopPropagation();
-      if (isfetched == false) {
+      if (isfetched === false) {
         searchFunc(path, 'local-search-input', 'local-search-result');
       } else {
         proceedsearch();
       };
-
     });
 
-    $('.popup-btn-close').click(function(e){
-      $('.popup').hide();
-      $(".popoverlay").remove();
-      $('body').css('overflow', '');
-    });
+    $('.popup-btn-close').click(onPopupClose);
     $('.popup').click(function(e){
       e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
     });
   </script>
 
 
-  
+
+
 
   
 
@@ -957,6 +1253,9 @@ program : suite
 
   
 
+  
+
+  
 
 </body>
 </html>
