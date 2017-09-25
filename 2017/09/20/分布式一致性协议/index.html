@@ -1,0 +1,1163 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="分布式,raft,paxos," />
+
+
+
+
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="CAP理论、2PC和3PC协议、RWN协议、Raft协议、Paxos协议">
+<meta property="og:type" content="article">
+<meta property="og:title" content="分布式一致性协议笔记">
+<meta property="og:url" content="http://www.calvinneo.com/2017/09/20/分布式一致性协议/index.html">
+<meta property="og:site_name" content="Calvin's Marbles">
+<meta property="og:description" content="CAP理论、2PC和3PC协议、RWN协议、Raft协议、Paxos协议">
+<meta property="og:updated_time" content="2017-09-24T06:27:05.000Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="分布式一致性协议笔记">
+<meta name="twitter:description" content="CAP理论、2PC和3PC协议、RWN协议、Raft协议、Paxos协议">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2017/09/20/分布式一致性协议/"/>
+
+
+
+
+
+  <title>分布式一致性协议笔记 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2017/09/20/分布式一致性协议/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                分布式一致性协议笔记
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2017-09-20T12:33:22+08:00">
+                2017-09-20
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+              <span class="post-comments-count">
+                <span class="post-meta-divider">|</span>
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-comment-o"></i>
+                </span>
+                <a class="cloud-tie-join-count" href="/2017/09/20/分布式一致性协议/#comments" itemprop="discussionUrl">
+                  <span class="post-comments-count join-count" itemprop="commentCount"></span>
+                </a>
+              </span>
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>CAP理论、2PC和3PC协议、RWN协议、Raft协议、Paxos协议</p>
+<a id="more"></a>
+<h1 id="分布式系统中的一致性问题与CAP理论"><a href="#分布式系统中的一致性问题与CAP理论" class="headerlink" title="分布式系统中的一致性问题与CAP理论"></a>分布式系统中的一致性问题与CAP理论</h1><h2 id="CAP理论"><a href="#CAP理论" class="headerlink" title="CAP理论"></a>CAP理论</h2><p>CAP理论提出之后一直广受质疑，但并不影响其成为一套经典理论。<br>CAP理论认为一致性(consistency)、可用性(availability)和分区容错性(partition tolerance)是不可能同时被满足的。<br>一致性即<em>all nodes see the same data at the same time</em>。这个要求是比较高的，通常称为强一致性，有的时候系统保证在更新操作后的一段时间后，系统能够达到一致性状态，这称为弱一致性。最终一致性是一种弱一致性模型，还可以分为因果一致性、单调读一致性、单调写一致性等。<br>可用性即<em>reads and writes always succeed</em>。这个要求系统能够始终在<strong>正常时间</strong>内对用户的请求进行响应。当然由于可能出现的一致性问题，这个响应不一定是正确的。<br>分区容错性即<em>the system continues to operate despite arbitrary message loss or failure of part of the system</em>。由于分布式集群中常出现网络分区情况，即集群中的一部分机器与另一部分机器连接中断。我们除非设计出一个永远不会出故障的网络，否则我们必须要容忍P。于是C和A便成为了trade-off。由于网络分区的概率比较小，并且是易于探测的，所以C和A大多数情况是能够比较好地满足的，这就引入了下面的一些协议。</p>
+<h1 id="2PC和3PC"><a href="#2PC和3PC" class="headerlink" title="2PC和3PC"></a>2PC和3PC</h1><h2 id="事务"><a href="#事务" class="headerlink" title="事务"></a>事务</h2><h3 id="ACID准则"><a href="#ACID准则" class="headerlink" title="ACID准则"></a>ACID准则</h3><p>对于关系型数据库，存在ACID原则维护事务的正确可靠性。原子性(atomicity)表现为事务中的所有操作要么全部完成，要么全部不完成（回滚），不会出现中间状态。一致性(consistency)表现为在事务开始前和结束后完整性约束不被破坏。隔离性(isolation)表现为数据库支持多个并发事务同时进行增删改。持久性(durability)表现为事务结束后对数据的修改是永久的。</p>
+<h3 id="前像与后像"><a href="#前像与后像" class="headerlink" title="前像与后像"></a>前像与后像</h3><p>事务有只有两种完成方式，提交即全做事务中的操作，和回滚即全不做事务中的操作。在事务的中间过程中可能对数据块的值进行修改，但最终这些修改必须要通过提交和回滚来实现持久化。<br>AI（后像，After Image），指的是每次更新时数据块的新值。对于一个已提交的事务，当故障发生时应当REDO它的后像。注意一旦事务提交，就不能UNDO它的前像，会破坏完整性约束；但是事务提交前任意的删改都可以通过UNDO来撤销。事务提交和往数据库写值（执行事务）是两个不同概念。<br>BI（前像，Before Image），指的是每次更新时数据块的旧值。对于一个未提交的事务或提交进行到一半，当故障发生时应当UNDO它的前像。<br>UNDO和REDO操作具有幂等性，即对前像UNDO或对后像REDO任意多次，结果都是相同的。</p>
+<h3 id="事务更新的两条规则"><a href="#事务更新的两条规则" class="headerlink" title="事务更新的两条规则"></a>事务更新的两条规则</h3><h4 id="提交规则"><a href="#提交规则" class="headerlink" title="提交规则"></a>提交规则</h4><p>后像必须在提交前写入非易失存储器（数据库或运行记录）中。<br>当后像只写入日志而没写入数据库中也可以提交事务，因为出现故障之后可以使用后像REDO进行恢复。</p>
+<h4 id="先记后写规则"><a href="#先记后写规则" class="headerlink" title="先记后写规则"></a>先记后写规则</h4><p>数据库中有先记后写原则，如果在事务提交前将后像写入数据库，则必须首先把前像记入日志。这样做的好处是在事务提交完成前如果出现故障，可以通过日志文件中的该前像进行UNDO，此时即使数据库没有被修改，也只是进行一次多余的UNDO操作。</p>
+<h2 id="两阶段提交协议"><a href="#两阶段提交协议" class="headerlink" title="两阶段提交协议"></a>两阶段提交协议</h2><h3 id="分布式事务"><a href="#分布式事务" class="headerlink" title="分布式事务"></a>分布式事务</h3><p>由于分布式系统中存在多个副本，所以维护这些副本的一致性成为核心问题之一。分布式事务相对于仅涉及单个数据库事务的难点在于其提交或回滚不仅决定于自身，还决定于其他节点上事务执行的状态。从理想考虑，只要有一台节点失效，其他节点就要进行rollback。为了实现这一点，需要一个协调者(Coordinator)来根据所有参与者(Cohorts)的情况判断是否完成提交或终止提交。</p>
+<h3 id="第一阶段（投票阶段）"><a href="#第一阶段（投票阶段）" class="headerlink" title="第一阶段（投票阶段）"></a>第一阶段（投票阶段）</h3><p>首先协调者向所有的参与者发出提交请求VOTE_REQUEST，参与者按照事务的标准流程写UNDO和REDO等日志，并在本地执行事务。如果事务执行顺利，则不提交（尽管事务中的全部操作已经正确完成），返回一个VOTE_COMMIT给协调者，表示自己成功执行了事务。如果事务执行出现错误，则返回一个VOTE_ABORT。</p>
+<h3 id="第二阶段（执行提交阶段）"><a href="#第二阶段（执行提交阶段）" class="headerlink" title="第二阶段（执行提交阶段）"></a>第二阶段（执行提交阶段）</h3><p><strong>假设协调者没有宕机</strong><br>相应会出现两种状态：</p>
+<ol>
+<li>成功，发生在所有的参与者节点都返回VOTE_COMMIT</li>
+<li>失败，发生在任意参与者节点返回VOTE_ABORT，或者有的参与者timeout</li>
+</ol>
+<h4 id="成功"><a href="#成功" class="headerlink" title="成功"></a>成功</h4><p>此时协调者向所有参与者发送GLOBAL_COMMIT，参与者收到之后正式提交事务并释放资源，然后返回ACK确认</p>
+<h4 id="失败"><a href="#失败" class="headerlink" title="失败"></a>失败</h4><p>此时协调者向所有参与者发送GLOBAL_ROLLBACK，参与者收到之后UNDO回前像状态，然后返回ACK确认</p>
+<h3 id="协调者宕机情况对一致性的影响"><a href="#协调者宕机情况对一致性的影响" class="headerlink" title="协调者宕机情况对一致性的影响"></a>协调者宕机情况对一致性的影响</h3><p>OK，刚才协调者没有宕机，看起来很美好，可是如果协调者宕机了呢？首先如果有一台参与者收到来自协调者的信息GLOBAL_COMMIT，那么就能通过某种选举协议作为新的协调者重新掌控大局。可是如果这台参与者也宕机了呢？这就需要分类讨论</p>
+<h4 id="假设参与者全部宕机"><a href="#假设参与者全部宕机" class="headerlink" title="假设参与者全部宕机"></a>假设参与者<em>全部</em>宕机</h4><p>这时候整个集群“死绝了”，变成平凡情况，由于没人（有能力）commit，所以不一致性不会受到破坏。</p>
+<h4 id="假设参与者部分宕机"><a href="#假设参与者部分宕机" class="headerlink" title="假设参与者部分宕机"></a>假设参与者<em>部分</em>宕机</h4><p>这时候不一致性是一定遭到破坏的了。虽然未宕机的参与者中可能存在有收到来自协调者消息的，可以选一个新协调者出来，但是宕机的参与者究竟是否提交成功是个量子力学问题了，所以新协调者即使知道原协调者发出了commit指令，也不能断然决定去commit。</p>
+<h3 id="二阶段提交协议的不足"><a href="#二阶段提交协议的不足" class="headerlink" title="二阶段提交协议的不足"></a>二阶段提交协议的不足</h3><h4 id="阻塞"><a href="#阻塞" class="headerlink" title="阻塞"></a>阻塞</h4><p>2PC协议中，参与者一直是事务阻塞的，因此在事务进行的过程中，系统不能响应第三方节点的访问。这是偏于保守的，牺牲了一部分的可用性。<br>阻塞带来的另一个问题来自于协调者可能的故障。如果协调者挂掉，连接中断，可以重新选一个协调者。但如果协调者宕机，那么所有的参与者会跟着阻塞下去。这和参与者宕机形成比较，协调者对于参与者有timeout机制，但是参与者对协调者没有timeout机制。</p>
+<h4 id="不一致"><a href="#不一致" class="headerlink" title="不一致"></a>不一致</h4><p>我们知道2PC协议通过分出投票阶段能够根据所有节点上事务的执行情况判断执行提交或者回滚。但它在第二阶段依然会出现不一致问题。</p>
+<ol>
+<li><p>第二阶段出现网络分区<br> 假设协调者发出了GLOBAL_COMMIT请求时发生了网络分区，此时有一部分节点收到消息正常commit，但另一部分节点未收到，还处于阻塞状态。<br> 此时协调者仍可以通过最终返回的ACK进行补救。</p>
+</li>
+<li><p>第二阶段协调者宕机<br> 假设协调者宕机了，并且部分接受到GLOBAL_COMMIT请求的参与者也宕机/分区了，此时不论一致性，单宕机的参与者的事务是否提交都已经是不确定的了</p>
+</li>
+</ol>
+<h2 id="三阶段提交协议"><a href="#三阶段提交协议" class="headerlink" title="三阶段提交协议"></a>三阶段提交协议</h2><p>三阶段提交协议针对以上2PC的两点不足采取了一些措施：对参与者也引入超时措施，将执行提交阶段拆为两步。</p>
+<h3 id="CanCommit阶段"><a href="#CanCommit阶段" class="headerlink" title="CanCommit阶段"></a>CanCommit阶段</h3><p>这个类似于2PC的投票阶段，协调者发出询问是否可以提交，Yes为可以提交，No相反。</p>
+<h3 id="PreCommit阶段"><a href="#PreCommit阶段" class="headerlink" title="PreCommit阶段"></a>PreCommit阶段</h3><h4 id="如果上阶段全部为Yes"><a href="#如果上阶段全部为Yes" class="headerlink" title="如果上阶段全部为Yes"></a>如果上阶段全部为Yes</h4><p><strong>协调者</strong>发送PreCommit请求并进入Prepared状态<br><strong>参与者</strong>接受到PreCommit后确保事务操作全部执行并记录UNDO与REDO，返回ACK</p>
+<h4 id="如果上阶段有No"><a href="#如果上阶段有No" class="headerlink" title="如果上阶段有No"></a>如果上阶段有No</h4><p><strong>协调者</strong>发送abort请求<br><strong>参与者</strong>接受到abort后，REDO，中断事务，发送ACK</p>
+<h4 id="例外情况：参与者未收到协调者的消息"><a href="#例外情况：参与者未收到协调者的消息" class="headerlink" title="例外情况：参与者未收到协调者的消息"></a>例外情况：参与者未收到协调者的消息</h4><p>这可以认为是<strong>协调者的timeout</strong>，此时<strong>中断事务</strong><br>注意到这里<strong>参与者</strong>是可以处理<strong>协调者</strong>的timeout的</p>
+<h3 id="DoCommit阶段"><a href="#DoCommit阶段" class="headerlink" title="DoCommit阶段"></a>DoCommit阶段</h3><p>这是真正的事务提交阶段</p>
+<h4 id="协调者收全上阶段ACK"><a href="#协调者收全上阶段ACK" class="headerlink" title="协调者收全上阶段ACK"></a>协调者收全上阶段ACK</h4><p><strong>协调者</strong>发送DoCommit请求<br><strong>参与者</strong>接受到DoCommit后提交事务，返回ACK</p>
+<h4 id="协调者未收到上阶段ACK"><a href="#协调者未收到上阶段ACK" class="headerlink" title="协调者未收到上阶段ACK"></a>协调者未收到上阶段ACK</h4><p>这发生在<strong>协调者</strong>没有收到一些参与者的ACK（网络分区或该参与者abort）<br><strong>协调者</strong>发送abort请求<br><strong>参与者</strong>接受到abort，使用同上阶段的方式中断事务</p>
+<h4 id="例外情况：参与者未收到协调者的消息-1"><a href="#例外情况：参与者未收到协调者的消息-1" class="headerlink" title="例外情况：参与者未收到协调者的消息"></a>例外情况：参与者未收到协调者的消息</h4><p>这又是一个<strong>协调者的timeout</strong>，此时<strong>提交事务</strong><br>为什么选择提交事务而不是中断事务？因为此时提交事务成功的可能性非常非常大了，但仍有例外，例如：<br>进入PreCommit后，协调者发出的是abort请求，如果只有一个Cohort收到并进行了abort操作，而其他对于系统状态未知的Cohort会根据3PC选择继续Commit，这仍然会导致不一致，不过这个概率就显然非常小了</p>
+<h3 id="三阶段提交协议的不足"><a href="#三阶段提交协议的不足" class="headerlink" title="三阶段提交协议的不足"></a>三阶段提交协议的不足</h3><p>相对于2PC，3PC避免了协调者宕机之后可能出现的参与者们陷入状态停滞，群龙无首的情况。但仍然有较小的概率会导致不一致。</p>
+<h1 id="RWN"><a href="#RWN" class="headerlink" title="RWN"></a>RWN</h1><h1 id="Raft"><a href="#Raft" class="headerlink" title="Raft"></a>Raft</h1><h2 id="选举"><a href="#选举" class="headerlink" title="选举"></a>选举</h2><p>在Raft中，协调者被称为领袖、主(leader)，参与者被称为群众(follower)。<br>在2PC中我们看到，参与者必须对协调者有timeout机制，否则整个系统会阻塞。Raft实现了这样的功能。<br>Raft中leader是唯一的，leader存活时会不停的往所有的节点发送RPC心跳包，如果一个节点在election timeout时间（随机150ms-300ms，每个节点不同）中没有接到心跳包，那么它就会认为leader已经挂了（当然也可能是网络延迟等分区情况，先不考虑），成为candidates来选举领袖。这时候他需要获得过总结点数半数的票（每个节点赞成或反对遵循后面提到的规律），即N/2+1张，就能够成为新的leader。投票可能产生三种结果：</p>
+<ol>
+<li>自己成为leader<br> 此时自己获得了N/2+1张票，自动成为leader，开始发送心跳包。Raft中的leader具有任期机制，如果老leader的任期为term_id，那么新选出的leader的任期即为term_id + 1。在心跳包中会加入表示任期的字段rpc_term_id，这样其余的节点能够知道已经选出一个新主了，此时选举结束，candidate重新变为follower。<br> 假设老leader先前是由于网络分区失联导致选举的产生，在新leader产生后网络又恢复了，此时他收到了来自新leader的心跳包。显然这个心跳包中的rpc_term_id比老leader自己的current_term_id要大，老leader因此知道自己失联之后产生了新的leader，也会切换回follower模式，并更新自己的current_term_id。<br> 如果老leader在切换回follower前依然履行了一次职责，发送了leader的心跳包，这也不会对系统产生影响，因为它心跳包的rpc_term_id比新leader的rpc_term_id要小，只要对方节点迟早收到新leader的心跳包，老leader的心跳包就会被忽略。</li>
+<li>别人成为leader<br> 参照上一情况</li>
+<li>没有leader产生<br> 这发生在没有节点获得过半数的票的情境下，例如有很多follower的timeout时间比较接近，在选举开始时都timeout变成了candidate，由于每个candidate都会投给自己，所以没有candidate能获得大多数。此时认为term_id + 1届以没有leader告终，这时候节点们开始下一轮的election timeout。</li>
+</ol>
+<h2 id="Log-replication"><a href="#Log-replication" class="headerlink" title="Log replication"></a>Log replication</h2><p>在Raft集群的所有节点上都会维护一个Log Entries，保存着来自客户端的指令。每条Log记录有其发生的term以及是否提交。</p>
+<h2 id="脑裂（网络分区）的处理"><a href="#脑裂（网络分区）的处理" class="headerlink" title="脑裂（网络分区）的处理"></a>脑裂（网络分区）的处理</h2><p>由于某些节点的失效，部分节点的网络连接会断开，并形成一个与原集群一样名字的集群，这种情况称为集群脑裂（split-brain）现象。这个问题非常危险，因为两个新形成的集群会同时索引和修改集群的数据。<br>Raft协议能够解决由于网络分区导致的脑裂。我们知道每一届的leader都有一个term_id，</p>
+<p>特别地，当网络分区多于两块的时候，会不会存在有两个分区中都选出了新的term相同的leader呢？<br>应该是不可能的，因为成为leader必须达到全局的多数N/2+1张票，最多只能有一个。所以当分区较多的时候，很可能无法选出新leader。<br>另外某节点也不容易去“获得当前分区的多数票”，因为它也无法界定当前分区的范围。</p>
+<h1 id="Paxos"><a href="#Paxos" class="headerlink" title="Paxos"></a>Paxos</h1>
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/分布式/" rel="tag"># 分布式</a>
+          
+            <a href="/tags/raft/" rel="tag"># raft</a>
+          
+            <a href="/tags/paxos/" rel="tag"># paxos</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2017/08/20/黄山游记/" rel="next" title="黄山游记">
+                <i class="fa fa-chevron-left"></i> 黄山游记
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2017/09/23/HDU2089不要62/" rel="prev" title="HDU 2089 不要62 数位DP">
+                HDU 2089 不要62 数位DP <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="cloud-tie-wrapper" class="cloud-tie-wrapper"></div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">79</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">102</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://wenwenla.github.io/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#分布式系统中的一致性问题与CAP理论"><span class="nav-number">1.</span> <span class="nav-text">分布式系统中的一致性问题与CAP理论</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#CAP理论"><span class="nav-number">1.1.</span> <span class="nav-text">CAP理论</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#2PC和3PC"><span class="nav-number">2.</span> <span class="nav-text">2PC和3PC</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#事务"><span class="nav-number">2.1.</span> <span class="nav-text">事务</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#ACID准则"><span class="nav-number">2.1.1.</span> <span class="nav-text">ACID准则</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#前像与后像"><span class="nav-number">2.1.2.</span> <span class="nav-text">前像与后像</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#事务更新的两条规则"><span class="nav-number">2.1.3.</span> <span class="nav-text">事务更新的两条规则</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#提交规则"><span class="nav-number">2.1.3.1.</span> <span class="nav-text">提交规则</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#先记后写规则"><span class="nav-number">2.1.3.2.</span> <span class="nav-text">先记后写规则</span></a></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#两阶段提交协议"><span class="nav-number">2.2.</span> <span class="nav-text">两阶段提交协议</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#分布式事务"><span class="nav-number">2.2.1.</span> <span class="nav-text">分布式事务</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#第一阶段（投票阶段）"><span class="nav-number">2.2.2.</span> <span class="nav-text">第一阶段（投票阶段）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#第二阶段（执行提交阶段）"><span class="nav-number">2.2.3.</span> <span class="nav-text">第二阶段（执行提交阶段）</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#成功"><span class="nav-number">2.2.3.1.</span> <span class="nav-text">成功</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#失败"><span class="nav-number">2.2.3.2.</span> <span class="nav-text">失败</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#协调者宕机情况对一致性的影响"><span class="nav-number">2.2.4.</span> <span class="nav-text">协调者宕机情况对一致性的影响</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#假设参与者全部宕机"><span class="nav-number">2.2.4.1.</span> <span class="nav-text">假设参与者全部宕机</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#假设参与者部分宕机"><span class="nav-number">2.2.4.2.</span> <span class="nav-text">假设参与者部分宕机</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#二阶段提交协议的不足"><span class="nav-number">2.2.5.</span> <span class="nav-text">二阶段提交协议的不足</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#阻塞"><span class="nav-number">2.2.5.1.</span> <span class="nav-text">阻塞</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#不一致"><span class="nav-number">2.2.5.2.</span> <span class="nav-text">不一致</span></a></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#三阶段提交协议"><span class="nav-number">2.3.</span> <span class="nav-text">三阶段提交协议</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#CanCommit阶段"><span class="nav-number">2.3.1.</span> <span class="nav-text">CanCommit阶段</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#PreCommit阶段"><span class="nav-number">2.3.2.</span> <span class="nav-text">PreCommit阶段</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#如果上阶段全部为Yes"><span class="nav-number">2.3.2.1.</span> <span class="nav-text">如果上阶段全部为Yes</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#如果上阶段有No"><span class="nav-number">2.3.2.2.</span> <span class="nav-text">如果上阶段有No</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#例外情况：参与者未收到协调者的消息"><span class="nav-number">2.3.2.3.</span> <span class="nav-text">例外情况：参与者未收到协调者的消息</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#DoCommit阶段"><span class="nav-number">2.3.3.</span> <span class="nav-text">DoCommit阶段</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#协调者收全上阶段ACK"><span class="nav-number">2.3.3.1.</span> <span class="nav-text">协调者收全上阶段ACK</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#协调者未收到上阶段ACK"><span class="nav-number">2.3.3.2.</span> <span class="nav-text">协调者未收到上阶段ACK</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#例外情况：参与者未收到协调者的消息-1"><span class="nav-number">2.3.3.3.</span> <span class="nav-text">例外情况：参与者未收到协调者的消息</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#三阶段提交协议的不足"><span class="nav-number">2.3.4.</span> <span class="nav-text">三阶段提交协议的不足</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#RWN"><span class="nav-number">3.</span> <span class="nav-text">RWN</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Raft"><span class="nav-number">4.</span> <span class="nav-text">Raft</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#选举"><span class="nav-number">4.1.</span> <span class="nav-text">选举</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Log-replication"><span class="nav-number">4.2.</span> <span class="nav-text">Log replication</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#脑裂（网络分区）的处理"><span class="nav-number">4.3.</span> <span class="nav-text">脑裂（网络分区）的处理</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Paxos"><span class="nav-number">5.</span> <span class="nav-text">Paxos</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2017</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span>对本博客上的所有内容及其历史版本的任何引用必须征得作者书面同意并注明来源</span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="https://dn-lbstatics.qbox.me/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+    
+    <script>
+      var cloudTieConfig = {
+        url: document.location.href, 
+        sourceId: "",
+        productKey: "37598a3a99864bacb6bf78f7fbcbc3d6",
+        target: "cloud-tie-wrapper"
+      };
+    </script>
+    <script src="https://img1.ws.126.net/f2e/tie/yun/sdk/loader.js"></script>
+  
+
+
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
