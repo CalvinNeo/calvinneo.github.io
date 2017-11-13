@@ -96,7 +96,7 @@
 <meta property="og:url" content="http://www.calvinneo.com/2016/12/30/C++初始化方式/index.html">
 <meta property="og:site_name" content="Calvin's Marbles">
 <meta property="og:description" content="C++11/114标准之后对初始化方式有了很多的变动，现在主要分为五种list initialization、aggregate initialization、zero initialization、default initialization、value initialization其中aggregate initialization可以看做list initialization的一个特例">
-<meta property="og:updated_time" content="2017-02-14T11:23:53.000Z">
+<meta property="og:updated_time" content="2017-11-11T15:11:28.000Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="C++初始化方式(翻译)">
 <meta name="twitter:description" content="C++11/114标准之后对初始化方式有了很多的变动，现在主要分为五种list initialization、aggregate initialization、zero initialization、default initialization、value initialization其中aggregate initialization可以看做list initialization的一个特例">
@@ -384,89 +384,23 @@
 
       
         <p>C++11/114标准之后对初始化方式有了很多的变动，现在主要分为五种<a href="http://en.cppreference.com/w/cpp/language/list_initialization" target="_blank" rel="external">list initialization</a>、<a href="http://en.cppreference.com/w/cpp/language/aggregate_initialization" target="_blank" rel="external">aggregate initialization</a>、<a href="http://en.cppreference.com/w/cpp/language/zero_initialization" target="_blank" rel="external">zero initialization</a>、<a href="http://en.cppreference.com/w/cpp/language/default_initialization" target="_blank" rel="external">default initialization</a>、<a href="http://en.cppreference.com/w/cpp/language/value_initialization" target="_blank" rel="external">value initialization</a>其中aggregate initialization可以看做list initialization的一个特例<br><a id="more"></a><br>首先初始化和赋值是不一样的，例如<code>bool b = 1;</code>是初始化，<code>bool b; b = 1;</code>后一句是赋值。初始化和函数声明也要区分，例如<code>std::vector&lt;int&gt; X()</code>是一个函数声明，<code>std::vector&lt;int&gt; X{}</code>是从C++11标准以后的value initialization。</p>
-<h1 id="list-initialization"><a href="#list-initialization" class="headerlink" title="list initialization"></a>list initialization</h1><p>list initialization是使用braced-init-list的初始化语句<br>当一个类定义了从<code>std::initializer_list</code>的构造函数后，对于使用<code>{}</code>语法将调用该构造函数，例如<code>std::vector&lt;int&gt;(10)</code>创建10个元素并对每个元素进行zero initialization，<code>std::vector&lt;int&gt;{10}</code>创建一个值是10的元素。<br>使用下面的初始化语句会导致list initialization</p>
+<h1 id="list-initialization"><a href="#list-initialization" class="headerlink" title="list initialization"></a>list initialization</h1><p>list initialization是使用braced-init-list（以后简称BIL）的初始化语句<br>当一个类定义了从<code>std::initializer_list</code>的构造函数后，对于使用<code>{}</code>语法将调用该构造函数，例如<code>std::vector&lt;int&gt;(10)</code>创建10个元素并对每个元素进行zero initialization，<code>std::vector&lt;int&gt;{10}</code>创建一个值是10的元素。<br>下面的几种场景下会导致list initialization</p>
 <ol>
-<li>direct-list-initialization</li>
+<li><p>direct-list-initialization</p>
+ <figure class="highlight lasso"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div></pre></td><td class="code"><pre><div class="line"><span class="comment">// 使用BIL（空或嵌套的）初始化具名对象</span></div><div class="line">T object &#123; arg1, arg2, <span class="params">...</span> &#125;;      (<span class="number">1</span>)</div><div class="line"><span class="comment">// 使用BIL初始化匿名对象</span></div><div class="line">T &#123; arg1, arg2, <span class="params">...</span> &#125;;      (<span class="number">2</span>)</div><div class="line"><span class="comment">// 使用BIL在动态存储上初始化对象</span></div><div class="line"><span class="literal">new</span> T &#123; arg1, arg2, <span class="params">...</span> &#125;      (<span class="number">3</span>)</div><div class="line"><span class="comment">// 不使用等号`=`初始化对象的非静态成员</span></div><div class="line">Class &#123; T member &#123; arg1, arg2, <span class="params">...</span> &#125;; &#125;;      (<span class="number">4</span>)</div><div class="line"><span class="comment">// 在成员初始化列表中使用BIL</span></div><div class="line">Class<span class="type">::Class</span>() : member&#123;arg1, arg2, <span class="params">...</span>&#125; &#123;<span class="params">...</span>      (<span class="number">5</span>)</div></pre></td></tr></table></figure>
+</li>
+<li><p>copy-list-initialization</p>
+ <figure class="highlight actionscript"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div></pre></td><td class="code"><pre><div class="line"><span class="comment">// 比1多个等号</span></div><div class="line">T object = &#123;arg1, arg2, ...&#125;;      (<span class="number">6</span>)</div><div class="line"><span class="comment">// BIL作为函数参数</span></div><div class="line"><span class="function"><span class="keyword">function</span><span class="params">( &#123; arg1, arg2, <span class="rest_arg">... &#125; ) ;      (7)</span></span></span></div><div class="line">// BIL作为函数返回值</div><div class="line">return &#123; arg1, arg2, <span class="rest_arg">... &#125; ;      (8)</span></div><div class="line">// BIL作为`operator []`的参数</div><div class="line">object[ &#123; arg1, arg2, <span class="rest_arg">... &#125; ] ;      (9)</span></div><div class="line">// 使用BIL对对象赋值</div><div class="line">object = &#123; arg1, arg2, <span class="rest_arg">... &#125; ;      (10)</span></div><div class="line">// 使用U对BIL初始化的类V进行强转</div><div class="line">U( &#123; arg1, arg2, <span class="rest_arg">... &#125; )      (11)</span></div><div class="line">// 相对于4使用等号</div><div class="line">Class &#123; T member = &#123; arg1, arg2, <span class="rest_arg">... &#125;; &#125;;      (12)</span></div></pre></td></tr></table></figure>
+</li>
 </ol>
-<table>
-<thead>
-<tr>
-<th style="text-align:center">Syntax</th>
-<th style="text-align:center"></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:center"><code>T object { arg1, arg2, ... };</code></td>
-<td style="text-align:center">(1)</td>
-</tr>
-<tr>
-<td style="text-align:center"><code>T { arg1, arg2, ... };</code></td>
-<td style="text-align:center">(2)</td>
-</tr>
-<tr>
-<td style="text-align:center"><code>new T { arg1, arg2, ... }</code></td>
-<td style="text-align:center">(3)</td>
-</tr>
-<tr>
-<td style="text-align:center"><code>Class { T member { arg1, arg2, ... }; };</code></td>
-<td style="text-align:center">(4)</td>
-</tr>
-<tr>
-<td style="text-align:center"><code>Class::Class() : member{arg1, arg2, ...} {...</code></td>
-<td style="text-align:center">(5)</td>
-</tr>
-</tbody>
-</table>
-<ol>
-<li>copy-list-initialization</li>
-</ol>
-<table>
-<thead>
-<tr>
-<th style="text-align:center">Syntax</th>
-<th style="text-align:center"></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:center"><code>T object = {arg1, arg2, ...};</code></td>
-<td style="text-align:center">(6)</td>
-</tr>
-<tr>
-<td style="text-align:center"><code>function( { arg1, arg2, ... } ) ;</code></td>
-<td style="text-align:center">(7)</td>
-</tr>
-<tr>
-<td style="text-align:center"><code>return { arg1, arg2, ... } ;</code></td>
-<td style="text-align:center">(8)</td>
-</tr>
-<tr>
-<td style="text-align:center"><code>object[ { arg1, arg2, ... } ] ;</code></td>
-<td style="text-align:center">(9)</td>
-</tr>
-<tr>
-<td style="text-align:center"><code>object = { arg1, arg2, ... } ;</code></td>
-<td style="text-align:center">(10)</td>
-</tr>
-<tr>
-<td style="text-align:center"><code>U( { arg1, arg2, ... } )</code></td>
-<td style="text-align:center">(11)</td>
-</tr>
-<tr>
-<td style="text-align:center"><code>Class { T member = { arg1, arg2, ... }; };</code></td>
-<td style="text-align:center">(12)</td>
-</tr>
-</tbody>
-</table>
-<h2 id="narrow-conversion"><a href="#narrow-conversion" class="headerlink" title="narrow conversion"></a>narrow conversion</h2><p>narrow conversion是下面的隐式转换</p>
+<h2 id="narrowing-conversion"><a href="#narrowing-conversion" class="headerlink" title="narrowing conversion"></a>narrowing conversion</h2><p>narrowing conversion是下面的隐式转换</p>
 <ol>
 <li>浮点数与整数互相转换</li>
 <li>从高精度到低精度</li>
 </ol>
 <h2 id="list-initialization主要规则"><a href="#list-initialization主要规则" class="headerlink" title="list initialization主要规则"></a>list initialization主要规则</h2><p>list initialization的部分作用，来自cppreference第2、3、4条，</p>
 <ol>
-<li>如果braced-init-list是空的<ul>
+<li>如果BIL是空的<ul>
 <li>如果T是一个有默认构造函数的class，那么进行value initialization</li>
 <li>如果T是个aggregate聚合类型，那么进行aggregate initialization</li>
 </ul>
@@ -475,128 +409,35 @@
 </ol>
 <p>以下规则来自cppreference的notes部分</p>
 <ol>
-<li>brace-init-list不是一个表达式，所以没有类型，因此模板类型推导不能直接推导出来。<code>auto</code>关键字会将所有的braced-init-list推导为<code>std::initializer_list</code>。</li>
+<li>BIL不是一个表达式，所以没有类型，因此模板类型推导不能直接推导出来。<code>auto</code>关键字会将所有的BIL推导为<code>std::initializer_list</code>。</li>
 </ol>
-<h1 id="value-initialization"><a href="#value-initialization" class="headerlink" title="value initialization"></a>value initialization</h1><p>使用下面的初始化语句会导致value initialization</p>
-<table>
-<thead>
-<tr>
-<th style="text-align:center">Syntax</th>
-<th style="text-align:center"></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:center"><code>T();</code></td>
-<td style="text-align:center">(1)</td>
-</tr>
-<tr>
-<td style="text-align:center"><code>new T ();</code></td>
-<td style="text-align:center">(2)</td>
-</tr>
-<tr>
-<td style="text-align:center"><code>Class::Class(...) : member() { ... }</code></td>
-<td style="text-align:center">(3)</td>
-</tr>
-<tr>
-<td style="text-align:center"><code>T object {};</code></td>
-<td style="text-align:center">(4)    (since C++11)</td>
-</tr>
-<tr>
-<td style="text-align:center"><code>T{};</code></td>
-<td style="text-align:center">(5)    (since C++11)</td>
-</tr>
-<tr>
-<td style="text-align:center"><code>new T {};</code></td>
-<td style="text-align:center">(6)(since C++11)</td>
-</tr>
-<tr>
-<td style="text-align:center"><code>Class::Class(...) : member{} { ... }</code></td>
-<td style="text-align:center">(7)    (since C++11)</td>
-</tr>
-</tbody>
-</table>
-<p>value initialization具有以下作用：</p>
+<h1 id="value-initialization"><a href="#value-initialization" class="headerlink" title="value initialization"></a>value initialization</h1><p>下面的几种场景下会导致value initialization<br><figure class="highlight lasso"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div></pre></td><td class="code"><pre><div class="line"><span class="comment">// 使用小括号initializer创建一个匿名临时对象</span></div><div class="line">T();      (<span class="number">1</span>)</div><div class="line"><span class="comment">// 使用小括号initializer在动态存储上创建一个匿名临时对象</span></div><div class="line"><span class="literal">new</span> T ();      (<span class="number">2</span>)</div><div class="line"><span class="comment">// 使用成员初始化列表(member initializer)初始化对象的非静态成员</span></div><div class="line">Class<span class="type">::Class</span>(<span class="params">...</span>) : member() &#123; <span class="params">...</span> &#125;      (<span class="number">3</span>)</div><div class="line"><span class="comment">// 使用小括号initializer创建一个具名对象</span></div><div class="line">T object &#123;&#125;;      (<span class="number">4</span>) (since C++<span class="number">11</span>)</div><div class="line"><span class="comment">// 同1</span></div><div class="line">T&#123;&#125;;      (<span class="number">5</span>) (since C++<span class="number">11</span>)</div><div class="line"><span class="comment">// 同2</span></div><div class="line"><span class="literal">new</span> T &#123;&#125;;      (<span class="number">6</span>) (since C++<span class="number">11</span>)</div><div class="line"><span class="comment">// 同3</span></div><div class="line">Class<span class="type">::Class</span>(<span class="params">...</span>) : member&#123;&#125; &#123; <span class="params">...</span> &#125;      (<span class="number">7</span>) (since C++<span class="number">11</span>)</div></pre></td></tr></table></figure></p>
+<p>value initialization的效果是：</p>
 <ol>
-<li>当一个class没有默认构造函数（包含使用了自定义的构造函数或者构造函数是delete），这个对象是default initialization</li>
-<li>当一个class具有默认构造函数，这个对象先zero initialization，如果有non-trival的默认构造函数，再调用该默认构造函数进行default initialization</li>
-<li>value initialization对于数组中的每个元素进行value initialization</li>
+<li>当一个class没有默认构造函数（或delete了默认构造函数）、具有 user-provided构造函数，default initialization这个对象</li>
+<li>当一个class具有为delete的默认构造函数，并且没有 user-provided构造函数，首先zero initialization。如果有non-trivial的默认构造函数，再调用该默认构造函数进行default initialization。这段可以和zero initialization参照，如果默认构造函数是trivial的，则意味着编译器并不需要做任何事，这等价于只zero initialization。</li>
+<li>数组中的每一个元素被值初始化</li>
+<li>否则对对象进行zero initialization</li>
+<li>引用不能被值初始化</li>
 </ol>
-<h1 id="zero-initialization"><a href="#zero-initialization" class="headerlink" title="zero initialization"></a>zero initialization</h1><p>使用下面的初始化语句会导致zero initialization</p>
-<table>
-<thead>
-<tr>
-<th style="text-align:center">Syntax</th>
-<th style="text-align:center"></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:center"><code>static T object ;</code></td>
-<td style="text-align:center">(1)</td>
-</tr>
-<tr>
-<td style="text-align:center"><code>T () ;</code></td>
-<td style="text-align:center">(2) (since C++11)</td>
-</tr>
-<tr>
-<td style="text-align:center"><code>T t = {} ;</code></td>
-<td style="text-align:center">(2) (since C++11)</td>
-</tr>
-<tr>
-<td style="text-align:center"><code>T {} ;</code></td>
-<td style="text-align:center">(2) (since C++11)</td>
-</tr>
-<tr>
-<td style="text-align:center"><code>char array [ n ] = &quot;&quot;;</code></td>
-<td style="text-align:center">(3)</td>
-</tr>
-</tbody>
-</table>
-<p>zero initialization适用以下情景：</p>
-<ol>
-<li>static和thread local的有名字的变量在其他初始化前先进行zero initialization</li>
-<li>作为非class类型和使用value initialization初始化无构造函数的class的成员的过程的一部分</li>
-<li>字符数组初始化时未初始化部分被zero initialization</li>
-</ol>
-<p>zero initialization具有以下作用：</p>
+<p>注1：这里的 user-provided指的是用户定义的且没有显式<code>=default</code>的构造函数<br>注2：由于<code>T object();</code>声明了一个函数，所以在C++11允许使用<code>T object{}</code>前，应当使用<code>T object = T()</code>。这种方式会导致复制，但常常被编译器优化掉</p>
+<h1 id="zero-initialization"><a href="#zero-initialization" class="headerlink" title="zero initialization"></a>zero initialization</h1><p>zero initialization（如果发生）发生在其他初始化前，下面的几种场景下会导致zero initialization<br><figure class="highlight lsl"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div></pre></td><td class="code"><pre><div class="line"><span class="comment">// 对于static或未让步于const initialization的thread-local，发生在其他初始化前</span></div><div class="line">static T object ;      (<span class="number">1</span>)</div><div class="line"><span class="comment">// 作为value initialization下面两种情况过程的**一部分**</span></div><div class="line"><span class="comment">// 1. 非class类型（例如primitive type）  </span></div><div class="line"><span class="comment">// 2. 无构造函数的对象的成员</span></div><div class="line">T () ;      (<span class="number">2</span>) (since C++<span class="number">11</span>)</div><div class="line">T t = &#123;&#125; ;       (<span class="number">2</span>) (since C++<span class="number">11</span>)</div><div class="line">T &#123;&#125; ;      (<span class="number">2</span>) (since C++<span class="number">11</span>)</div><div class="line"><span class="comment">// 字符数组初始化时未初始化部分被zero initialization</span></div><div class="line">char array [ n ] = <span class="string">""</span>;      (<span class="number">3</span>)</div></pre></td></tr></table></figure></p>
+<p>zero initialization效果是：</p>
 <ol>
 <li>当T是一个scalar type标量类型，用0值来初始化</li>
-<li>如果T是一个非union联合的class，所有的基类和非静态成员进行zero initialize，所有padding被初始化为0，并不考虑构造函数</li>
-<li>如果T是一个union联合，第一个非静态成员用0值初始化，所有padding被初始化为0</li>
+<li>如果T是一个非联合(union)的class，所有的基类和非静态成员被zero initialize，所有padding被初始化为zero bits，如果有构造函数，构造函数会被忽略</li>
+<li>如果T是一个union，第一个非静态成员用0值初始化，所有padding被初始化为0</li>
 <li>如果T是一个数组，数组中的每个元素被zero initialize</li>
 <li>如果T是一个引用，不做任何事情</li>
 </ol>
-<h1 id="default-initialization"><a href="#default-initialization" class="headerlink" title="default initialization"></a>default initialization</h1><p>default initialization发生在当一个变量未使用initializer(the initial value of a variable)构造，特别地，<strong>从C++11标准以后空的圆括号不算做未使用initializer</strong>。详情可以参照下面的初始化语句<br>使用下面的初始化语句会导致default initialization</p>
-<table>
-<thead>
-<tr>
-<th style="text-align:center">Syntax</th>
-<th style="text-align:center"></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:center"><code>T object ;</code></td>
-<td style="text-align:center">(1)</td>
-</tr>
-<tr>
-<td style="text-align:center"><code>new T ;</code></td>
-<td style="text-align:center">(2)</td>
-</tr>
-<tr>
-<td style="text-align:center"><code>new T () ;</code></td>
-<td style="text-align:center">(2) (<strong>until c++03</strong>)</td>
-</tr>
-</tbody>
-</table>
-<p>default initialization适用以下情景：</p>
+<h1 id="default-initialization"><a href="#default-initialization" class="headerlink" title="default initialization"></a>default initialization</h1><p>default initialization发生在当一个变量未使用initializer(the initial value of a variable)构造，特别地，<strong>从C++11标准以后空的圆括号不算做未使用initializer</strong>。详情可以参照下面的初始化语句<br>下面的几种场景下会导致default initialization</p>
+<figure class="highlight oxygene"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div></pre></td><td class="code"><pre><div class="line"><span class="comment">// 声明auto、static、thread_local变量时（还有两种是register和extern）不带任何initializer（比如小括号initializer）</span></div><div class="line">T object ;       (<span class="number">1</span>)</div><div class="line"><span class="comment">// 在动态存储上创建对象且不带任何initializer时，特别地，C++11标准后使用空圆括号（类似`std::vector&lt;int&gt; a()`）不算做默认初始化</span></div><div class="line"><span class="keyword">new</span> T ;       (<span class="number">2</span>)</div><div class="line"><span class="keyword">new</span> T () ;       (<span class="number">2</span>) <span class="comment">(**until c++03**)</span></div><div class="line"><span class="comment">// 当基类和非静态成员不在某个构造函数的construct initializer list（类似`:a(_a), b(_b), c(_c)`）中时</span></div></pre></td></tr></table></figure>
+<p>default initialization效果是：</p>
 <ol>
-<li>当一个变量的存储方式是auto、static、thread_local（注：还有两种是register和extern，详见<a href="">storage duration specifiers</a>），并且没有initializer</li>
-<li>当一个变量具有dunamic storage duration，特别地，C++11标准后使用空圆括号（类似<code>std::vector&lt;int&gt; a()</code>）不算做默认初始化</li>
-<li>当基类和非静态成员不在某个构造函数的construct initializer list（类似<code>:a(_a), b(_b), c(_c)</code>）中时</li>
+<li>对于（非POD，until C++11）类，构造函数根据重载决议在默认构造函数中选择一个为新对象提供初始值</li>
+<li>数组中的每一个元素被默认初始化</li>
+<li>对于其他情况，编译器不做任何事情。例如此时的自动变量被初始化到不确定的值。使用这个值会导致UB，除非一些情况</li>
 </ol>
-<p>default initialization按照以下规则：</p>
 <h1 id="aggregate-initialization"><a href="#aggregate-initialization" class="headerlink" title="aggregate initialization"></a>aggregate initialization</h1><p>aggregate initialization是list initialization的特例<br>C++17标准对于public base的情况有一些修订，这里省略了部分，而说明C++14标准</p>
 <h2 id="aggregate（聚合）类型"><a href="#aggregate（聚合）类型" class="headerlink" title="aggregate（聚合）类型"></a>aggregate（聚合）类型</h2><p>聚合类型包括：</p>
 <ol>
@@ -620,9 +461,10 @@
 </ol>
 </li>
 </ol>
-<h1 id="对象的初始化"><a href="#对象的初始化" class="headerlink" title="对象的初始化"></a>对象的初始化</h1><ol>
-<li>在构造函数初始化列表中的初始化是对该成员的初始化，在构造函数体中的“初始化”实际上是对该成员的赋值</li>
-</ol>
+<h1 id="constant-initialization"><a href="#constant-initialization" class="headerlink" title="constant initialization"></a>constant initialization</h1><p>下面的几种场景下会导致constant initialization<br>constant initialization会替代zero initialization（C++14标准前不是替代而是接着）初始化static和thread-local对象。发生在所有初始化前</p>
+<pre><code>static T &amp; ref = constexpr;      (1)    
+static T object = constexpr;      (2)
+</code></pre><h1 id="成员初始化列表"><a href="#成员初始化列表" class="headerlink" title="成员初始化列表"></a>成员初始化列表</h1><p>根据Inside the C++ object model：<br>在构造函数体中的“初始化”实际上是对默认初始化后的该成员的进行赋值，因此浪费了一次初始化的开销<br>对于reference、const、有一组参数的base class构造函数、有一组参数的member class构造函数这四种情况，必须使用初始化列表进行初始化。<br>一般地，初始化列表中的初始化顺序是按照成员在类中的声明顺序而不是在列表中的顺序，构造函数体内代码会在初始化列表“执行”完毕后开始工作。但在初始化列表中使用成员函数仍然是不好的。</p>
 
       
     </div>
@@ -756,7 +598,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">85</span>
+                <span class="site-state-item-count">91</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -769,7 +611,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">106</span>
+                <span class="site-state-item-count">109</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -855,7 +697,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#list-initialization"><span class="nav-number">1.</span> <span class="nav-text">list initialization</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#narrow-conversion"><span class="nav-number">1.1.</span> <span class="nav-text">narrow conversion</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#list-initialization主要规则"><span class="nav-number">1.2.</span> <span class="nav-text">list initialization主要规则</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#value-initialization"><span class="nav-number">2.</span> <span class="nav-text">value initialization</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#zero-initialization"><span class="nav-number">3.</span> <span class="nav-text">zero initialization</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#default-initialization"><span class="nav-number">4.</span> <span class="nav-text">default initialization</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#aggregate-initialization"><span class="nav-number">5.</span> <span class="nav-text">aggregate initialization</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#aggregate（聚合）类型"><span class="nav-number">5.1.</span> <span class="nav-text">aggregate（聚合）类型</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#aggregate-initialization规则"><span class="nav-number">5.2.</span> <span class="nav-text">aggregate initialization规则</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#对象的初始化"><span class="nav-number">6.</span> <span class="nav-text">对象的初始化</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#list-initialization"><span class="nav-number">1.</span> <span class="nav-text">list initialization</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#narrowing-conversion"><span class="nav-number">1.1.</span> <span class="nav-text">narrowing conversion</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#list-initialization主要规则"><span class="nav-number">1.2.</span> <span class="nav-text">list initialization主要规则</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#value-initialization"><span class="nav-number">2.</span> <span class="nav-text">value initialization</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#zero-initialization"><span class="nav-number">3.</span> <span class="nav-text">zero initialization</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#default-initialization"><span class="nav-number">4.</span> <span class="nav-text">default initialization</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#aggregate-initialization"><span class="nav-number">5.</span> <span class="nav-text">aggregate initialization</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#aggregate（聚合）类型"><span class="nav-number">5.1.</span> <span class="nav-text">aggregate（聚合）类型</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#aggregate-initialization规则"><span class="nav-number">5.2.</span> <span class="nav-text">aggregate initialization规则</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#constant-initialization"><span class="nav-number">6.</span> <span class="nav-text">constant initialization</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#成员初始化列表"><span class="nav-number">7.</span> <span class="nav-text">成员初始化列表</span></a></li></ol></div>
             
 
           </div>
@@ -1044,19 +886,12 @@
 
 
   
-    
-    <script>
-      var cloudTieConfig = {
-        url: document.location.href, 
-        sourceId: "",
-        productKey: "37598a3a99864bacb6bf78f7fbcbc3d6",
-        target: "cloud-tie-wrapper"
-      };
-    </script>
-    <script src="https://img1.ws.126.net/f2e/tie/yun/sdk/loader.js"></script>
+
+
+
+
+
   
-
-
 
 
 
