@@ -106,7 +106,7 @@
 重载决议中右值引用、左值引用、通用引用有什么区别
 右值、(N)RVO之间的关系是什么
 移动语义在哪些地方可以提高性能">
-<meta property="og:updated_time" content="2017-11-11T12:27:10.000Z">
+<meta property="og:updated_time" content="2017-11-13T11:14:01.000Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="C++右值">
 <meta name="twitter:description" content="C++11标准开始引入了右值引用的概念，容易产生下面的问题：
@@ -428,6 +428,7 @@
 <p>查看上面的代码节选，移动构造函数将第一个参数将亡值<code>A &amp;&amp; a</code>持有的指针<code>a.p</code>直接取来，然后将其设为<code>nullptr</code>。这一步是即为重要的，因为如果不设为<code>nullptr</code>，在<code>a</code>销毁时会执行<code>delete p</code>，那么<code>this</code>好不容易从<code>a</code>那里掏来的<code>p</code>就会被销毁，<code>this-&gt;p</code>会变成悬挂指针。这样，将亡值<code>a</code>里面的东西通过了<code>this</code>的皮囊得到了续命。而<code>this</code>也避免了调用一个拷贝构造函数的开销。<br>现在我们能够理解为什么将亡值属于泛左值，又属于右值了。属于泛左值是由于将亡值作为右值引用是具名的，这和纯右值（如字面量）不一样，所以被视为左值。作为右值是由于将亡值具有可移动性。而将亡值之所以又具名又能移动，是因为它要死了。<br>类似地我们可以写出这样的代码<br><figure class="highlight kotlin"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div></pre></td><td class="code"><pre><div class="line">X <span class="function"><span class="title">fun</span><span class="params">()</span></span>&#123;</div><div class="line">	</div><div class="line">&#125;</div><div class="line">int &amp;&amp; x = <span class="function"><span class="title">fun</span><span class="params">()</span></span>;</div></pre></td></tr></table></figure></p>
 <p><code>fun</code>返回值的生命在<code>x</code>中得到了延长。<br>但在cppreference的<a href="http://zh.cppreference.com/w/cpp/language/value_category" target="_blank" rel="external">value_category词条上</a>我看到了这样的阐述：右值可以用于初始化右值引用，这种情况下该右值所标识的对象的生存期被扩展到该引用的作用域结尾。由于将亡值也是右值，所以是不是下面的代码中也存在续命呢？<br><figure class="highlight kotlin"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div></pre></td><td class="code"><pre><div class="line"><span class="comment">// case 1</span></div><div class="line">X &amp;&amp; <span class="function"><span class="title">fun</span><span class="params">()</span></span>&#123;</div><div class="line">	X x1;</div><div class="line">	<span class="keyword">return</span> x1;</div><div class="line">&#125;</div><div class="line">int &amp;&amp; x = <span class="function"><span class="title">fun</span><span class="params">()</span></span>;</div><div class="line"><span class="comment">// case 2</span></div><div class="line">X get_x()&#123;</div><div class="line">	<span class="keyword">return</span> X&#123;&#125;;</div><div class="line">&#125;</div><div class="line">int &amp;&amp; x = std::move(get_x());</div></pre></td></tr></table></figure></p>
 <p>首先看case 1，<code>x1</code>的什么有没有通过<code>x</code>得到延长呢？就是是延长了，也是延长了<code>fun()</code>的返回值的寿命，而不是<code>fun</code>里面的一个自动变量得到了延长。如果我们加上了一次隐式转换，可以发现这和之前在NRVO讨论的情况是一样的，自动变量只会被销毁。<br>此外，<a href="https://stackoverflow.com/questions/3716277/do-rvalue-references-allow-dangling-references" target="_blank" rel="external">在StackOverflow中我找到了答案</a>，它阐释了cppreference的论点，因为有一种叫dangling reference的东西，如果将xvalue绑定到rvalue reference上就可能会产生这个。这也说明了为什么函数返回<code>T&amp;&amp;</code>是危险的。对此SOF上还有<a href="https://stackoverflow.com/questions/42441791/lifetime-extension-prvalues-and-xvalues" target="_blank" rel="external">进一步的讨论</a>。<br>综上所述，当<code>fun</code>返回一个prvalue时，用<code>T &amp;&amp;</code>来续命是合法的。</p>
+<p>注意，我们虽然定义了移动构造函数可以从<code>old_x</code>构造<code>new_x</code>，但是<code>old_x</code>和<code>new_x</code><a href="http://paste.ubuntu.com/25953395/" target="_blank" rel="external">在地址上仍然是不同的</a>，例如被移动对象指针被其他对象持有的话，同样会发生错误。这是因为move语义并不是单纯的“移动”，而是通过默认或自定义的移动构造等函数掏空对象的过程。</p>
 <h2 id="拷贝构造函数与移动构造函数的关系"><a href="#拷贝构造函数与移动构造函数的关系" class="headerlink" title="拷贝构造函数与移动构造函数的关系"></a>拷贝构造函数与移动构造函数的关系</h2><p>如果一个程序中显式定义了拷贝构造函数，编译器便不会合成移动构造函数。这会造成下面的效果，如果程序中没有定义移动构造函数，那<code>std::move</code>会调用拷贝构造函数。</p>
 <h2 id="将移动构造函数声明为noexcept"><a href="#将移动构造函数声明为noexcept" class="headerlink" title="将移动构造函数声明为noexcept"></a>将移动构造函数声明为noexcept</h2><p><code>noexcept</code>在C++17标准中成为了函数类型的一部分。<br>通常来说应该将移动构造函数声明为noexcept。<br>特别是当你的类型会和STL中的容器一起用时，<a href="https://stackoverflow.com/questions/26922113/when-should-i-declare-a-move-constructor-without-noexcept" target="_blank" rel="external">如果移动构造函数不是noexcept的，那么容器会调用复制构造函数</a>。</p>
 <h1 id="通用引用和完美转发"><a href="#通用引用和完美转发" class="headerlink" title="通用引用和完美转发"></a>通用引用和完美转发</h1><p>这一部分是针对模板变成来说的。</p>
@@ -445,6 +446,27 @@
     <div>
       
         
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
 
       
     </div>
@@ -564,7 +586,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">91</span>
+                <span class="site-state-item-count">93</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>

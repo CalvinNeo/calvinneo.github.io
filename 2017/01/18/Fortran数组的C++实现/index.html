@@ -96,7 +96,7 @@
 <meta property="og:url" content="http://www.calvinneo.com/2017/01/18/Fortran数组的C++实现/index.html">
 <meta property="og:site_name" content="Calvin's Marbles">
 <meta property="og:description" content="最近在写CFortranTranslator，一个从Fortran77/Fortran90到C++ 14的工具，其中涉及到使用C++为Fortran实现一个数组库。总的来讲，Fortran90的有些语言特性在编写和编译上都让人不是很舒服。比如没有头文件和前置声明，这导致了许多额外的代码和解析工作，比如INTERFACE块因此而生（但当时其实是一个比较好的解决方案）。又比如Fortran兼容老标准允">
-<meta property="og:updated_time" content="2017-10-19T02:18:31.000Z">
+<meta property="og:updated_time" content="2017-11-14T08:59:57.000Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Fortran数组的C++实现">
 <meta name="twitter:description" content="最近在写CFortranTranslator，一个从Fortran77/Fortran90到C++ 14的工具，其中涉及到使用C++为Fortran实现一个数组库。总的来讲，Fortran90的有些语言特性在编写和编译上都让人不是很舒服。比如没有头文件和前置声明，这导致了许多额外的代码和解析工作，比如INTERFACE块因此而生（但当时其实是一个比较好的解决方案）。又比如Fortran兼容老标准允">
@@ -389,7 +389,7 @@
 <p>13.13.109 TRANSPOSE (MATRIX)<br>Description. Transpose an array of rank two.<br>Class. Transformational function.<br>Argument. MATRIX may be of any type and must have rank two.</p>
 </blockquote>
 <p>因此实际上对于一个N维/秩数组$X$，假设第$i$维的取值范围是$[0, n_i]$，定义转置$X^T$，满足$X[a_1][a_2]…[a_n]$ = $X^T[a_n][a_{n-1}]…[a_1]$。</p>
-<h1 id="farray-lt-typename-T-int-D-gt"><a href="#farray-lt-typename-T-int-D-gt" class="headerlink" title="farray&lt;typename T, int D&gt;"></a>farray&lt;typename T, int D&gt;</h1><p>Fortran90标准中数组的维数，上下界都是确定的，称为显式形状数组(explicit-shape)。此外，除了动态数组(deferred-shape)，即使出现的可调数组(automatic explicit-shape)（类似于C99中的VLA）、假定形状数组(assumed-shape)（仅给出维/秩数）和假定大小数组(assumed-size)（最后一维的上下界是不定的）也是作为哑元（形参的）。Fortran77标准更是使用完全静态环境(fully static environment)的运行时（《编译原理及实践》§7），因此都不支持递归调用。因此Fortran多维数组并不需要锯齿数组，也不需要实现类似动态表的自扩，所以内部可以通过一个一维的线性表data来保存数据。<br>因为要尽可能保证和源代码一致性，所以不能将上界统一改为0开始，在设计时需要使用在对象中维护每一维的上下界。有一些方法可以在常量表达式内初始化表示上下界的数组，例如<a href="http://stackoverflow.com/questions/27083755/copy-array-in-constexpr-constructor" target="_blank" rel="external">使用constexpr构造函数</a>（注意目前使用的<a href="https://msdn.microsoft.com/en-us/library/hh567368.aspx" target="_blank" rel="external">MSVC2015</a>尚不支持<a href="https://isocpp.org/wiki/faq/cpp14-language#extended-constexpr" target="_blank" rel="external">Extended Constexpr</a>），但事实上<code>constexpr</code>并不是一个强制性声明，编译器仍然可以选择将其放到运行期完成。根据<a href="http://stackoverflow.com/questions/37602057/why-isnt-a-for-loop-a-compile-time-expression" target="_blank" rel="external">StackOverflow上的这篇回答</a>，所以这个我希望在编译期完成的动作得放到运行期来完成。另外一种思路是将每一维的上下界放入模板参数里面，然后通过parameter unpack提取出来。</p>
+<h1 id="farray-lt-typename-T-int-D-gt"><a href="#farray-lt-typename-T-int-D-gt" class="headerlink" title="farray&lt;typename T, int D&gt;"></a>farray&lt;typename T, int D&gt;</h1><p>Fortran90标准中数组的维数，上下界都是确定的，称为显式形状数组(explicit-shape)。此外，除了动态数组(deferred-shape)，即使出现的可调数组(automatic explicit-shape)（类似于C99中的VLA）、假定形状数组(assumed-shape)（仅给出维/秩数）和假定大小数组(assumed-size)（最后一维的上下界是不定的）也是作为哑元（形参的）。Fortran77标准更是使用完全静态环境(fully static environment)的运行时（《编译原理及实践》§7），因此都不支持递归调用。因此Fortran多维数组并不需要锯齿数组，也不需要实现类似动态表的自扩，所以内部可以通过一个一维的线性表data来保存数据。<br>因为要尽可能保证和源代码一致性，所以不能将上界统一改为0开始，在设计时需要使用在对象中维护每一维的上下界。有一些方法可以在常量表达式内初始化表示上下界的数组，例如<a href="http://stackoverflow.com/questions/27083755/copy-array-in-constexpr-constructor" target="_blank" rel="external">使用constexpr构造函数</a>（注意目前使用的<a href="https://msdn.microsoft.com/en-us/library/hh567368.aspx" target="_blank" rel="external">MSVC2015</a>尚不支持<a href="https://isocpp.org/wiki/faq/cpp14-language#extended-constexpr" target="_blank" rel="external">Extended Constexpr</a>），但事实上<code>constexpr</code>并不是一个强制性声明，编译器仍然可以选择将其放到运行期完成。根据<a href="http://stackoverflow.com/questions/37602057/why-isnt-a-for-loop-a-compile-time-expression" target="_blank" rel="external">StackOverflow上的这篇回答</a>，所以这个希望在编译期完成的动作得放到运行期来完成。当然确实有一些方法可以实现编译期的循环结构的，比如变循环为递归，或者使用fold expression对一个index_sequence。<br>另外一种思路是将每一维的上下界放入模板参数里面，然后通过parameter unpack提取出来。</p>
 <h2 id="实现transpose"><a href="#实现transpose" class="headerlink" title="实现transpose"></a>实现transpose</h2><p>现在实现<code>transpose</code>函数，<code>transpose</code>函数主要是通过变换$n_i$和对应的一维序列，满足上面式子。<br>对于原矩阵$X[a_1][a_2]…[a_n]$，可以映射到$X$对应的一维序列的第$\sum_{i=1}^{N}{(a_i \times \prod_{j = i + 1}}^{N}{n_j})$项，令$\prod_{N + 1}^{N}{} = 1  $；<br>对于转置后的矩阵$X^T[b_1][b_2]…[b_n]$，令其每一维大小为$n’_i $，可得$n’_i = n_{N + 1 - i}$，可以映射到$X^T$对应的一维序列的第$\sum_{i=1}^{N}{(b_i \times \prod_{j = i + 1}}^{N}{n’_j})$项，其中令$\prod_{1}^{0}{} = 1 $。<br>根据$X[a_1][a_2]…[a_n]$ = $X^T[a_n][a_{n-1}]…[a_1]$，带入$b_i = a_{N + 1 - i}$，可以得到映射规则$X: \sum_{i=1}^{N}{(a_i \times \prod_{j = i + 1}}^{N}{n_j})$ $\Rightarrow$ $X^T: \sum_{i=1}^{N}{(b_i \times \prod_{j = i + 1}}^{N}{n’_j})$ = $\sum_{i=1}^{N}{(a_{N + 1 - i} \times \prod_{j = i + 1}}^{N}{n_{N + 1 - j}})$。<br>以上是对于C-style的数组讨论的，对于Fortran-style的数组，将$\Sigma$的上下界改成$0 .. i - 1$<br>此外，对于<a href="http://www.cnblogs.com/illuminator/archive/2013/04/22/3036061.html" target="_blank" rel="external">2维矩阵转置有$O(1)$空间的方法</a>。</p>
 <h2 id="slice数组片段"><a href="#slice数组片段" class="headerlink" title="slice数组片段"></a>slice数组片段</h2><p>fortran中的slice是by reference的，对slice的修改也是对原数组的修改，于是要实现一个<code>forslice</code>函数，其返回的slice应当是数组片段的引用。对于这种情况，首先可以考虑使用<code>vector&lt;shared_ptr&lt;T&gt;&gt; data</code>来实现内部的线性表data，但是这样会产生不必要的空间开销。因为虽然每一个slice是不一样的，没办法对<code>shared_ptr&lt;vector&lt;T&gt;&gt; data</code>，但是每个slice的data部分是作为一个整体的。所以还是使用的裸指针RAII，对于从<code>forslice</code>函数构造的<code>farray</code>，在构造时加一个tag，析构时不释放指针即可。考虑到Fortran77标准本身的完全静态环境，Fortran90可能是基于栈的，所以不会出现悬挂指针导致的AV错误。<br>此外fortran中还允许使用<code>(/ /)</code>这样的Delimiters来具体指定位置组成数组片段，例如<code>A((/1,2/))</code>表示选取A中的第1和第2个元素。要实现这个功能只需要给<code>slice_info</code>做一些修改，加一个迭代器即可，考虑到这个功能并不常用，所以并没有实现。</p>
 <h2 id="数组的秩"><a href="#数组的秩" class="headerlink" title="数组的秩"></a>数组的秩</h2><p>此外fortran中有使用到数组的秩作为参数（通常参数名为dim）的函数，要注意秩是从1开始计算的。</p>
@@ -460,6 +460,27 @@ ac-implied-do ::= ( ac-value-list , scalar-int-expr , scalar-int-expr [ , scalar
     <div>
       
         
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
 
       
     </div>
@@ -585,7 +606,7 @@ ac-implied-do ::= ( ac-value-list , scalar-int-expr , scalar-int-expr [ , scalar
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">91</span>
+                <span class="site-state-item-count">93</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
