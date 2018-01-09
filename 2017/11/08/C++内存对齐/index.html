@@ -96,7 +96,7 @@
 <meta property="og:url" content="http://www.calvinneo.com/2017/11/08/C++内存对齐/index.html">
 <meta property="og:site_name" content="Calvin's Marbles">
 <meta property="og:description" content="最近在看Inside the C++ Object Model，突然想起了之前的一道面试题，求sizeof(A)12345678struct A&amp;#123;	int a;	char b;	virtual void f()&amp;#123;&amp;#125;;&amp;#125;;struct B&amp;#123;&amp;#125;;">
-<meta property="og:updated_time" content="2017-11-13T04:44:41.000Z">
+<meta property="og:updated_time" content="2017-12-13T14:14:29.941Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="C++内存对齐与多态">
 <meta name="twitter:description" content="最近在看Inside the C++ Object Model，突然想起了之前的一道面试题，求sizeof(A)12345678struct A&amp;#123;	int a;	char b;	virtual void f()&amp;#123;&amp;#125;;&amp;#125;;struct B&amp;#123;&amp;#125;;">
@@ -387,8 +387,9 @@
 <a id="more"></a>
 <h1 id="虚函数"><a href="#虚函数" class="headerlink" title="虚函数"></a>虚函数</h1><p>首先，<code>int</code>长度是不固定的，与编译器和平台有关，所以首先可以回答“不知道”。但是面试官会说，就按“通常情况来计算”，于是埋头苦算。<br>恩，出现了虚（包括构造、析构）函数就要创建虚表，在对象中会储存一个虚指针vptr，根据指令集字长定。这里可以考虑为4。<br>下面是<code>char</code>，加上1，出现了<code>int</code>，加上4，总和为9，但实际输出下，答案是12。<br>根据Inside the C++ Object Model Ch1.3中的注解，一个class object的大小包括其non-static data menbers的总大小，加上保持alignment时需要padding上去的空间（在members之间以及在objects之间），以及维持虚函数等的开销。<br>根据Inside the C++ Object Model Ch3.1，一个空的struct仍有1字节，这是为了保证其实例化得到的所有对象能在内存上拥有自己独有的地址。但正如下面即将看到的一样，这个1字节在使用虚继承时可以被去掉。</p>
 <h1 id="虚继承"><a href="#虚继承" class="headerlink" title="虚继承"></a>虚继承</h1><p>下面我们看看复杂一点的虚继承。为了避免在菱形继承中<code>A</code>出现两份的<code>X</code>拷贝，进而出现二义性的问题，可以使用虚继承。虚继承中对于给定的虚基类，无论该类在继承体系中作为虚基类出现了多少次，只继承一个共享的基类子对象，这样<strong>菱形继承</strong>中的二义性问题也能够解决了（但普通多继承并没有解决）。<br>下面看看Inside the C++ Object Model上的这段菱形继承代码，它的大小如何？<br><figure class="highlight kotlin"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div></pre></td><td class="code"><pre><div class="line"><span class="class"><span class="keyword">class</span> <span class="title">X</span></span>&#123;&#125;;</div><div class="line"><span class="class"><span class="keyword">class</span> <span class="title">Y</span>: <span class="type">public virtual X&#123;&#125;;</span></span></div><div class="line"><span class="class"><span class="keyword">class</span> <span class="title">Z</span>: <span class="type">public virtual X&#123;&#125;;</span></span></div><div class="line"><span class="class"><span class="keyword">class</span> <span class="title">A</span>: <span class="type">public Y</span>, <span class="type">public Z&#123;&#125;;</span></span></div></pre></td></tr></table></figure></p>
-<p>作者指出应当为<code>1 8 8 12</code>，但也同时指出有些编译器（译者指出例如MSVC）会产生<code>1 4 4 8</code>。<br>首先<code>X</code>有1的开销这是毫无疑问的，我们似乎不要考虑所谓对象外的“外部碎片”。<br>下面的<code>Y</code>大小为8。首先<code>Y</code>虚继承了<code>X</code>，所以还需要一个4字节的指针，指向虚基类的<code>X</code>大小为1字节的子对象。这有点类似于vftable指针，实际上是个vbtable指针。然后<code>X</code>的1字节的占位符也被继承下来到了<code>Y</code>对象中，这里译者的图应该错了，不然没有办法解释后面<code>A</code>也能算空类，为啥不给<code>A</code>加上1字节。最后，我们为已有的5字节加上3字节的padding，总共有8字节。<br>考虑<code>A</code>，它拥有12字节，这包括<code>Y</code>和<code>Z</code>的子对象，各4字节（注意不是8字节，由于<code>X</code>被共享了，这也是虚继承的核心思想）。现在在加上被共享的<code>X</code>的1字节，共9字节，加上padding共12字节。Inside the C++ Object Model指出此时<code>A</code>自己的大小是0字节.<br>MSVC优化掉了空类<code>X</code>占用的1字节开销，这样<code>Y</code>最后的3字节的padding也不需要了，因此只保留了一个指针。</p>
+<p>作者指出应当为<code>1 8 8 12</code>，但也同时指出有些编译器（译者指出例如MSVC）会产生<code>1 4 4 8</code>。<br>首先<code>X</code>有1的开销这是毫无疑问的，我们似乎不要考虑所谓对象外的“外部碎片”。<br>下面的<code>Y</code>大小为8。首先<code>Y</code>虚继承了<code>X</code>，所以还需要一个4字节的指针，指向虚基类的<code>X</code>大小为1字节的子对象。这有点类似于vftable指针，实际上是个vbtable指针。然后<code>X</code>的1字节的占位符也被继承下来到了<code>Y</code>对象中，这里译者的图应该错了，不然没有办法解释后面<code>A</code>也能算空类，为啥不给<code>A</code>加上1字节。最后，我们为已有的5字节加上3字节的padding，总共有8字节。<br>考虑<code>A</code>，它拥有12字节，这包括<code>Y</code>和<code>Z</code>的子对象，各4字节（注意不是8字节，由于<code>X</code>被共享了，这也是虚继承的核心思想）。现在在加上被共享的<code>X</code>的1字节，共9字节，加上padding共12字节。Inside the C++ Object Model指出此时<code>A</code>自己的大小是0字节。<br>MSVC优化掉了空类<code>X</code>占用的1字节开销，这样<code>Y</code>最后的3字节的padding也不需要了，因此只保留了一个指针。</p>
 <h1 id="虚函数-虚继承"><a href="#虚函数-虚继承" class="headerlink" title="虚函数+虚继承"></a>虚函数+虚继承</h1><p>虚函数和虚继承可能同时出现。</p>
+<h1 id="禁用对齐"><a href="#禁用对齐" class="headerlink" title="禁用对齐"></a>禁用对齐</h1><p>有的时候我们需要禁用对齐功能，例如我们需要将某个<code>struct</code>按照二进制格式进行传输或者存储，因此padding的存在容易导致错误和浪费。</p>
 
       
     </div>
@@ -543,7 +544,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">93</span>
+                <span class="site-state-item-count">96</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -556,7 +557,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">109</span>
+                <span class="site-state-item-count">110</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -616,7 +617,7 @@
                 </li>
               
                 <li class="links-of-blogroll-item">
-                  <a href="https://wenwenla.github.io/" title="wenwen" target="_blank">wenwen</a>
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
                 </li>
               
                 <li class="links-of-blogroll-item">
@@ -642,7 +643,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#虚函数"><span class="nav-number">1.</span> <span class="nav-text">虚函数</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#虚继承"><span class="nav-number">2.</span> <span class="nav-text">虚继承</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#虚函数-虚继承"><span class="nav-number">3.</span> <span class="nav-text">虚函数+虚继承</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#虚函数"><span class="nav-number">1.</span> <span class="nav-text">虚函数</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#虚继承"><span class="nav-number">2.</span> <span class="nav-text">虚继承</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#虚函数-虚继承"><span class="nav-number">3.</span> <span class="nav-text">虚函数+虚继承</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#禁用对齐"><span class="nav-number">4.</span> <span class="nav-text">禁用对齐</span></a></li></ol></div>
             
 
           </div>
@@ -665,7 +666,7 @@
         <div class="copyright">
   
   &copy;  2015 - 
-  <span itemprop="copyrightYear">2017</span>
+  <span itemprop="copyrightYear">2018</span>
   <span class="with-love">
     <i class="fa fa-heart"></i>
   </span>

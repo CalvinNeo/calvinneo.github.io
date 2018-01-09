@@ -74,7 +74,7 @@
 <link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="C++,编译原理,编译器,fortran," />
+  <meta name="keywords" content="C++,fortran,编译原理,编译器," />
 
 
 
@@ -90,16 +90,16 @@
 
 
 
-<meta name="description" content="最近在写CFortranTranslator，一个从Fortran77/Fortran90到C++ 14的工具，其中涉及到使用C++为Fortran实现一个数组库。总的来讲，Fortran90的有些语言特性在编写和编译上都让人不是很舒服。比如没有头文件和前置声明，这导致了许多额外的代码和解析工作，比如INTERFACE块因此而生（但当时其实是一个比较好的解决方案）。又比如Fortran兼容老标准允">
+<meta name="description" content="最近在写CFortranTranslator，一个从Fortran77/Fortran90到C++ 14的工具，其中涉及到使用C++为Fortran实现一个数组库。总的来讲，Fortran90的有些语言特性在编写和编译上都让人不是很舒服。比如没有头文件和前置声明，这导致了许多额外的代码和解析工作，比如INTERFACE块因此而生（但其实也是一个比较好的解决方案，和前置声明也差不多）。又比如Fort">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Fortran数组的C++实现">
 <meta property="og:url" content="http://www.calvinneo.com/2017/01/18/Fortran数组的C++实现/index.html">
 <meta property="og:site_name" content="Calvin's Marbles">
-<meta property="og:description" content="最近在写CFortranTranslator，一个从Fortran77/Fortran90到C++ 14的工具，其中涉及到使用C++为Fortran实现一个数组库。总的来讲，Fortran90的有些语言特性在编写和编译上都让人不是很舒服。比如没有头文件和前置声明，这导致了许多额外的代码和解析工作，比如INTERFACE块因此而生（但当时其实是一个比较好的解决方案）。又比如Fortran兼容老标准允">
-<meta property="og:updated_time" content="2017-11-14T08:59:57.000Z">
+<meta property="og:description" content="最近在写CFortranTranslator，一个从Fortran77/Fortran90到C++ 14的工具，其中涉及到使用C++为Fortran实现一个数组库。总的来讲，Fortran90的有些语言特性在编写和编译上都让人不是很舒服。比如没有头文件和前置声明，这导致了许多额外的代码和解析工作，比如INTERFACE块因此而生（但其实也是一个比较好的解决方案，和前置声明也差不多）。又比如Fort">
+<meta property="og:updated_time" content="2018-01-03T10:01:56.849Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Fortran数组的C++实现">
-<meta name="twitter:description" content="最近在写CFortranTranslator，一个从Fortran77/Fortran90到C++ 14的工具，其中涉及到使用C++为Fortran实现一个数组库。总的来讲，Fortran90的有些语言特性在编写和编译上都让人不是很舒服。比如没有头文件和前置声明，这导致了许多额外的代码和解析工作，比如INTERFACE块因此而生（但当时其实是一个比较好的解决方案）。又比如Fortran兼容老标准允">
+<meta name="twitter:description" content="最近在写CFortranTranslator，一个从Fortran77/Fortran90到C++ 14的工具，其中涉及到使用C++为Fortran实现一个数组库。总的来讲，Fortran90的有些语言特性在编写和编译上都让人不是很舒服。比如没有头文件和前置声明，这导致了许多额外的代码和解析工作，比如INTERFACE块因此而生（但其实也是一个比较好的解决方案，和前置声明也差不多）。又比如Fort">
 
 
 
@@ -383,14 +383,23 @@
       
 
       
-        <p>最近在写CFortranTranslator，一个从Fortran77/Fortran90到C++ 14的工具，其中涉及到使用C++为Fortran实现一个数组库。<br>总的来讲，Fortran90的有些语言特性在编写和编译上都让人不是很舒服。比如没有头文件和前置声明，这导致了许多额外的代码和解析工作，比如<code>INTERFACE</code>块因此而生（但当时其实是一个比较好的解决方案）。又比如Fortran兼容老标准允许隐式声明变量，这使得处理变量声明的工作要延迟到处理函数体时。Fortran90还可以直接根据Attribute specification statements给变量加属性(ISO/IEC 1539 : 1991 ch5.2)，加上隐式声明的情况，实际上类似于<code>INTENT</code>、<code>PARAMETER</code>、<code>DIMENSION</code>这样的语句需要考虑是生成一段新变量声明还是修改老声明，这同样会延迟处理变量声明的工作，还会要求建立符号表。此外各种impied-do结构，虽然可以完全展开成for循环，但是为了保持Fortran源语句的抽象，最好还是做成一个表达式。当然了最恶心的还是Fortran77里面的nonblock DO construct，最省事的办法就是先用start condition给flex开洞，再<code>#define YYLEX</code>给bison开洞。<br>关于C++元编程的部分可以参考<a href="/2016/12/22/C++模板编程/">C++模板编程</a>这篇文章中，关于使用flex/bison进行语法分析的部分我放到了<a href="/2016/07/29/flex和bison使用/">flex和bison使用</a>，其他的部分放在这里。<br><a id="more"></a></p>
-<h1 id="for1array-lt-typename-T-gt"><a href="#for1array-lt-typename-T-gt" class="headerlink" title="for1array&lt;typename T&gt;"></a>for1array&lt;typename T&gt;</h1><p><code>for1array&lt;T&gt;</code>是一个一维的数组，可以理解为对C++原生数组的一个包装，使得数组能够自定义上下界，和列优先的存储模式。事实上这种嵌套(nested)数组在实现Fortran的内在函数时存在相当大的麻烦。<br>例如将初始化序列按列映射到一个嵌套的数组<code>for1array&lt;for1array&lt;...for1array&lt;T&gt;...&gt;&gt; farr</code>中，如果通过通常的递归来做，那么就要自结构最里面从内而外<code>for1array&lt;T&gt;</code>进行递归，然而这是比较难于实现的。实际上解决方案对于嵌套的<code>for1array</code>数组按照通常一样从外到内进行递归遍历，而计算<code>farr[a1][a2]...[an]</code>时对应的一维序列中的位置。对于<code>farr</code>数组中的第k层的指针增加1，实际上相当于一维序列中向后移动<code>size[1] * size[2] * ... size[k-1]</code>，其中<code>size[i]</code>为<code>farr</code>中第i层的大小。<br>但是对于<code>transpose</code>这样的函数使用嵌套数组实现的代价就相当大了，特别地，fortran90标准对转置秩大于2的数组并没有规定行为：</p>
+        <p>最近在写CFortranTranslator，一个从Fortran77/Fortran90到C++ 14的工具，其中涉及到使用C++为Fortran实现一个数组库。<br>总的来讲，Fortran90的有些语言特性在编写和编译上都让人不是很舒服。比如没有头文件和前置声明，这导致了许多额外的代码和解析工作，比如<code>INTERFACE</code>块因此而生（但其实也是一个比较好的解决方案，和前置声明也差不多）。又比如Fortran兼容老标准的问题，这个写C++的同学也应该深有同感，C++为了保持和C的linkage做了不少擦屁股的事情，像什么POD、函数指针函数对象啥的。Fortran老标准中允许隐式声明变量，而且可以通过名字推断变量的类型，而且由于COMMON块的存在还要兼容一些奇妙的用法。这使得处理变量声明的工作要延迟到处理函数体时。Fortran90还可以直接根据Attribute specification statements给变量加属性(ISO/IEC 1539 : 1991 ch5.2)，加上隐式声明的情况，实际上类似于<code>INTENT</code>、<code>PARAMETER</code>、<code>DIMENSION</code>这样的语句需要考虑是生成一段新变量声明还是修改老声明，这同样会延迟处理变量声明的工作，还会要求建立符号表。此外各种impied-do结构，虽然可以完全展开成for循环，但是为了保持Fortran源语句的抽象，最好还是做成一个表达式。还有Fortran77里面的nonblock DO construct非常恶心，从语法上完全无法解析了，最偷懒的办法就是先用start condition给flex开洞，再<code>#define YYLEX</code>给bison开洞。不过后来token级的continuation迫使我直接手写词法分析了，果然偷懒还是要不得的。<br>关于C++元编程的部分可以参考<a href="/2016/12/22/C++模板编程/">C++模板编程</a>这篇文章中，关于使用flex/bison进行语法分析的部分我放到了<a href="/2016/07/29/flex和bison使用/">flex和bison使用</a>，其他的部分放在这里。<br><a id="more"></a></p>
+<h1 id="Fortran数组简介"><a href="#Fortran数组简介" class="headerlink" title="Fortran数组简介"></a>Fortran数组简介</h1><p>Fortran语言的实现常常要比C快，其中数组是功不可没的。<br>在C语言中，数组常常会被decay成指针来处理，而这会在优化时造成pointer aliasing的问题。<br>一方面C/C++编译器遵循strict aliasing规则，即不同类型的指针绝不会指向同一块内存。具体的说下面的情况被视为相同类型：</p>
+<ol>
+<li>被signed/unsigned/const/volatile所修饰 </li>
+<li>被一个聚合或联合所包含</li>
+<li>继承自一个基类</li>
+<li>类型<code>char*</code>和<code>void**</code>可以alias任何其他类型<br>这样当你写出这样的神奇代码的时候，编译器至少能有个warning<figure class="highlight cpp"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">int</span> a;</div><div class="line"><span class="function"><span class="keyword">int</span> <span class="title">f</span><span class="params">(<span class="keyword">float</span> *b)</span></span></div><div class="line">&#123;</div><div class="line">    a = <span class="number">1</span>;</div><div class="line">    *b = <span class="number">0</span>;</div><div class="line">    <span class="keyword">return</span> a;</div><div class="line">&#125;</div><div class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></div><div class="line">&#123;</div><div class="line">    <span class="built_in">printf</span>(<span class="string">"%d\n"</span>, f((<span class="keyword">float</span>*)&amp;a));</div><div class="line">    <span class="keyword">return</span> <span class="number">0</span>;</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+</li>
+</ol>
+<p>在另一方面，我们还是无法容易得知道两个相同类型的指针是否alias，即指向同一块内存。这时候Pointer aliasing的问题会阻碍编译器进行优化，虽然restrict关键字可以一定程度上减少这个问题。Fortran数组就彻底没有这样的烦恼。</p>
+<h1 id="for1array-lt-typename-T-gt"><a href="#for1array-lt-typename-T-gt" class="headerlink" title="for1array&lt;typename T&gt;"></a>for1array&lt;typename T&gt;</h1><p>一开始的想法是实现一个<code>for1array&lt;T&gt;</code>，一个一维的数组。可以理解为对C++原生数组的一个包装，使得数组能够自定义上下界，和列优先的存储模式。事实上这种嵌套(nested)数组在实现Fortran的内在函数时存在相当大的麻烦。<br>例如将初始化序列按列映射到一个嵌套的数组<code>for1array&lt;for1array&lt;...for1array&lt;T&gt;...&gt;&gt; farr</code>中，如果通过通常的递归来做，那么就要自结构最里面从内而外<code>for1array&lt;T&gt;</code>进行递归，然而这是比较难于实现的。实际上解决方案对于嵌套的<code>for1array</code>数组按照通常一样从外到内进行递归遍历，而计算<code>farr[a1][a2]...[an]</code>时对应的一维序列中的位置。对于<code>farr</code>数组中的第k层的指针增加1，实际上相当于一维序列中向后移动<code>size[1] * size[2] * ... size[k-1]</code>，其中<code>size[i]</code>为<code>farr</code>中第i层的大小。<br>但是对于<code>transpose</code>这样的函数使用嵌套数组实现的代价就相当大了，特别地，fortran90标准对转置秩大于2的数组并没有规定行为：</p>
 <blockquote>
 <p>13.13.109 TRANSPOSE (MATRIX)<br>Description. Transpose an array of rank two.<br>Class. Transformational function.<br>Argument. MATRIX may be of any type and must have rank two.</p>
 </blockquote>
 <p>因此实际上对于一个N维/秩数组$X$，假设第$i$维的取值范围是$[0, n_i]$，定义转置$X^T$，满足$X[a_1][a_2]…[a_n]$ = $X^T[a_n][a_{n-1}]…[a_1]$。</p>
-<h1 id="farray-lt-typename-T-int-D-gt"><a href="#farray-lt-typename-T-int-D-gt" class="headerlink" title="farray&lt;typename T, int D&gt;"></a>farray&lt;typename T, int D&gt;</h1><p>Fortran90标准中数组的维数，上下界都是确定的，称为显式形状数组(explicit-shape)。此外，除了动态数组(deferred-shape)，即使出现的可调数组(automatic explicit-shape)（类似于C99中的VLA）、假定形状数组(assumed-shape)（仅给出维/秩数）和假定大小数组(assumed-size)（最后一维的上下界是不定的）也是作为哑元（形参的）。Fortran77标准更是使用完全静态环境(fully static environment)的运行时（《编译原理及实践》§7），因此都不支持递归调用。因此Fortran多维数组并不需要锯齿数组，也不需要实现类似动态表的自扩，所以内部可以通过一个一维的线性表data来保存数据。<br>因为要尽可能保证和源代码一致性，所以不能将上界统一改为0开始，在设计时需要使用在对象中维护每一维的上下界。有一些方法可以在常量表达式内初始化表示上下界的数组，例如<a href="http://stackoverflow.com/questions/27083755/copy-array-in-constexpr-constructor" target="_blank" rel="external">使用constexpr构造函数</a>（注意目前使用的<a href="https://msdn.microsoft.com/en-us/library/hh567368.aspx" target="_blank" rel="external">MSVC2015</a>尚不支持<a href="https://isocpp.org/wiki/faq/cpp14-language#extended-constexpr" target="_blank" rel="external">Extended Constexpr</a>），但事实上<code>constexpr</code>并不是一个强制性声明，编译器仍然可以选择将其放到运行期完成。根据<a href="http://stackoverflow.com/questions/37602057/why-isnt-a-for-loop-a-compile-time-expression" target="_blank" rel="external">StackOverflow上的这篇回答</a>，所以这个希望在编译期完成的动作得放到运行期来完成。当然确实有一些方法可以实现编译期的循环结构的，比如变循环为递归，或者使用fold expression对一个index_sequence。<br>另外一种思路是将每一维的上下界放入模板参数里面，然后通过parameter unpack提取出来。</p>
-<h2 id="实现transpose"><a href="#实现transpose" class="headerlink" title="实现transpose"></a>实现transpose</h2><p>现在实现<code>transpose</code>函数，<code>transpose</code>函数主要是通过变换$n_i$和对应的一维序列，满足上面式子。<br>对于原矩阵$X[a_1][a_2]…[a_n]$，可以映射到$X$对应的一维序列的第$\sum_{i=1}^{N}{(a_i \times \prod_{j = i + 1}}^{N}{n_j})$项，令$\prod_{N + 1}^{N}{} = 1  $；<br>对于转置后的矩阵$X^T[b_1][b_2]…[b_n]$，令其每一维大小为$n’_i $，可得$n’_i = n_{N + 1 - i}$，可以映射到$X^T$对应的一维序列的第$\sum_{i=1}^{N}{(b_i \times \prod_{j = i + 1}}^{N}{n’_j})$项，其中令$\prod_{1}^{0}{} = 1 $。<br>根据$X[a_1][a_2]…[a_n]$ = $X^T[a_n][a_{n-1}]…[a_1]$，带入$b_i = a_{N + 1 - i}$，可以得到映射规则$X: \sum_{i=1}^{N}{(a_i \times \prod_{j = i + 1}}^{N}{n_j})$ $\Rightarrow$ $X^T: \sum_{i=1}^{N}{(b_i \times \prod_{j = i + 1}}^{N}{n’_j})$ = $\sum_{i=1}^{N}{(a_{N + 1 - i} \times \prod_{j = i + 1}}^{N}{n_{N + 1 - j}})$。<br>以上是对于C-style的数组讨论的，对于Fortran-style的数组，将$\Sigma$的上下界改成$0 .. i - 1$<br>此外，对于<a href="http://www.cnblogs.com/illuminator/archive/2013/04/22/3036061.html" target="_blank" rel="external">2维矩阵转置有$O(1)$空间的方法</a>。</p>
+<h1 id="farray-lt-typename-T-int-D-gt"><a href="#farray-lt-typename-T-int-D-gt" class="headerlink" title="farray&lt;typename T, int D&gt;"></a>farray&lt;typename T, int D&gt;</h1><p>Fortran90标准中数组的维数，上下界都是确定的，称为显式形状数组(explicit-shape)。此外，除了动态数组(deferred-shape)，即使出现的可调数组(automatic explicit-shape)（类似于C99中的VLA）、假定形状数组(assumed-shape)（仅给出维/秩数）和假定大小数组(assumed-size)（最后一维的上下界是不定的）也是作为哑元（形参的）。Fortran77标准更是使用完全静态环境(fully static environment)的运行时（《编译原理及实践》§7），因此都不支持递归调用。因此Fortran多维数组并不需要锯齿数组，也不需要实现类似动态表的自扩，所以内部可以通过一个一维的线性表data来保存数据。<br>因为要尽可能保证和源代码一致性，所以不能将上界统一改为0开始，在设计时需要使用在对象中维护每一维的上下界。于是自然想到是否可以在编译期进行上下界的相关计算，一个很挫的思路是将每一维的上下界放入模板参数里面，然后通过parameter unpack提取出来。另外还有想法是借助constexpr而不是模板，例如<a href="http://stackoverflow.com/questions/27083755/copy-array-in-constexpr-constructor" target="_blank" rel="external">使用constexpr构造函数</a>（注意目前使用的<a href="https://msdn.microsoft.com/en-us/library/hh567368.aspx" target="_blank" rel="external">MSVC2015</a>无法编译，原因是尚不支持<a href="https://isocpp.org/wiki/faq/cpp14-language#extended-constexpr" target="_blank" rel="external">Extended Constexpr</a>）。但事实上即使能编译，<code>constexpr</code>也不是一个强制性声明，编译器仍然可以选择将其放到运行期完成。其实<code>constexpr</code>也被用来“糊弄”编译器。<br><a href="http://stackoverflow.com/questions/37602057/why-isnt-a-for-loop-a-compile-time-expression" target="_blank" rel="external">StackOverflow上的这篇回答</a>解释了这样做的原因。回答列举了一个希望使用<code>for</code>遍历<code>std::tuple</code>的例子，我们知道C++是静态类型的且<code>std::tuple</code>的参数包中可能包含不同类型，所以<code>for (const auto &amp; x : my_tuple)</code>这样的做法就是在和C++标准过不去；但使用一个index来“遍历”<code>std::tuple</code>中的元素也是不行的，例如<code>for (constexpr i = 0; i &lt; 10; ++i)</code>，程序员完全可以将这个<code>i</code>作为<code>std::get</code>的非类型模板参数来构造出可能属于不同类型的变量。<br>通过答主的这个例子可以知道一个constexpr的for对当前的C++来说是不切实际的，事实上我们可以采用一些方法可以实现编译期的循环结构，比如变循环为递归，把index放到模板参数里面。对于C++14，可以借助于<code>index_sequence</code>来<a href="http://blog.jobbole.com/112106/?utm_source=blog.jobbole.com&amp;utm_medium=relatedPosts" target="_blank" rel="external">辅助进行包展开</a>，对于C++17可以去<a href="http://en.cppreference.com/w/cpp/language/fold" target="_blank" rel="external">fold</a>一个<code>index_sequence</code>。</p>
+<h2 id="实现transpose"><a href="#实现transpose" class="headerlink" title="实现transpose"></a>实现transpose</h2><p>现在实现<code>transpose</code>函数，<code>transpose</code>函数主要是通过变换$n_i$和对应的一维序列，满足上面式子。<br>对于原矩阵$X[a_1][a_2]…[a_n]$，可以映射到$X$对应的一维序列的第$\sum_{i=1}^{N}{(a_i \times \prod_{j = i + 1}}^{N}{n_j})$项，令$\prod_{N + 1}^{N}{} = 1  $；<br>对于转置后的矩阵$X^T[b_1][b_2]…[b_n]$，令其每一维大小为$n’_i $，可得$n’_i = n_{N + 1 - i}$，可以映射到$X^T$对应的一维序列的第$\sum_{i=1}^{N}{(b_i \times \prod_{j = i + 1}}^{N}{n’_j})$项，其中令$\prod_{1}^{0}{} = 1 $。<br>根据$X[a_1][a_2]…[a_n]$ = $X^T[a_n][a_{n-1}]…[a_1]$，带入$b_i = a_{N + 1 - i}$，可以得到映射规则$X: \sum_{i=1}^{N}{(a_i \times \prod_{j = i + 1}}^{N}{n_j})$ $\Rightarrow$ $X^T: \sum_{i=1}^{N}{(b_i \times \prod_{j = i + 1}}^{N}{n’_j})$ = $\sum_{i=1}^{N}{(a_{N + 1 - i} \times \prod_{j = i + 1}}^{N}{n_{N + 1 - j}})$。<br>以上是对于C-style的数组讨论的，对于Fortran-style的数组，将$\Sigma$的上下界改成$0 .. i - 1$<br>此外，对于<a href="http://www.cnblogs.com/illuminator/archive/2013/04/22/3036061.html" target="_blank" rel="external">2维非方阵矩阵转置有$O(1)$空间的方法</a>，主要是按照序号从小到大遍历矩阵中的每个元素，希望能够找到以它开始的环。容易看出一个环没有被遍历过当前仅当当前序号是环中最小的序号。</p>
 <h2 id="slice数组片段"><a href="#slice数组片段" class="headerlink" title="slice数组片段"></a>slice数组片段</h2><p>fortran中的slice是by reference的，对slice的修改也是对原数组的修改，于是要实现一个<code>forslice</code>函数，其返回的slice应当是数组片段的引用。对于这种情况，首先可以考虑使用<code>vector&lt;shared_ptr&lt;T&gt;&gt; data</code>来实现内部的线性表data，但是这样会产生不必要的空间开销。因为虽然每一个slice是不一样的，没办法对<code>shared_ptr&lt;vector&lt;T&gt;&gt; data</code>，但是每个slice的data部分是作为一个整体的。所以还是使用的裸指针RAII，对于从<code>forslice</code>函数构造的<code>farray</code>，在构造时加一个tag，析构时不释放指针即可。考虑到Fortran77标准本身的完全静态环境，Fortran90可能是基于栈的，所以不会出现悬挂指针导致的AV错误。<br>此外fortran中还允许使用<code>(/ /)</code>这样的Delimiters来具体指定位置组成数组片段，例如<code>A((/1,2/))</code>表示选取A中的第1和第2个元素。要实现这个功能只需要给<code>slice_info</code>做一些修改，加一个迭代器即可，考虑到这个功能并不常用，所以并没有实现。</p>
 <h2 id="数组的秩"><a href="#数组的秩" class="headerlink" title="数组的秩"></a>数组的秩</h2><p>此外fortran中有使用到数组的秩作为参数（通常参数名为dim）的函数，要注意秩是从1开始计算的。</p>
 <h1 id="farray-lt-typename-T-gt"><a href="#farray-lt-typename-T-gt" class="headerlink" title="farray&lt;typename T&gt;"></a>farray&lt;typename T&gt;</h1><p>fortran有一个slice操作，它返回的维数是不固定的，例如<code>a(:, 1, 1:2)</code>返回一个2维的数组，但是<code>a(:, 1, 1:1)</code>返回一个三维的数组，虽然这两个数组所承载的数据是一样的。这给实现带来了困难，因为返回类型是根据<code>slice_info</code>的初始化列表来决定的，为了追求语法尽可能简单，贴近fortran源码，对<code>slice_info</code>这样的工具类模板开洞是不太好的，因此决定将维数参数也移出模板参数。<br>因此将<code>farray&lt;T&gt;</code>的数据分成两块，第一块是有关形状的元数据，通过<code>reset_array</code>来设置；另一块是数据本身，通过<code>reset_value</code>来设置。在数组声明（构造函数）时，可以确定数组形状，可以顺带赋值；在数组（<code>operator=</code>）赋值时只能赋值，<strong>而不使用目标右值的形状</strong>。<br>再一次说明，这样带来了额外的空间开销<code>lb</code>用来存储上界，<code>sz</code>用来存储大小。由于fortran数组是按列存储，越往后的下边周期越长，因此预先计算<code>delta</code>也就是第<code>d</code>维是<code>i</code>时数组的长度，用来辅助运算。可以看到是把整个数组的运算都放到了运行期，而这些东西完全是编译器决定的。显然我们可以在把fortran编译到C++的阶段处理这些东西，但是要不这让生成的代码因为带上这些附加的数据显得非常难看，要不就会损失掉fortran原来的语义，例如将fortran的数组整合成上界始终是<code>0</code>，按行存储的数组。所以唯一的办法是利用元编程，让C++编译器在模板阶段处理这些东西。</p>
@@ -498,11 +507,11 @@ ac-implied-do ::= ( ac-value-list , scalar-int-expr , scalar-int-expr [ , scalar
           
             <a href="/tags/C/" rel="tag"># C++</a>
           
+            <a href="/tags/fortran/" rel="tag"># fortran</a>
+          
             <a href="/tags/编译原理/" rel="tag"># 编译原理</a>
           
             <a href="/tags/编译器/" rel="tag"># 编译器</a>
-          
-            <a href="/tags/fortran/" rel="tag"># fortran</a>
           
         </div>
       
@@ -515,7 +524,7 @@ ac-implied-do ::= ( ac-value-list , scalar-int-expr , scalar-int-expr [ , scalar
         <div class="post-nav">
           <div class="post-nav-next post-nav-item">
             
-              <a href="/2017/01/02/C++static用法/" rel="next" title="C++中static关键字的用法">
+              <a href="/2017/01/02/C++static-usage/" rel="next" title="C++中static关键字的用法">
                 <i class="fa fa-chevron-left"></i> C++中static关键字的用法
               </a>
             
@@ -606,7 +615,7 @@ ac-implied-do ::= ( ac-value-list , scalar-int-expr , scalar-int-expr [ , scalar
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">93</span>
+                <span class="site-state-item-count">96</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -619,7 +628,7 @@ ac-implied-do ::= ( ac-value-list , scalar-int-expr , scalar-int-expr [ , scalar
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">109</span>
+                <span class="site-state-item-count">110</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -679,7 +688,7 @@ ac-implied-do ::= ( ac-value-list , scalar-int-expr , scalar-int-expr [ , scalar
                 </li>
               
                 <li class="links-of-blogroll-item">
-                  <a href="https://wenwenla.github.io/" title="wenwen" target="_blank">wenwen</a>
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
                 </li>
               
                 <li class="links-of-blogroll-item">
@@ -705,7 +714,7 @@ ac-implied-do ::= ( ac-value-list , scalar-int-expr , scalar-int-expr [ , scalar
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#for1array-lt-typename-T-gt"><span class="nav-number">1.</span> <span class="nav-text">for1array<typename T></span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#farray-lt-typename-T-int-D-gt"><span class="nav-number">2.</span> <span class="nav-text">farray<typename T, int D></span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#实现transpose"><span class="nav-number">2.1.</span> <span class="nav-text">实现transpose</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#slice数组片段"><span class="nav-number">2.2.</span> <span class="nav-text">slice数组片段</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#数组的秩"><span class="nav-number">2.3.</span> <span class="nav-text">数组的秩</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#farray-lt-typename-T-gt"><span class="nav-number">3.</span> <span class="nav-text">farray<typename T></span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#fortran数组的内在函数"><span class="nav-number">4.</span> <span class="nav-text">fortran数组的内在函数</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#处理dim参数"><span class="nav-number">4.1.</span> <span class="nav-text">处理dim参数</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#处理mask参数"><span class="nav-number">4.2.</span> <span class="nav-text">处理mask参数</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#fortran数组中的运算符重载"><span class="nav-number">5.</span> <span class="nav-text">fortran数组中的运算符重载</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#数组声明"><span class="nav-number">6.</span> <span class="nav-text">数组声明</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#数组初始化和赋值"><span class="nav-number">7.</span> <span class="nav-text">数组初始化和赋值</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#使用数组构造器"><span class="nav-number">7.1.</span> <span class="nav-text">使用数组构造器</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#implied-do"><span class="nav-number">7.2.</span> <span class="nav-text">implied-do</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#使用DATA"><span class="nav-number">7.3.</span> <span class="nav-text">使用DATA</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#使用WHERE"><span class="nav-number">7.4.</span> <span class="nav-text">使用WHERE</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#生成AST"><span class="nav-number">8.</span> <span class="nav-text">生成AST</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#总结"><span class="nav-number">9.</span> <span class="nav-text">总结</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Fortran数组简介"><span class="nav-number">1.</span> <span class="nav-text">Fortran数组简介</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#for1array-lt-typename-T-gt"><span class="nav-number">2.</span> <span class="nav-text">for1array<typename T></span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#farray-lt-typename-T-int-D-gt"><span class="nav-number">3.</span> <span class="nav-text">farray<typename T, int D></span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#实现transpose"><span class="nav-number">3.1.</span> <span class="nav-text">实现transpose</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#slice数组片段"><span class="nav-number">3.2.</span> <span class="nav-text">slice数组片段</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#数组的秩"><span class="nav-number">3.3.</span> <span class="nav-text">数组的秩</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#farray-lt-typename-T-gt"><span class="nav-number">4.</span> <span class="nav-text">farray<typename T></span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#fortran数组的内在函数"><span class="nav-number">5.</span> <span class="nav-text">fortran数组的内在函数</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#处理dim参数"><span class="nav-number">5.1.</span> <span class="nav-text">处理dim参数</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#处理mask参数"><span class="nav-number">5.2.</span> <span class="nav-text">处理mask参数</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#fortran数组中的运算符重载"><span class="nav-number">6.</span> <span class="nav-text">fortran数组中的运算符重载</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#数组声明"><span class="nav-number">7.</span> <span class="nav-text">数组声明</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#数组初始化和赋值"><span class="nav-number">8.</span> <span class="nav-text">数组初始化和赋值</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#使用数组构造器"><span class="nav-number">8.1.</span> <span class="nav-text">使用数组构造器</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#implied-do"><span class="nav-number">8.2.</span> <span class="nav-text">implied-do</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#使用DATA"><span class="nav-number">8.3.</span> <span class="nav-text">使用DATA</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#使用WHERE"><span class="nav-number">8.4.</span> <span class="nav-text">使用WHERE</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#生成AST"><span class="nav-number">9.</span> <span class="nav-text">生成AST</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#总结"><span class="nav-number">10.</span> <span class="nav-text">总结</span></a></li></ol></div>
             
 
           </div>
@@ -728,7 +737,7 @@ ac-implied-do ::= ( ac-value-list , scalar-int-expr , scalar-int-expr [ , scalar
         <div class="copyright">
   
   &copy;  2015 - 
-  <span itemprop="copyrightYear">2017</span>
+  <span itemprop="copyrightYear">2018</span>
   <span class="with-love">
     <i class="fa fa-heart"></i>
   </span>

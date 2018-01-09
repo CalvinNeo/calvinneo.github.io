@@ -1,0 +1,1223 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="C++,并行计算,多线程," />
+
+
+
+
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="在本篇中比较了各种并发、并行技术。并发(concurrency)强调的是逻辑上的同时发生，在实际上并发程序可能是由一个处理器同时(simultaneously)处理多个任务，因此并发过程中常出现一个线程等待其他资源的情况。此时常伴随着线程的阻塞和调度。并发过程通常可划分为多个级别：Blocking、Obstruction-Free、Lock-Free、Wait-Free，其中后三种统称为Non-b">
+<meta property="og:type" content="article">
+<meta property="og:title" content="并发编程重要概念及比较">
+<meta property="og:url" content="http://www.calvinneo.com/2017/12/28/Concurrency-Programming-Compare/index.html">
+<meta property="og:site_name" content="Calvin's Marbles">
+<meta property="og:description" content="在本篇中比较了各种并发、并行技术。并发(concurrency)强调的是逻辑上的同时发生，在实际上并发程序可能是由一个处理器同时(simultaneously)处理多个任务，因此并发过程中常出现一个线程等待其他资源的情况。此时常伴随着线程的阻塞和调度。并发过程通常可划分为多个级别：Blocking、Obstruction-Free、Lock-Free、Wait-Free，其中后三种统称为Non-b">
+<meta property="og:updated_time" content="2018-01-09T14:46:00.467Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="并发编程重要概念及比较">
+<meta name="twitter:description" content="在本篇中比较了各种并发、并行技术。并发(concurrency)强调的是逻辑上的同时发生，在实际上并发程序可能是由一个处理器同时(simultaneously)处理多个任务，因此并发过程中常出现一个线程等待其他资源的情况。此时常伴随着线程的阻塞和调度。并发过程通常可划分为多个级别：Blocking、Obstruction-Free、Lock-Free、Wait-Free，其中后三种统称为Non-b">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2017/12/28/Concurrency-Programming-Compare/"/>
+
+
+
+
+
+  <title>并发编程重要概念及比较 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2017/12/28/Concurrency-Programming-Compare/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                并发编程重要概念及比较
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2017-12-28T20:34:20+08:00">
+                2017-12-28
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+              <span class="post-comments-count">
+                <span class="post-meta-divider">|</span>
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-comment-o"></i>
+                </span>
+                <a href="/2017/12/28/Concurrency-Programming-Compare/#comments" itemprop="discussionUrl">
+                  <span class="post-comments-count disqus-comment-count"
+                        data-disqus-identifier="2017/12/28/Concurrency-Programming-Compare/" itemprop="commentCount"></span>
+                </a>
+              </span>
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>在本篇中比较了各种并发、并行技术。<br><strong>并发(concurrency)</strong>强调的是逻辑上的同时发生，在实际上并发程序可能是由一个处理器同时(simultaneously)处理多个任务，因此并发过程中常出现一个线程等待其他资源的情况。此时常伴随着线程的阻塞和调度。并发过程通常可划分为<a href="http://ifeve.com/lock-free-and-wait-free/" target="_blank" rel="external">多个级别</a>：Blocking、Obstruction-Free、Lock-Free、Wait-Free，其中后三种统称为Non-blocking的。<br><strong>并行(parallelism)</strong>属于并发，并行强调这两个并发事件实际上也是同时发生的，例如在多个处理器上运行的多个任务。<br>【未完待续】</p>
+<a id="more"></a>
+<h1 id="内核层面的并发"><a href="#内核层面的并发" class="headerlink" title="内核层面的并发"></a>内核层面的并发</h1><h2 id="流水线"><a href="#流水线" class="headerlink" title="流水线"></a>流水线</h2><p>CPU流水线中通过暂停(stalling)和转发(forward)/旁路(bypassing)的机制维护了指令级别的并发。在这里不详细论述。</p>
+<h2 id="中断"><a href="#中断" class="headerlink" title="中断"></a>中断</h2><p>在现在的多核CPU（特别是SMP架构）背景下，中断的机制和单核有所区别。在x86中使用的是高级可编程中断控制器(APIC)，APIC由本地APIC和IO APIC组成，其中本地APIC与每个处理器核心对应，IO APIC负责采集和转发来自IO设备的中断信号。<br>根据Intel的规定，广义上的中断可分为<a href="https://www.ibm.com/developerworks/cn/linux/l-cn-linuxkernelint/index.html" target="_blank" rel="external">同步中断和异步中断</a>。同步中断又称异常，实际上是由CPU产生的，因此显然不能被屏蔽，异常分为故障(fault)、陷阱(trap)和终止(abort)，异常对应到中断号的0-15。异步中断又称中断，分为外部非屏蔽中断(NMI)和外部可屏蔽中断(INTR)，分别对应中断号的16-31和32-47。中断处理的原则是快，否则很容易被覆盖。在Intel中将非屏蔽中断也归入异常，所以异常一般为来自外设或CPU中的非法或故障状态。除了一些硬件故障，来自外部IO设备的中断常是可以等待的，所以属于可屏蔽中断，当IF标志为1时，CPU可以不响应可屏蔽中断，而是将它缓存起来，在开中断后会传给CPU。当CPU在响应一个异常时，所有的可屏蔽中断都将被屏蔽，而如果此时再出现一个异常，即产生了double fault故障，一般来说系统就会宕机。</p>
+<h3 id="软中断和硬中断"><a href="#软中断和硬中断" class="headerlink" title="软中断和硬中断"></a>软中断和硬中断</h3><p>在操作系统如Linux中，中断还可以被分为软中断（内部中断）和硬中断，硬中断是来自硬件的中断，它可以是可屏蔽的，也可以是不可屏蔽的，软中断一般是由<code>int</code>指令产生的，由操作系统提供，在Linux中软中断对应于中断号48-255。软中断是不可屏蔽的（不然干嘛调用<code>int</code>呢），但在操作系统中软中断也可能是由一个硬中断产生的，例如一个来自打印机的硬中断可能产生一个软中断给内核中的相关处理程序，这就是所谓的中断推后处理机制。<br>Linux中硬中断是可嵌套的，也就是说它可以被<strong>非同种中断</strong>打断，禁止同种类中断打断主要是为了防止重入现象的发生。Linux通过一些<a href="http://blog.csdn.net/yusiguyuan/article/details/23701519" target="_blank" rel="external">巧妙的办法</a>来解决这个问题。<br>如果不希望中断的嵌套的发生，可以进行关中断操作，因为它屏蔽的可屏蔽硬件中断具有抢占性。在关中断时要注意关中断会导致异步IO、调度等一系列依赖中断的功能失效，所以屏蔽中断后一定要尽快执行完临界区内代码。<br>在Linux内核中是允许在硬中断中出现中断嵌套的。这是指在中断处理函数<code>handle_IRQ_event</code>中开启了中断，但是在调用这个函数前的调用链的前面，都是关中断的，可参考<a href="http://abcdxyzk.github.io/blog/2015/05/07/kernel-irq-irq/" target="_blank" rel="external">这篇文章</a>。<br>Linux中，软中断是不能嵌套的，但可以被硬中断打断，所以可以认为硬中断具有更高的“优先级”，但Linux中并没有中断优先级的概念（不过也有个中断线程化的东西）。软中断可以在SMP的不同CPU上并行执行，Linux上每一个CPU都拥有一个中断栈。<br>Linux中使用一个<code>softirq_action</code>结构维护软中断<br><figure class="highlight rust"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div></pre></td><td class="code"><pre><div class="line"><span class="class"><span class="keyword">struct</span> <span class="title">softirq_action</span></span> &#123;  </div><div class="line">    void (*action) (<span class="class"><span class="keyword">struct</span> <span class="title">softirq_action</span></span> *); <span class="comment">/* 软中断的处理函数 */</span>  </div><div class="line">&#125;;</div></pre></td></tr></table></figure></p>
+<p>可以看出，软中断实际上很像一个回调函数。那么软中断和回调函数之间有什么区别呢：</p>
+<ol>
+<li>中断能够实现不同优先级代码的跳转</li>
+<li>中断的重入性和回调函数不同</li>
+</ol>
+<h3 id="中断下半部和软中断"><a href="#中断下半部和软中断" class="headerlink" title="中断下半部和软中断"></a>中断下半部和软中断</h3><p>Linux的外部中断处理过程可以参考<a href="http://home.ustc.edu.cn/~boj/courses/linux_kernel/2_int.html" target="_blank" rel="external">文章</a>。<br>中断延时处理和中断下半部分别是来自Windows和Linux的中断推后处理机制。<br>Linux中完整的中断处理包含上半部和下半部，其中上半部是真正的中断处理程序，它短小精悍，运行时需要关中断。<br>Linux中的中断下半部的实现有三种机制：Orignial Bottom Half机制、Task Queue机制、软中断Softirq机制、tasklet和工作队列，其中前两种已被替代。注意到很多博客提到众多下半部不属于中断上下文，但又有说<a href="http://unicornx.github.io/2016/02/11/20160211-lk-drv-softirq/" target="_blank" rel="external">软中断处理函数属于中断上下文</a>，从而不允许休眠。但注意工作队列由内核线程eventX执行，允许被调度甚至睡眠</p>
+<h2 id="调度"><a href="#调度" class="headerlink" title="调度"></a>调度</h2><h3 id="任务"><a href="#任务" class="headerlink" title="任务"></a>任务</h3><h3 id="抢占式调度"><a href="#抢占式调度" class="headerlink" title="抢占式调度"></a>抢占式调度</h3><p>被动式的调度指的是使用一个<strong>调度器</strong>决定哪一个任务会在下一刻运行，而不是由进程主动放弃处理器。调度器暂时停止一个任务并让另一个任务开始执行的行为就是抢占式(preempt)调度。抢占式调度分为<a href="http://blog.csdn.net/gatieme/article/details/51872618" target="_blank" rel="external">用户抢占和内核抢占</a>两种。<br>以Linux为例，调度器工作在内核态，所以用户抢占并不是在用户态下，而是发生在进程即将从内核态返回用户态时，这对应两种情况，从系统调用返回和从中断处理程序返回。<br>如果不开启内核抢占，那么进程在内核态的运行会直至结束（主动放弃/时间片耗尽/阻塞），这样的假设方便了内核的编写，特别是在单处理器(UP)下。考虑到在内核态中不存在进程上下文的切换，内核并不需要考虑对临界资源的竞争访问问题，而用户程序也可以假设在一次系统调用过程中不需要保护内核临界资源。但需要注意的是中断仍然存在，所以在进入临界区前还需要关中断。<br>通过内核抢占，系统允许高优先级的进程抢占低优先级的进程的<strong>内核态</strong>，这将能提高系统的实时性能。内核抢占是可以被关闭的，即所谓的关抢占的几种情况：</p>
+<ol>
+<li>内核正在处理中断<br> 这时候也就是所谓的中断上半部，中断在操作系统中拥有最高的优先级</li>
+<li>中断的bottom half<br> 通常有上文所述的三种方式，当内核执行软中断和tasklet是禁止内核抢占（注意此时可以被硬中断打断）</li>
+<li>当进程持有自旋锁读写锁<br> 这实际上是为了保护临界资源，在有关自旋锁的讨论中会详细说明</li>
+<li>当内核调度器scheduler正在运行时</li>
+<li>内核操作Per-CPU data structures<br> 在SMP架构中，不同的CPU仍然会维护一些私有数据，此时抢占可能造成一个进程被调度到另一个CPU上去，此时Per-CPU变量就会发生改变</li>
+<li>关中断<br> 这是一种特殊情况，关中断后抢占机制自然无法实现了</li>
+</ol>
+<p>Linux通过内核抢占锁<code>preempt_count</code>来跟踪一个进程的可抢占性，当内核代码具有抢占性时，则调用<code>preempt_schedule_irq</code>进行内核抢占。<br>因此可以总结到内核抢占可能发生在中断处理程序返回到内核空间前、内核代码具有抢占性、内核代码显式调用调度器schedule、内核中的任务被阻塞。</p>
+<h2 id="可重入函数和不可重入函数"><a href="#可重入函数和不可重入函数" class="headerlink" title="可重入函数和不可重入函数"></a>可重入函数和不可重入函数</h2><p>在很多地方，我们需要可重入的函数。</p>
+<h1 id="系统提供的并发设施"><a href="#系统提供的并发设施" class="headerlink" title="系统提供的并发设施"></a>系统提供的并发设施</h1><h2 id="多进程"><a href="#多进程" class="headerlink" title="多进程"></a>多进程</h2><h2 id="多线程"><a href="#多线程" class="headerlink" title="多线程"></a>多线程</h2><h2 id="协程"><a href="#协程" class="headerlink" title="协程"></a>协程</h2><h1 id="并发编程中Race-condition和其应对措施"><a href="#并发编程中Race-condition和其应对措施" class="headerlink" title="并发编程中Race condition和其应对措施"></a>并发编程中Race condition和其应对措施</h1><p>线程间实现互斥与同步的任务常具有下面两种形式：</p>
+<ol>
+<li>多个线程同时访问一个共享资源，需要维护该共享资源的完整性。这就是Race condition问题，将在本节讨论。</li>
+<li>一个线程向另一个线程通告自己的结果/等待另一个线程的结果，这将在下节讨论。</li>
+</ol>
+<p>总得来说，实现同步时进程可以处于用户态（忙等）或者内核态（睡眠），这分别对应了下面的一些不同工具，Linux、Windows和C++11的标准库中都对这些工具提供了不同程度的支持，具体可参考<a href="https://www.ibm.com/developerworks/cn/linux/l-cn-mthreadps/index.html" target="_blank" rel="external">文档</a>。</p>
+<h2 id="Race-condition"><a href="#Race-condition" class="headerlink" title="Race condition"></a>Race condition</h2><p>当两个线程竞争同一资源时（但竞态条件也会出现在逻辑电路等地方），如果对资源的访问顺序敏感，就称存在竞态条件(race condition)，导致竞态条件发生的代码区称作临界区。 </p>
+<h2 id="volatile"><a href="#volatile" class="headerlink" title="volatile"></a>volatile</h2><p>这里的<code>volatile</code>特指C++中的<code>volatile</code>，C++中的<code>volatile</code>并不以任何形式保证线程安全，用来告知编译器期修饰的变量是易变的，要避免对其进行优化。所谓的优化常常是将变量缓存到寄存器中而不是每次都从内存读取。<br><code>volatile</code>关键字有时是有用的，例如可以在自旋锁中防止多次循环中始终读取寄存器中的值。但滥用<code>volatile</code>不仅不会提高程序的安全性，而且会导致程序变慢。对于以为可以加“volatile”就可以解决的问题，一般可以使用<code>std::atomic</code>来避免使用内核锁的开销。</p>
+<h2 id="fence"><a href="#fence" class="headerlink" title="fence"></a>fence</h2><p>thread fence，signal fence</p>
+<h2 id="内核锁"><a href="#内核锁" class="headerlink" title="内核锁"></a>内核锁</h2><p>内核锁一般基于内核对象互斥量/信号量，它们通常是阻塞锁，会导致线程进入睡眠。</p>
+<h3 id="互斥量与信号量"><a href="#互斥量与信号量" class="headerlink" title="互斥量与信号量"></a>互斥量与信号量</h3><h3 id="lock-guard和unique-guard"><a href="#lock-guard和unique-guard" class="headerlink" title="lock_guard和unique_guard"></a>lock_guard和unique_guard</h3><p><code>lock_guard</code>和<code>unique_guard</code>利用了RAII来自动管理加锁解锁操作，它们能够应用到包括互斥量的所有Lockable的对象上。<br><code>unique_lock</code>相比于<code>lock_guard</code>更灵活，它能够在等待过程中加/解锁，因此在使用条件变量时需要使用<code>unique_lock</code>。</p>
+<h2 id="自旋锁"><a href="#自旋锁" class="headerlink" title="自旋锁"></a>自旋锁</h2><p>自旋锁是一种忙等锁(busy waiting)，它适用于短时间锁定某个资源，这样可以避免内核锁所需要的线程睡眠（两次线程上下文切换）等一系列的开销，但持有过长的自旋锁会导致浪费大量CPU资源。特别是在单核CPU上，自旋锁的使用需要审慎考虑，因为在单核CPU上同一时间只能运行一个线程，这时候如果等待锁的线程先运行，那么它势必进入空等直到时间片用完，因为获得锁的线程势必不能运行以释放锁。因此在单核CPU上使用内核锁进入睡眠是一个好的选择。自旋锁常被用在对称多处理器(SMP)系统中，在多CPU的情况下保护临界区。</p>
+<h3 id="自旋锁与中断处理"><a href="#自旋锁与中断处理" class="headerlink" title="自旋锁与中断处理"></a>自旋锁与中断处理</h3><p>处理中断时不能使用互斥量、信号量等让线程进入睡眠的锁，因此自旋锁常用于内核中有关中断处理的部分。内核锁必须在进程上下文中才能使用，这里的关闭中断的目的是为了关闭调度，因为关闭了时钟中断（时钟中断是可以被关闭的），调度器就无法运转了。这样就产生了睡死的现象。</p>
+<h3 id="持有自旋锁时不能进入睡眠"><a href="#持有自旋锁时不能进入睡眠" class="headerlink" title="持有自旋锁时不能进入睡眠"></a>持有自旋锁时不能进入睡眠</h3><p>自旋锁适用于不能睡眠的场景，但双向地来说，持有自旋锁时也不能进入睡眠，否则会引起死锁。<br>为了理解原因，首先要了解为什么自旋锁常伴随关中断和关抢占。Linux中提供了各个品种的自旋锁操作函数。其中<code>spin_lock</code>系列的关闭了抢占而不关中断，而<code>spin_lock_irqsave</code>、<code>spin_lock_irq</code>、<code>spin_lock_bh</code>会一道把中断也关了。<br><a href="http://blog.csdn.net/liduxun/article/details/47833143" target="_blank" rel="external">关抢占的原因是</a>如果一个低优先级的线程A获得自旋锁而紧接着被一个高优先级的进程B抢占，那么会造成这两个线程死锁，直到时间片用尽，也就是所谓的优先级反转（优先级倒置）现象，会严重影响性能。<br>关中断的原因是如果一个进程A获得自旋锁然后被一个中断打断，如果这个中断处理器也试图获得同一个自旋锁，那么就会造成在中断内部的死锁（自旋锁不能嵌套上锁，否则会造成自死锁现象），并且中断处理无法被抢占（但可以被其他中断打断）。可以参考<a href="http://blog.guorongfei.com/2014/09/06/linux-interrupt-preemptive-lock/" target="_blank" rel="external">文章</a>和<a href="https://www.zhihu.com/question/28821201" target="_blank" rel="external">知乎</a>。<br>既然使用自旋锁应当关闭中断或者调度，那么原因就很明显了，如果进程A获得了自旋锁并且阻塞在内核态，此时内核调度了进程B（阻塞可导致调度），而B也试图获得自旋锁，那么B将永远自旋，A将永远睡眠，这类似于开中断时在中断内的死锁情况，不过在这种情况下仍有可能B时间片用完从而再次重新调度。此外<a href="http://blog.csdn.net/samantha_sun/article/details/6365770" target="_blank" rel="external">另一种解释</a>认为对于不关中断的自旋锁在睡眠后可能会被重新调度，从而造成自死锁的现象。</p>
+<h2 id="临界区"><a href="#临界区" class="headerlink" title="临界区"></a>临界区</h2><p>相对于互锁访问函数这种“有限的”原子操作，临界区允许对<strong>一段代码</strong>进行“原子操作”，临界区相对于互斥量比较轻便，这是由于互斥量能够跨进程，并且支持等待多个内核对象。同时线程在进入一个被占用的临界区时会首先尝试自旋锁，在自旋锁循环一定次数失败后再让线程进入睡眠。</p>
+<h3 id="读写锁"><a href="#读写锁" class="headerlink" title="读写锁"></a>读写锁</h3><p>相对于临界区，读写锁能提供更精细的控制</p>
+<h3 id="双重检查锁定模式"><a href="#双重检查锁定模式" class="headerlink" title="双重检查锁定模式"></a>双重检查锁定模式</h3><p>双重检查锁定模式(Double-checked locking)指的是在加锁前先进行一次验证是否可以加锁。</p>
+<h2 id="锁无关"><a href="#锁无关" class="headerlink" title="锁无关"></a>锁无关</h2><p>加锁操作通常存在着<a href="http://blog.csdn.net/liuxuejiang158blog/article/details/17559901" target="_blank" rel="external">一些问题</a>，锁无关的性能通常要比使用内核锁要好。<br>锁无关(Lock-Free)是一种比无干扰(Obstruction-Free)高层次的并发模型，它是一个容易混淆的概念。锁无关并不是不用锁(Lockless)，而是确保各个线程在访问共享资源时之间不会互相阻塞，从而使得整个程序整体上看是非阻塞的。相对应地，如果使用内核锁，如果一个获得内核锁的线程被挂起或者挂掉，这容易导致其他拥有锁的线程陷入永久等待。但即使借助于原子操作，也会产生死锁、竞态的问题，例如自旋锁的死锁问题和使用CAS时可能出现的<a href="http://www.isnowfy.com/understand-to-lock-free/" target="_blank" rel="external">ABA问题</a>。</p>
+<h3 id="原子操作"><a href="#原子操作" class="headerlink" title="原子操作"></a>原子操作</h3><p>原子操作是常见的实现锁无关编程的方式。原子操作保证了这个操作中不会发生线程切换，因此我们可以保证没有其他的线程会访问这个资源。原子操作一般有两种实现方式，第一个是使用锁或者CPU的特殊指令等机制来维持原子性，第二个是当出现并发写等破坏原子性的情况时<strong>让操作失败</strong>，因此对于第二种情况需要使用一个循环不断尝试。<br>在C++11前，在语言层面无法保证哪怕是一个对<code>int</code>赋值的操作是原子的。这一方面是由于C++无法保证通过一条指令从内存的存取（考虑一些违反strict aliasing的胡乱cast破坏了对齐），另一方面也是C++11前根本没有考虑对多线程提供语言级别的支持（这点Java就做得很好），所以对编译器而言可能不考虑多线程的情况，从而进程暴力优化，<a href="https://www.zhihu.com/question/27026846" target="_blank" rel="external">产生UB</a>。因此通常的方式是直接使用操作系统提供的API，一般来说如果能够有一个<strong>原子的CAS</strong>，那么就能够借助它实现其他的原子操作。</p>
+<h3 id="互锁访问函数和CAS操作"><a href="#互锁访问函数和CAS操作" class="headerlink" title="互锁访问函数和CAS操作"></a>互锁访问函数和CAS操作</h3><p>操作系统提供的原子API常借助于某些CPU（比如Intel处理器）提供的指令，能够对<strong>某些类型</strong>实现<strong>某些原子操作</strong>。注意到对SMP架构而言，会出现多个核心并发写的情况，这个涉及到后面的内存模型，并且在这里我们可以暂时忽略这个问题。<br>Windows API提供了一系列Interlocked开头的互锁访问函数，这些函数在处理器层面被保证独占访问。其中一个很关键的便是<code>InterlockedCompareExchange(PLONG dest, LONG value, LONG old)</code>函数，这个函数提供了对<code>LONG</code>类型的原子的CAS操作。<br>虽然通过内核锁能够方便地实现原子操作，但原子操作通常会借助于CAS操作。CAS操作将<code>*dest</code>和<code>old</code>进行比较，如果相等就将<code>*dest</code>设为<code>value</code>。<br>借助于原子的CAS函数<code>InterlockedCompareExchange</code>可以实现其他的原子操作，例如下面的<code>std::atomic</code>。现在考虑用这个函数实现另外一个<code>InterlockedExchange</code>函数，这个函数可以用来对<code>LONG</code>进行原子的赋值<br><figure class="highlight gradle"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">LONG</span> InterlockedExchange(<span class="keyword">LONG</span> <span class="keyword">volatile</span> * target, <span class="keyword">LONG</span> value)&#123;</div><div class="line">  <span class="keyword">LONG</span> old;</div><div class="line">  <span class="keyword">do</span>&#123;</div><div class="line">    old = *target;</div><div class="line">  &#125;<span class="keyword">while</span>(! InterlockedCompareExchange(target, value, old));</div><div class="line">  <span class="keyword">return</span> old;</div><div class="line">&#125;</div></pre></td></tr></table></figure></p>
+<p>这里的循环保证了在<code>InterlockedCompareExchange</code>失败之后再来一遍能够再来一遍直到成功。可以看到CAS在这里对竞争访问实际上是“消极防御”的态度，也就是所谓的<strong>乐观锁(Optimistic Locking)</strong>，乐观锁是一种非独占锁，它并不是向内核锁一样直接让竞争者们睡眠，而是让他们失败。相对应的，之前的内核锁和自旋锁等机制属于悲观锁、独占锁。相比乐观锁，悲观锁有以下的弱点</p>
+<ol>
+<li>上下文切换造成的性能开销</li>
+<li>可能造成的死锁问题</li>
+<li>优先级倒置<br>常见的用CAS实现的Lockfree算法例如一个唯一读唯一写的环形缓冲队列。</li>
+</ol>
+<h3 id="std-atomic-flag"><a href="#std-atomic-flag" class="headerlink" title="std::atomic_flag"></a>std::atomic_flag</h3><p><code>std::atomic_flag</code>基于TAS(test-and-set)操作维护了一个布尔量flag，提供了<code>test_and_set</code>和<code>clear</code>两个方法，可以保证对flag的写不会冲突，读不会脏读。<code>test_and_set</code>尝试将flag从false设为true，如果发现flag已被设置，否则原子地设置flag为true，该函数返回的是flag先前的值。由于<code>std::atomic_flag</code>原子地维护了一个flag，它常被用来实现自旋锁。下面的代码来自MSVC的atomic库，它在<code>std::atomic</code>的<code>_Atomic_copy</code>方法中被调用。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">inline</span> <span class="keyword">void</span> _Lock_spin_lock(</div><div class="line">	<span class="keyword">volatile</span> _Atomic_flag_t *_Flag)</div><div class="line">	&#123;</div><div class="line">	<span class="keyword">while</span> (_ATOMIC_FLAG_TEST_AND_SET(_Flag, memory_order_acquire))</div><div class="line">		_YIELD_PROCESSOR;</div><div class="line">	&#125;</div><div class="line"></div><div class="line"><span class="keyword">inline</span> <span class="keyword">void</span> _Unlock_spin_lock(</div><div class="line">	<span class="keyword">volatile</span> _Atomic_flag_t *_Flag)</div><div class="line">	&#123;</div><div class="line">	_ATOMIC_FLAG_CLEAR(_Flag, memory_order_release);</div><div class="line">	&#125;</div></pre></td></tr></table></figure></p>
+<p>此外，容易发现TAS操作也可以通过CAS实现，其代码很简单<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">return</span> InterlockedCompareExchange(&amp;flag, <span class="literal">true</span>, <span class="literal">false</span>);</div></pre></td></tr></table></figure></p>
+<p>在MSVC的标准库实现中<code>test_and_set</code>借助了Interlock互锁访问函数，保证了访问的原子性<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div><div class="line">24</div><div class="line">25</div><div class="line">26</div><div class="line">27</div><div class="line">28</div><div class="line">29</div><div class="line">30</div><div class="line">31</div><div class="line">32</div><div class="line">33</div><div class="line">34</div><div class="line">35</div><div class="line">36</div><div class="line">37</div><div class="line">38</div><div class="line">39</div><div class="line">40</div><div class="line">41</div><div class="line">42</div><div class="line">43</div><div class="line">44</div><div class="line">45</div><div class="line">46</div><div class="line">47</div><div class="line">48</div><div class="line">49</div><div class="line">50</div><div class="line">51</div><div class="line">52</div><div class="line">53</div><div class="line">54</div></pre></td><td class="code"><pre><div class="line"> <span class="meta">#<span class="meta-keyword">if</span> defined(_M_ARM) || defined(_M_ARM64)</span></div><div class="line">  <span class="meta">#<span class="meta-keyword">define</span> _INTRIN_RELAXED(x)	_CONCAT(x, _nf)</span></div><div class="line">  <span class="meta">#<span class="meta-keyword">define</span> _INTRIN_ACQUIRE(x)	_CONCAT(x, _acq)</span></div><div class="line">  <span class="meta">#<span class="meta-keyword">define</span> _INTRIN_RELEASE(x)	_CONCAT(x, _rel)</span></div><div class="line">  <span class="meta">#<span class="meta-keyword">define</span> _INTRIN_SEQ_CST(x)	x</span></div><div class="line"> <span class="meta">#<span class="meta-keyword">else</span> <span class="comment">/* defined(_M_ARM) || defined(_M_ARM64) */</span></span></div><div class="line">  <span class="meta">#<span class="meta-keyword">define</span> _INTRIN_RELAXED(x)	x</span></div><div class="line">  <span class="meta">#<span class="meta-keyword">define</span> _INTRIN_ACQUIRE(x)	x</span></div><div class="line">  <span class="meta">#<span class="meta-keyword">define</span> _INTRIN_RELEASE(x)	x</span></div><div class="line">  <span class="meta">#<span class="meta-keyword">define</span> _INTRIN_SEQ_CST(x)	x</span></div><div class="line"> <span class="meta">#<span class="meta-keyword">endif</span> <span class="comment">/* defined(_M_ARM) || defined(_M_ARM64) */</span></span></div><div class="line"><span class="keyword">inline</span> <span class="keyword">int</span> _Atomic_flag_test_and_set(<span class="keyword">volatile</span> _Atomic_flag_t *_Flag,</div><div class="line">	memory_order _Order)</div><div class="line">	&#123;	<span class="comment">/* atomically test flag and set to true */</span></div><div class="line">	<span class="keyword">switch</span> (_Order)</div><div class="line">		&#123;</div><div class="line">		<span class="keyword">case</span> memory_order_relaxed:</div><div class="line">			<span class="keyword">return</span> (_INTRIN_RELAXED(_interlockedbittestandset)(_Flag, <span class="number">0</span>));</div><div class="line"></div><div class="line">		<span class="keyword">case</span> memory_order_consume:</div><div class="line">		<span class="keyword">case</span> memory_order_acquire:</div><div class="line">			<span class="keyword">return</span> (_INTRIN_ACQUIRE(_interlockedbittestandset)(_Flag, <span class="number">0</span>));</div><div class="line"></div><div class="line">		<span class="keyword">case</span> memory_order_release:</div><div class="line">			<span class="keyword">return</span> (_INTRIN_RELEASE(_interlockedbittestandset)(_Flag, <span class="number">0</span>));</div><div class="line"></div><div class="line">		<span class="keyword">case</span> memory_order_acq_rel:</div><div class="line">		<span class="keyword">case</span> memory_order_seq_cst:</div><div class="line">			<span class="keyword">return</span> (_INTRIN_SEQ_CST(_interlockedbittestandset)(_Flag, <span class="number">0</span>));</div><div class="line"></div><div class="line">		<span class="keyword">default</span>:</div><div class="line">			_INVALID_MEMORY_ORDER;</div><div class="line">			<span class="keyword">return</span> (<span class="number">0</span>);</div><div class="line">		&#125;</div><div class="line">	&#125;</div><div class="line"><span class="keyword">inline</span> <span class="keyword">void</span> _Atomic_flag_clear(<span class="keyword">volatile</span> _Atomic_flag_t *_Flag,</div><div class="line">	memory_order _Order)</div><div class="line">	&#123;	<span class="comment">/* atomically clear flag */</span></div><div class="line">	<span class="keyword">static_assert</span>(<span class="keyword">sizeof</span>(_Atomic_flag_t) == <span class="keyword">sizeof</span>(_Uint4_t),</div><div class="line">		<span class="string">"Unexpected _Atomic_flag_t size"</span>);</div><div class="line"></div><div class="line">	<span class="keyword">switch</span> (_Order)</div><div class="line">		&#123;</div><div class="line">		<span class="keyword">case</span> memory_order_relaxed:</div><div class="line">		<span class="keyword">case</span> memory_order_release:</div><div class="line">		<span class="keyword">case</span> memory_order_seq_cst:</div><div class="line">			_Atomic_store_4((<span class="keyword">volatile</span> _Uint4_t *)_Flag, <span class="number">0</span>, _Order);</div><div class="line">			<span class="keyword">break</span>;</div><div class="line"></div><div class="line">		<span class="keyword">default</span>:</div><div class="line">			_INVALID_MEMORY_ORDER;</div><div class="line">			<span class="keyword">break</span>;</div><div class="line">		&#125;</div><div class="line">	&#125;</div></pre></td></tr></table></figure></p>
+<h3 id="std-atomic"><a href="#std-atomic" class="headerlink" title="std::atomic"></a>std::atomic</h3><p><code>std::atomic&lt;typename T&gt;</code>定义了一系列具有<strong>原子行为</strong>的<strong>类型</strong>，当需要在C++中使用原子的操作时，除了使用刚才的<code>atomic_flag</code>手动维护，还可以直接使用<code>std::atomic</code>。<code>std::atomic</code>禁用了复制构造函数和复制赋值运算符（同时也不允许移动）。这是由于这两个操作发生在两个对象间，势必要破坏原子性，而一个<code>std::atomic</code>的所有操作都是原子的。<br>对于用户自定义类型(UDT)<code>typename T</code>，<code>std::atomic</code>的<strong>主模板</strong>要求<code>T</code>满足<a href="http://zh.cppreference.com/w/cpp/atomic/atomic" target="_blank" rel="external">standard layout、trivial default constructor和trivial destructor</a>，即编译器可以使用<code>memcpy</code>等进行bitwise的复制并使用<code>memcmp</code>进行bitwise的比较（从而允许了CAS操作）。C++ Concurrency in Action一书中指出，如果有自定义的复制构造函数，那么就势必要将锁定区域（下文中会交待其实<code>std::atomic</code>的主模板实现中可能会有自旋锁）内的数据交给这些用户代码，如果在用户代码中再使用了锁，就可能产生死锁的现象。容易发现<code>std::shared_ptr</code>肯定不能被放到一个原子类型里面，但是标准库通过重载<code>std::atomic_</code>系列函数为<code>std::shared_ptr</code>提供了原子操作的支持。主模板中提供了<code>compare_exchange_weak</code>、<code>compare_exchange_strong</code>、<code>load</code>、<code>store</code>等基本的CAS/存取操作。<br>一般标准库会对一些大小满足能够直接使用某些处理器的原子指令的类型进行特化，例如指针类型、integral类型和一些用户定义类型。对于指针类型，<code>std::atomic</code>会进行偏特化。原子的指针运算可以通过<code>fetch_</code>开头的函数和相应的<code>operator</code>运算符来实现。对integral类型<code>std::atomic</code>类模板也会进行特化，其实现类似指针类型，并且添加了对位运算的支持。对于“复杂”的整型计算如乘法，虽然atomic未提供，但可以通过<code>compare_exchange_weak</code>等函数间接实现。从C++20开始，<code>std::atomic</code>类模板提供对浮点类型的特化。注意在这之前，<code>compare_exchange_strong</code>等CAS方法因为<code>memcmp</code>的使用可能存在问题，原因显而易见，我们都不能使用<code>==</code>来判断浮点数是否相等。<br>在上文中提到，除了<code>std::atomic_flag</code>，<code>std::atomic&lt;typename T&gt;</code>类模板都是<strong>不保证不使用锁</strong>的（情况特定于处理器和标准库实现），用户可通过<code>bool is_lock_free()</code>函数判断是否Lockfree的。以MSVC的实现为例，在主模板的实现中，<code>load()</code>成员函数内部就使用了上文提到的用<code>std::atomic_flag</code>实现自旋锁。<br><figure class="highlight"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div></pre></td><td class="code"><pre><div class="line">inline void _Atomic_copy(</div><div class="line">	volatile _Atomic_flag_t *_Flag, size_t _Size,</div><div class="line">		volatile void *_Tgt, volatile const void *_Src,</div><div class="line">			memory_order _Order)</div><div class="line">	&#123;</div><div class="line">	_Lock_spin_lock(_Flag);</div><div class="line">	_CSTD memcpy((void *)_Tgt, (void *)_Src, _Size);</div><div class="line">	_Unlock_spin_lock(_Flag);</div><div class="line">	&#125;</div></pre></td></tr></table></figure></p>
+<p>而对于一个<code>uint2_t</code>，标准库则有以下的实现<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div><div class="line">24</div><div class="line">25</div><div class="line">26</div><div class="line">27</div><div class="line">28</div><div class="line">29</div><div class="line">30</div><div class="line">31</div><div class="line">32</div><div class="line">33</div><div class="line">34</div><div class="line">35</div><div class="line">36</div><div class="line">37</div><div class="line">38</div><div class="line">39</div><div class="line">40</div><div class="line">41</div><div class="line">42</div><div class="line">43</div><div class="line">44</div></pre></td><td class="code"><pre><div class="line">  <span class="meta">#<span class="meta-keyword">define</span> _Compiler_barrier()	_ReadWriteBarrier()</span></div><div class="line"></div><div class="line">  <span class="meta">#<span class="meta-keyword">if</span> defined(_M_ARM)</span></div><div class="line">  <span class="meta">#<span class="meta-keyword">define</span> _Memory_barrier()     __dmb(_ARM_BARRIER_ISH)</span></div><div class="line">  <span class="meta">#<span class="meta-keyword">endif</span> <span class="comment">/* defined(_M_ARM) */</span></span></div><div class="line"></div><div class="line">  <span class="meta">#<span class="meta-keyword">if</span> defined(_M_ARM64)</span></div><div class="line">  <span class="meta">#<span class="meta-keyword">define</span> _Memory_barrier()     __dmb(_ARM64_BARRIER_ISH)</span></div><div class="line">  <span class="meta">#<span class="meta-keyword">endif</span> <span class="comment">/* defined(_M_ARM64) *</span></span></div><div class="line">  </div><div class="line">	/* _Atomic_load_2 */</div><div class="line"><span class="keyword">inline</span> _Uint2_t _Load_seq_cst_2(<span class="keyword">volatile</span> _Uint2_t *_Tgt)</div><div class="line">	&#123;</div><div class="line">	_Uint2_t _Value;</div><div class="line"></div><div class="line"> <span class="meta">#<span class="meta-keyword">if</span> defined(_M_ARM) || defined(_M_ARM64)</span></div><div class="line">	_Value = __iso_volatile_load16((<span class="keyword">volatile</span> <span class="keyword">short</span> *)_Tgt);</div><div class="line">	_Memory_barrier();</div><div class="line"></div><div class="line"> <span class="meta">#<span class="meta-keyword">else</span></span></div><div class="line">	_Value = *_Tgt;</div><div class="line">	_Compiler_barrier();</div><div class="line"> <span class="meta">#<span class="meta-keyword">endif</span></span></div><div class="line"></div><div class="line">	<span class="keyword">return</span> (_Value);</div><div class="line">	&#125;</div><div class="line"></div><div class="line"><span class="keyword">inline</span> _Uint2_t _Load_relaxed_2(<span class="keyword">volatile</span> _Uint2_t *_Tgt)</div><div class="line">	&#123;</div><div class="line">	_Uint2_t _Value;</div><div class="line"></div><div class="line"> <span class="meta">#<span class="meta-keyword">if</span> defined(_M_ARM) || defined(_M_ARM64)</span></div><div class="line">	_Value = __iso_volatile_load16((<span class="keyword">volatile</span> <span class="keyword">short</span> *)_Tgt);</div><div class="line"></div><div class="line"> <span class="meta">#<span class="meta-keyword">else</span></span></div><div class="line">	_Value = *_Tgt;</div><div class="line"> <span class="meta">#<span class="meta-keyword">endif</span></span></div><div class="line">	<span class="keyword">return</span> (_Value);</div><div class="line">	&#125;</div><div class="line"></div><div class="line"><span class="keyword">inline</span> _Uint2_t _Load_acquire_2(<span class="keyword">volatile</span> _Uint2_t *_Tgt)</div><div class="line">	&#123;	</div><div class="line">	<span class="keyword">return</span> (_Load_seq_cst_2(_Tgt));</div><div class="line">	&#125;</div></pre></td></tr></table></figure></p>
+<p>可以发现对于integral来说原子操作直接借助了处理器提供的设施。</p>
+<h3 id="atomic-compare-exchange-weak和atomic-compare-exchange-strong"><a href="#atomic-compare-exchange-weak和atomic-compare-exchange-strong" class="headerlink" title="atomic::compare_exchange_weak和atomic::compare_exchange_strong"></a>atomic::compare_exchange_weak和atomic::compare_exchange_strong</h3><p>类似与Windows API的互锁访问函数，atomic库通过<code>bool atomic::compare_exchange_weak(old, value)</code>和<code>bool atomic::compare_exchange_strong(old, value)</code>提供了对CAS操作的支持。这两个函数监测该<code>std::atomic</code>中维护的<code>std::atomic_flag _My_flag</code>（在<code>_Atomic_impl</code>模板中定义）的值，如果等于<code>old</code>就改为<code>value</code>，函数返回一个表示修改是否成功的bool量。因此容易发现这两个函数不总是成功的，因为CPU可能仅对某些类型提供了相应的CAS原子指令，对于其他的类型则必须通过使用自旋锁甚至内核锁来实现。<br><figure class="highlight sqf"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div></pre></td><td class="code"><pre><div class="line">inline int <span class="variable">_Atomic_compare_exchange_weak</span>(</div><div class="line">	volatile <span class="variable">_Atomic_flag_t</span> *<span class="variable">_Flag</span>, size_t <span class="variable">_Size</span>,</div><div class="line">		volatile void *<span class="variable">_Tgt</span>, volatile void *<span class="variable">_Exp</span>, const volatile void *<span class="variable">_Src</span>,</div><div class="line">			memory_order <span class="variable">_Order1</span>, memory_order <span class="variable">_Order2</span>)</div><div class="line">	&#123;	<span class="comment">/* atomically compare and exchange with memory ordering */</span></div><div class="line">	int <span class="variable">_Result</span>;</div><div class="line"></div><div class="line">	<span class="variable">_Lock_spin_lock</span>(<span class="variable">_Flag</span>);</div><div class="line">	<span class="variable">_Result</span> = <span class="variable">_CSTD</span> memcmp((const void *)<span class="variable">_Tgt</span>, (const void *)<span class="variable">_Exp</span>, <span class="variable">_Size</span>) == <span class="number">0</span>;</div><div class="line">	<span class="keyword">if</span> (<span class="variable">_Result</span> != <span class="number">0</span>)</div><div class="line">		<span class="variable">_CSTD</span> memcpy((void *)<span class="variable">_Tgt</span>, (void *)<span class="variable">_Src</span>, <span class="variable">_Size</span>);</div><div class="line">	<span class="keyword">else</span></div><div class="line">		<span class="variable">_CSTD</span> memcpy((void *)<span class="variable">_Exp</span>, (void *)<span class="variable">_Tgt</span>, <span class="variable">_Size</span>);</div><div class="line">	<span class="variable">_Unlock_spin_lock</span>(<span class="variable">_Flag</span>);</div><div class="line">	return (<span class="variable">_Result</span>);</div><div class="line">	&#125;</div></pre></td></tr></table></figure></p>
+<p>这两个函数有一些细致的区别，<code>compare_exchange_weak</code>在可能会False Negative，这是由于weak允许spurious failure。在某些平台（不错ARM、PowerPC又被点名了）上的CAS是通过LL/SC实现的，而不像x86上那样只通过一条指令，所以可能存在问题。因此使用<code>compare_exchange_weak</code>的时候需要一个循环。注意到这个<code>!expected</code>不是必要的。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">bool</span> expected=<span class="literal">false</span>;</div><div class="line"><span class="keyword">extern</span> atomic&lt;<span class="keyword">bool</span>&gt; b; <span class="comment">// set somewhere else</span></div><div class="line"><span class="keyword">while</span>(!b.compare_exchange_weak(expected,<span class="literal">true</span>) &amp;&amp; !expected);</div></pre></td></tr></table></figure></p>
+<p>在<a href="https://chaomai.github.io/2015/06/09/2015-2015-06-09-translation-understand-std-atomic-compare-exchange-weak-in-cpp11/" target="_blank" rel="external">Stackoverflow上相关问题的整理</a>中提到了这两者之间的性能比较，由于weak会忽视检查，所以一般weak比strong快。但是如果使用strong能避免weak+loop，那么选择strong是适合的。注意到即使使用strong，loop也不是就一定可以避免的，因为原子操作本来就存在使用乐观锁的情况。</p>
+<h3 id="ABA问题"><a href="#ABA问题" class="headerlink" title="ABA问题"></a>ABA问题</h3><p>伴随着CAS的是可能存在的ABA问题。ABA问题的根源是从内存中取出值和CAS这两个操作不是原子的，因此可能在这两个过程中发生切换。</p>
+<h3 id="原子操作的线程间顺序"><a href="#原子操作的线程间顺序" class="headerlink" title="原子操作的线程间顺序"></a>原子操作的线程间顺序</h3><p>我们知道从C++语言到运行程序得到结果之间需要经历编译器优化和处理器优化两道坎，处理器优化包括高速缓存和指令乱序，编译器优化可能进行重排。编译器和处理器达成的协议是不能改变单线程程序的行为。以编译器优化为例，下面展示的代码在O0下，g++7按照1-2的原始顺序来编译，但开启O1后，g++7就会将2提到1前面来（并且省略了0和1的加法）。对单线程来说，这样的优化并没有任何问题。<br><figure class="highlight mel"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">int</span> main()&#123;</div><div class="line">    <span class="keyword">int</span> a = <span class="number">1</span>, b = <span class="number">1</span>; <span class="comment">// 0</span></div><div class="line">    <span class="comment">// a</span></div><div class="line">    a = b + <span class="number">42</span>; <span class="comment">// 1</span></div><div class="line">    b = <span class="number">123</span>; <span class="comment">// 2</span></div><div class="line">    printf(<span class="string">"%d %d"</span>, a, b);</div><div class="line">    <span class="keyword">return</span> <span class="number">0</span>;</div><div class="line">&#125;</div><div class="line"><span class="comment">// O0</span></div><div class="line">	movl	$1, <span class="number">-8</span>(%rbp)</div><div class="line">	movl	$1, <span class="number">-4</span>(%rbp)</div><div class="line">	movl	<span class="number">-4</span>(%rbp), %eax</div><div class="line">	addl	$42, %eax</div><div class="line">	movl	%eax, <span class="number">-8</span>(%rbp)</div><div class="line">	movl	$123, <span class="number">-4</span>(%rbp)</div><div class="line">	movl	<span class="number">-4</span>(%rbp), %edx</div><div class="line">	movl	<span class="number">-8</span>(%rbp), %eax</div><div class="line"><span class="comment">// O1</span></div><div class="line">	movl	$123, %ecx</div><div class="line">	movl	$43, %edx</div></pre></td></tr></table></figure></p>
+<p>但对于多线程来说，O1结果在a处读取的数据就和期望不同了，原因包括对性能方面的考虑，对<strong>多线程</strong>的程序而言并不存在和单线程一样的硬性要求。虽然大部分时候我们不需要操心这个问题，这是因为一方面在使用mutex等内核锁时，内核帮我们做了相关工作，另一方面部分处理器（如x86）也提供了（<a href="https://www.zhihu.com/question/24301047" target="_blank" rel="external">近似</a>，实际上是<a href="https://ljalphabeta.gitbooks.io/a-primer-on-memory-consistency-and-cache-coherenc/content/%E7%AC%AC%E5%9B%9B%E7%AB%A0-total-store-order%E5%92%8Cx.html" target="_blank" rel="external">TSO</a>）acquire/release的保障。在使用原子操作等锁无关技术时，通常不能假设所有环境下程序最后行为一如代码所“暗示”一样。事实上锁无关的条件下，共享资源不受任何互斥保护，从而在<strong>线程和线程间</strong>会产生内存乱序，这是一个客观存在的问题，虽然通过acquire/release模型x86等处理器已经在处理器层面限制了这个问题。</p>
+<h3 id="可见性和有序性"><a href="#可见性和有序性" class="headerlink" title="可见性和有序性"></a>可见性和有序性</h3><p>可见性指一个线程对变量的写操作对其它线程后续的读操作可见，可见，见的是结果。可见性要求CPU在对缓存行写操作后能够保证至少在某个时间点前必须写回内存，从而保证其他线程能读到<strong>最新的值</strong>。例如x86往往都有高速缓存行(Cache line)，CPU有时并不从内存中加载值，而是直接使用Cache line中的值以期提高速度。在策略使用合适时，这种机制能提供巨大性能提升，最近的spectre和meltdown就与此相关。但是我们不要担心诸如此类的“一个核心写另一个核心脏读”的情况，x86会在一个CPU修改缓存行后自动作废其他CPU的缓存行。<br>有序性指的是数据不相关变量在并发的情况下，实际执行的结果和单线程的执行结果和单线程的执行结果是一样的，不会因为重排/乱序的问题导致结果不可预知。</p>
+<h3 id="先行发生和同步发生"><a href="#先行发生和同步发生" class="headerlink" title="先行发生和同步发生"></a>先行发生和同步发生</h3><h3 id="内存模型"><a href="#内存模型" class="headerlink" title="内存模型"></a>内存模型</h3><p>对于编译器的行为而言，在<code>std::atomic</code>中提供了六种内存模型(memory order)来描述不同线程之间数据读写的顺序。<br>顺序一致性(sequential consistency, SC)是最强的模型，要求程序中的行为从任意角度来看，序列顺序都是一致的；这是在说这段多线程程序的行为和一段单线程程序的行为是一致的，类似于不是并行的并发。这个模型的实际效果就是我们可以认为我们每次读到的都是最新值。在C++ Concurrency in Action中举了一个例子，使用四个线程运行下面四个函数，断言无论如何<code>z</code>永远不可能为0。这说明了在<code>read_x_then_y</code>和<code>read_y_then_x</code>两个函数至少有一个能看到<code>x</code>和<code>y</code>同时被设为<code>true</code>。容易看出将1/2/3/4任意排序，那么上面的断言是显然的（注意到即使<code>read_x_then_y</code>在<code>write_x</code>前被调用也有while循环兜底）。但是如果<code>(1 -&gt; 3)</code>和<code>(2 -&gt; 4)</code>这两个步骤并行发生的话，上面断言就不成立了。<br><figure class="highlight cpp"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div></pre></td><td class="code"><pre><div class="line"><span class="built_in">std</span>::atomic&lt;<span class="keyword">bool</span>&gt; x = <span class="literal">false</span>, y = <span class="literal">false</span>;</div><div class="line"><span class="built_in">std</span>::atomic&lt;<span class="keyword">int</span>&gt; z = <span class="number">0</span>;</div><div class="line"><span class="function"><span class="keyword">void</span> <span class="title">write_x</span><span class="params">()</span></span></div><div class="line">&#123;</div><div class="line">  x.store(<span class="literal">true</span>,<span class="built_in">std</span>::memory_order_seq_cst);  <span class="comment">// 1</span></div><div class="line">&#125;</div><div class="line"><span class="function"><span class="keyword">void</span> <span class="title">write_y</span><span class="params">()</span></span></div><div class="line">&#123;</div><div class="line">  y.store(<span class="literal">true</span>,<span class="built_in">std</span>::memory_order_seq_cst);  <span class="comment">// 2</span></div><div class="line">&#125;</div><div class="line"><span class="function"><span class="keyword">void</span> <span class="title">read_x_then_y</span><span class="params">()</span></span></div><div class="line">&#123;</div><div class="line">  <span class="keyword">while</span>(!x.load(<span class="built_in">std</span>::memory_order_seq_cst)); <span class="comment">// a</span></div><div class="line">  <span class="keyword">if</span>(y.load(<span class="built_in">std</span>::memory_order_seq_cst))  <span class="comment">// 3</span></div><div class="line">    ++z;</div><div class="line">&#125;</div><div class="line"><span class="function"><span class="keyword">void</span> <span class="title">read_y_then_x</span><span class="params">()</span></span></div><div class="line">&#123;</div><div class="line">  <span class="keyword">while</span>(!y.load(<span class="built_in">std</span>::memory_order_seq_cst)); <span class="comment">// b</span></div><div class="line">  <span class="keyword">if</span>(x.load(<span class="built_in">std</span>::memory_order_seq_cst))  <span class="comment">// 4</span></div><div class="line">    ++z;</div><div class="line">&#125;</div></pre></td></tr></table></figure></p>
+<p>自由模型(Relaxed ordering)是最弱的模型，它要求对线程间的执行顺序不做任何假设。下面展示的一个相应的例子中<code>z</code>就可能为0了，即使处理器按照我们期望的顺序执行，即1先于2、3先于4，且3读到<code>true</code>，这可能是由于CPU的Cache line导致的。注意到这个assersion并不是由于指令重排引起的，比如代码被重排以2-3-4-1的顺序被执行，此时<code>x</code>的读操作4在写操作1前进行了，所以读到的是个旧值，但x86处理器一般不会进行这种乱序，而编译器一般不会进行这种重排。但在x86下的MSVC2015上测试发现<code>z</code>始终不为0，这是为什么呢？我在StackOverflow上<a href="https://stackoverflow.com/questions/48139399/memory-order-relaxed-not-work-as-expected-in-code-from-c-concurrency-in-action?noredirect=1#comment83256917_48139399" target="_blank" rel="external">提了个问题</a>，大致解答是x86 CPU提供了acquire/release语义，而这个保证了当3是true时，在2前的对3后的可见。注意到这个并不违反x86对Store-Load可能的重排，它实际上利用了Store-Store不会重排的特性。这里使用Relax Ordering的副作用实际上是禁止编译器的优化。回顾之前的最严格的顺序一致模型，它要求对于每个共享变量，Load-Load、Load-Store、Store-Load、Store-Store都不重排。<br><figure class="highlight cpp"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div></pre></td><td class="code"><pre><div class="line"><span class="built_in">std</span>::atomic&lt;<span class="keyword">bool</span>&gt; x = <span class="literal">false</span>, y = <span class="literal">false</span>;</div><div class="line"><span class="built_in">std</span>::atomic&lt;<span class="keyword">int</span>&gt; z = <span class="number">0</span>;</div><div class="line"><span class="function"><span class="keyword">void</span> <span class="title">write_x_then_y</span><span class="params">()</span></span></div><div class="line">&#123;</div><div class="line">  x.store(<span class="literal">true</span>,<span class="built_in">std</span>::memory_order_relaxed);  <span class="comment">// 1</span></div><div class="line">  y.store(<span class="literal">true</span>,<span class="built_in">std</span>::memory_order_relaxed);  <span class="comment">// 2</span></div><div class="line">&#125;</div><div class="line"><span class="function"><span class="keyword">void</span> <span class="title">read_y_then_x</span><span class="params">()</span></span></div><div class="line">&#123;</div><div class="line">  <span class="keyword">while</span>(!y.load(<span class="built_in">std</span>::memory_order_relaxed));  <span class="comment">// 3</span></div><div class="line">  <span class="keyword">if</span>(x.load(<span class="built_in">std</span>::memory_order_relaxed))  <span class="comment">// 4</span></div><div class="line">    ++z;</div><div class="line">&#125;</div></pre></td></tr></table></figure></p>
+<p>acquire/release模型相对灵活一点，也是x86实现的语义。release可以理解为写操作，acquire可以理解为读操作，这个模型包括了C++原子库提供的剩下四个内存模型。</p>
+<h3 id="内存模型的实现"><a href="#内存模型的实现" class="headerlink" title="内存模型的实现"></a>内存模型的实现</h3><p>六种内存模型通过加入Compiler Barrier和Memory Barrier来实现。<br>Compiler Barrier类似下面的东西<br><figure class="highlight cpp"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div></pre></td><td class="code"><pre><div class="line"><span class="comment">// gcc</span></div><div class="line"><span class="function"><span class="keyword">asm</span> <span class="title">volatile</span><span class="params">(<span class="string">""</span> ::: <span class="string">"memory"</span>)</span></span>;</div><div class="line"><span class="comment">// msvc</span></div><div class="line">__MACHINE(<span class="keyword">void</span> _ReadWriteBarrier(<span class="keyword">void</span>))</div></pre></td></tr></table></figure></p>
+<h2 id="无等待"><a href="#无等待" class="headerlink" title="无等待"></a>无等待</h2><p>无等待(Wait-Free)是比锁无关更高层面的并发。无等待指的是程序中的每个线程都可以一直运行下去而不阻塞。</p>
+<h1 id="并发编程中数据共享措施"><a href="#并发编程中数据共享措施" class="headerlink" title="并发编程中数据共享措施"></a>并发编程中数据共享措施</h1><h2 id="condition-variable"><a href="#condition-variable" class="headerlink" title="condition variable"></a>condition variable</h2><p><code>lock_guard</code>和<code>unique_guard</code>能够保证线程之间的互斥访问，但是尚不能在进程间进行同步，例如进行信息传递。一个比较naive的方式是轮询(poll)<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">bool</span> flag;</div><div class="line"><span class="built_in">std</span>::mutex m;</div><div class="line"></div><div class="line"><span class="function"><span class="keyword">void</span> <span class="title">wait_for_flag</span><span class="params">()</span></span></div><div class="line">&#123;</div><div class="line">  <span class="built_in">std</span>::unique_lock&lt;<span class="built_in">std</span>::mutex&gt; lk(m);</div><div class="line">  <span class="keyword">while</span>(!flag)</div><div class="line">  &#123;</div><div class="line">    lk.unlock();  <span class="comment">// 1 解锁互斥量</span></div><div class="line">    <span class="built_in">std</span>::this_thread::sleep_for(<span class="built_in">std</span>::chrono::milliseconds(<span class="number">100</span>));  <span class="comment">// 2 休眠100ms</span></div><div class="line">    lk.lock();   <span class="comment">// 3 再锁互斥量</span></div><div class="line">  &#125;</div><div class="line">  flag = <span class="literal">false</span>;</div><div class="line">&#125;</div></pre></td></tr></table></figure></p>
+<p>注意这里这里仍然是需要锁的，否则可能两个互相竞争的线程同时获得flag。<br>另一种更好的方法是利用条件变量，条件变量(condition variable)是利用共享的变量进行线程之间同步的一种机制。相对于前面的轮询，condition variable使用<code>notify_one</code>和<code>notify_all</code>来通知正在等待的线程，这是一个“推”的机制。</p>
+<h3 id="事件"><a href="#事件" class="headerlink" title="事件"></a>事件</h3><p>Windows中通过事件的机制类似于条件变量的机制。</p>
+<h2 id="future"><a href="#future" class="headerlink" title="future"></a>future</h2><p>条件变量的一个重要的应用就是生产者/消费者模型，但对于一些平凡的情况，消费者只等待一次来自生产者的结果。此时较为方便的做法是使用<code>future</code>。</p>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/C/" rel="tag"># C++</a>
+          
+            <a href="/tags/并行计算/" rel="tag"># 并行计算</a>
+          
+            <a href="/tags/多线程/" rel="tag"># 多线程</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2017/12/05/libutp源码简析/" rel="next" title="libutp源码简析">
+                <i class="fa fa-chevron-left"></i> libutp源码简析
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">96</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">110</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#内核层面的并发"><span class="nav-number">1.</span> <span class="nav-text">内核层面的并发</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#流水线"><span class="nav-number">1.1.</span> <span class="nav-text">流水线</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#中断"><span class="nav-number">1.2.</span> <span class="nav-text">中断</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#软中断和硬中断"><span class="nav-number">1.2.1.</span> <span class="nav-text">软中断和硬中断</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#中断下半部和软中断"><span class="nav-number">1.2.2.</span> <span class="nav-text">中断下半部和软中断</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#调度"><span class="nav-number">1.3.</span> <span class="nav-text">调度</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#任务"><span class="nav-number">1.3.1.</span> <span class="nav-text">任务</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#抢占式调度"><span class="nav-number">1.3.2.</span> <span class="nav-text">抢占式调度</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#可重入函数和不可重入函数"><span class="nav-number">1.4.</span> <span class="nav-text">可重入函数和不可重入函数</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#系统提供的并发设施"><span class="nav-number">2.</span> <span class="nav-text">系统提供的并发设施</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#多进程"><span class="nav-number">2.1.</span> <span class="nav-text">多进程</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#多线程"><span class="nav-number">2.2.</span> <span class="nav-text">多线程</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#协程"><span class="nav-number">2.3.</span> <span class="nav-text">协程</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#并发编程中Race-condition和其应对措施"><span class="nav-number">3.</span> <span class="nav-text">并发编程中Race condition和其应对措施</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Race-condition"><span class="nav-number">3.1.</span> <span class="nav-text">Race condition</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#volatile"><span class="nav-number">3.2.</span> <span class="nav-text">volatile</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#fence"><span class="nav-number">3.3.</span> <span class="nav-text">fence</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#内核锁"><span class="nav-number">3.4.</span> <span class="nav-text">内核锁</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#互斥量与信号量"><span class="nav-number">3.4.1.</span> <span class="nav-text">互斥量与信号量</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#lock-guard和unique-guard"><span class="nav-number">3.4.2.</span> <span class="nav-text">lock_guard和unique_guard</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#自旋锁"><span class="nav-number">3.5.</span> <span class="nav-text">自旋锁</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#自旋锁与中断处理"><span class="nav-number">3.5.1.</span> <span class="nav-text">自旋锁与中断处理</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#持有自旋锁时不能进入睡眠"><span class="nav-number">3.5.2.</span> <span class="nav-text">持有自旋锁时不能进入睡眠</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#临界区"><span class="nav-number">3.6.</span> <span class="nav-text">临界区</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#读写锁"><span class="nav-number">3.6.1.</span> <span class="nav-text">读写锁</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#双重检查锁定模式"><span class="nav-number">3.6.2.</span> <span class="nav-text">双重检查锁定模式</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#锁无关"><span class="nav-number">3.7.</span> <span class="nav-text">锁无关</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#原子操作"><span class="nav-number">3.7.1.</span> <span class="nav-text">原子操作</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#互锁访问函数和CAS操作"><span class="nav-number">3.7.2.</span> <span class="nav-text">互锁访问函数和CAS操作</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#std-atomic-flag"><span class="nav-number">3.7.3.</span> <span class="nav-text">std::atomic_flag</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#std-atomic"><span class="nav-number">3.7.4.</span> <span class="nav-text">std::atomic</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#atomic-compare-exchange-weak和atomic-compare-exchange-strong"><span class="nav-number">3.7.5.</span> <span class="nav-text">atomic::compare_exchange_weak和atomic::compare_exchange_strong</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#ABA问题"><span class="nav-number">3.7.6.</span> <span class="nav-text">ABA问题</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#原子操作的线程间顺序"><span class="nav-number">3.7.7.</span> <span class="nav-text">原子操作的线程间顺序</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#可见性和有序性"><span class="nav-number">3.7.8.</span> <span class="nav-text">可见性和有序性</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#先行发生和同步发生"><span class="nav-number">3.7.9.</span> <span class="nav-text">先行发生和同步发生</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#内存模型"><span class="nav-number">3.7.10.</span> <span class="nav-text">内存模型</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#内存模型的实现"><span class="nav-number">3.7.11.</span> <span class="nav-text">内存模型的实现</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#无等待"><span class="nav-number">3.8.</span> <span class="nav-text">无等待</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#并发编程中数据共享措施"><span class="nav-number">4.</span> <span class="nav-text">并发编程中数据共享措施</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#condition-variable"><span class="nav-number">4.1.</span> <span class="nav-text">condition variable</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#事件"><span class="nav-number">4.1.1.</span> <span class="nav-text">事件</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#future"><span class="nav-number">4.2.</span> <span class="nav-text">future</span></a></li></ol></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2018</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="https://dn-lbstatics.qbox.me/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+      <script id="dsq-count-scr" src="https://calvinneo.disqus.com/count.js" async></script>
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2017/12/28/Concurrency-Programming-Compare/';
+          this.page.identifier = '2017/12/28/Concurrency-Programming-Compare/';
+          this.page.title = '并发编程重要概念及比较';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
