@@ -96,7 +96,7 @@
 <meta property="og:url" content="http://www.calvinneo.com/2017/09/20/分布式一致性协议/index.html">
 <meta property="og:site_name" content="Calvin's Marbles">
 <meta property="og:description" content="CAP理论、2PC和3PC协议、RWN协议、Raft协议、Paxos协议">
-<meta property="og:updated_time" content="2018-01-17T10:19:32.719Z">
+<meta property="og:updated_time" content="2018-02-09T02:05:52.292Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="分布式一致性协议笔记">
 <meta name="twitter:description" content="CAP理论、2PC和3PC协议、RWN协议、Raft协议、Paxos协议">
@@ -388,28 +388,29 @@
 <h1 id="分布式系统中的CAP理论"><a href="#分布式系统中的CAP理论" class="headerlink" title="分布式系统中的CAP理论"></a>分布式系统中的CAP理论</h1><h2 id="CAP理论"><a href="#CAP理论" class="headerlink" title="CAP理论"></a>CAP理论</h2><p>CAP理论提出之后一直广受质疑，但并不影响其成为一套经典理论。<br>CAP理论认为一致性(consistency)、可用性(availability)和分区容错性(partition tolerance)是不可能同时被满足的。</p>
 <h2 id="一致性"><a href="#一致性" class="headerlink" title="一致性"></a>一致性</h2><p>一致性即<em>all nodes see the same data at the same time</em>。这个要求是比较高的，通常称为强一致性，有的时候系统保证在更新操作后的一段时间后，系统能够达到一致性状态，这称为弱一致性。最终一致性是一种弱一致性模型，还可以分为因果一致性、单调读一致性、单调写一致性等。<br>具体地讲，一致性需要满足下面三个条件</p>
 <ol>
-<li>agreement<br> 决议需要得到所有节点的认同</li>
+<li>agreement<br> 决议需要得到所有节点的认同，通常是首先批准一个多数票的决议，然后进行同步。</li>
 <li>validity<br> 决议的值需要满足合法性要求</li>
-<li>termination<br> 决议过程能够在有限步内结束</li>
+<li>termination(liveness)<br> 决议过程能够在有限步内结束，并产生结果。</li>
 </ol>
 <h2 id="可用性"><a href="#可用性" class="headerlink" title="可用性"></a>可用性</h2><p>可用性即<em>reads and writes always succeed</em>。这个要求系统能够始终在<strong>正常时间</strong>内对用户的请求进行响应。当然由于可能出现的一致性问题，这个响应不一定是正确的。</p>
 <h2 id="分区容错性"><a href="#分区容错性" class="headerlink" title="分区容错性"></a>分区容错性</h2><p>分区容错性即<em>the system continues to operate despite arbitrary message loss or failure of part of the system</em>。由于分布式集群中常出现网络分区情况，即集群中的一部分机器与另一部分机器中断连接，这可能是由于网络故障，产生网络分区；也可能是由于某些节点宕机。我们除非设计出一个永远不会出故障的网络，否则我们必须要容忍P。于是C和A便成为了trade-off。由于网络分区的概率比较小，并且是易于探测的，所以C和A大多数情况是能够比较好地满足的，所以说我们要做的不是根除网络分区及其导致的部分失效(partial failure)问题，而是去正确地处理它，这就引入了下面的一些协议。</p>
-<h1 id="2PC和3PC"><a href="#2PC和3PC" class="headerlink" title="2PC和3PC"></a>2PC和3PC</h1><h2 id="事务"><a href="#事务" class="headerlink" title="事务"></a>事务</h2><h3 id="ACID准则"><a href="#ACID准则" class="headerlink" title="ACID准则"></a>ACID准则</h3><p>对于关系型数据库，存在ACID原则维护事务的正确可靠性。原子性(atomicity)表现为事务中的所有操作要么全部完成，要么全部不完成（回滚），不会出现中间状态。一致性(consistency)表现为在事务开始前和结束后完整性约束不被破坏。隔离性(isolation)表现为数据库支持多个并发事务同时进行增删改。持久性(durability)表现为事务结束后对数据的修改是永久的。</p>
+<h1 id="分布式共识"><a href="#分布式共识" class="headerlink" title="分布式共识"></a>分布式共识</h1><h2 id="关系型数据库中的事务"><a href="#关系型数据库中的事务" class="headerlink" title="关系型数据库中的事务"></a>关系型数据库中的事务</h2><h3 id="ACID准则"><a href="#ACID准则" class="headerlink" title="ACID准则"></a>ACID准则</h3><p>对于关系型数据库，存在ACID原则维护事务的正确可靠性。原子性(atomicity)表现为事务中的所有操作要么全部完成，要么全部不完成（回滚），不会出现中间状态。一致性(consistency)表现为在事务开始前和结束后完整性约束不被破坏。隔离性(isolation)表现为数据库支持多个并发事务同时进行增删改。持久性(durability)表现为事务结束后对数据的修改是永久的。</p>
 <h3 id="前像与后像"><a href="#前像与后像" class="headerlink" title="前像与后像"></a>前像与后像</h3><p>事务有只有两种完成方式，提交即全做事务中的操作，和回滚即全不做事务中的操作。在事务的中间过程中可能对数据块的值进行修改，但最终这些修改必须要通过提交和回滚来实现持久化。<br>AI（后像，After Image），指的是每次更新时数据块的新值。对于一个已提交的事务，当故障发生时应当REDO它的后像。注意一旦事务提交，就不能UNDO它的前像，会破坏完整性约束；但是事务提交前任意的删改都可以通过UNDO来撤销。事务提交和往数据库写值（执行事务）是两个不同概念。<br>BI（前像，Before Image），指的是每次更新时数据块的旧值。对于一个未提交的事务或提交进行到一半，当故障发生时应当UNDO它的前像。<br>UNDO和REDO操作具有幂等性，即对前像UNDO或对后像REDO任意多次，结果都是相同的。</p>
 <h3 id="事务更新的两条规则"><a href="#事务更新的两条规则" class="headerlink" title="事务更新的两条规则"></a>事务更新的两条规则</h3><h4 id="提交规则"><a href="#提交规则" class="headerlink" title="提交规则"></a>提交规则</h4><p>后像必须在提交前写入非易失存储器（数据库或运行记录）中。<br>当后像只写入日志而没写入数据库中也可以提交事务，因为出现故障之后可以使用后像REDO进行恢复。</p>
 <h4 id="先记后写规则"><a href="#先记后写规则" class="headerlink" title="先记后写规则"></a>先记后写规则</h4><p>数据库中有先记后写原则，如果在事务提交前将后像写入数据库，则必须首先把前像记入日志。这样做的好处是在事务提交完成前如果出现故障，可以通过日志文件中的该前像进行UNDO，此时即使数据库没有被修改，也只是进行一次多余的UNDO操作。</p>
-<h2 id="两阶段提交协议"><a href="#两阶段提交协议" class="headerlink" title="两阶段提交协议"></a>两阶段提交协议</h2><h3 id="分布式事务"><a href="#分布式事务" class="headerlink" title="分布式事务"></a>分布式事务</h3><p>由于分布式系统中存在多个副本，所以维护这些副本的一致性成为核心问题之一。分布式事务相对于仅涉及单个数据库事务的难点在于其提交或回滚不仅决定于自身，还决定于其他节点上事务执行的状态。从理想考虑，只要有一台节点失效，其他节点就要进行rollback。为了实现这一点，需要一个协调者(Coordinator)来根据所有参与者(Cohorts)的情况判断是否完成提交或终止提交。同时协调者的故障称为单点故障，也就是这个鼓掌能够直接导致集群无法运行，需要特别考虑。</p>
+<h2 id="分布式共识面临的问题"><a href="#分布式共识面临的问题" class="headerlink" title="分布式共识面临的问题"></a>分布式共识面临的问题</h2><h3 id="拜占庭将军问题"><a href="#拜占庭将军问题" class="headerlink" title="拜占庭将军问题"></a>拜占庭将军问题</h3><h2 id="复制状态机"><a href="#复制状态机" class="headerlink" title="复制状态机"></a>复制状态机</h2><p>复制状态机(RSM)源自Paxos算法。通过同步日志，使得多个节点从相同的初始状态开始，按顺序执行相同的命令，转移到相同的状态。</p>
+<h1 id="2PC和3PC"><a href="#2PC和3PC" class="headerlink" title="2PC和3PC"></a>2PC和3PC</h1><h2 id="两阶段提交协议"><a href="#两阶段提交协议" class="headerlink" title="两阶段提交协议"></a>两阶段提交协议</h2><h3 id="分布式事务"><a href="#分布式事务" class="headerlink" title="分布式事务"></a>分布式事务</h3><p>由于分布式系统中存在多个副本，所以维护这些副本的一致性成为核心问题之一。分布式事务相对于仅涉及单个数据库事务的难点在于其提交或回滚不仅决定于自身，还决定于其他节点上事务执行的状态。从理想考虑，只要有一台节点失效，其他节点就要进行rollback。为了实现这一点，需要一个协调者(Coordinator)来根据所有参与者(Cohorts)的情况判断是否完成提交或终止提交。同时协调者的故障称为单点故障，也就是这个故障能够直接导致集群无法运行，需要特别考虑。</p>
 <h3 id="第一阶段（投票阶段）"><a href="#第一阶段（投票阶段）" class="headerlink" title="第一阶段（投票阶段）"></a>第一阶段（投票阶段）</h3><p>首先协调者向所有的参与者发出提交请求VOTE_REQUEST，参与者按照事务的标准流程写UNDO和REDO等日志，并在本地执行事务。如果事务执行顺利，则不提交（尽管事务中的全部操作已经正确完成），返回一个VOTE_COMMIT给协调者，表示自己成功执行了事务。如果事务执行出现错误，则返回一个VOTE_ABORT。</p>
-<h3 id="第二阶段（执行提交阶段）"><a href="#第二阶段（执行提交阶段）" class="headerlink" title="第二阶段（执行提交阶段）"></a>第二阶段（执行提交阶段）</h3><p><strong>假设协调者没有宕机</strong><br>相应会出现两种状态：</p>
+<h3 id="第二阶段（执行提交阶段）"><a href="#第二阶段（执行提交阶段）" class="headerlink" title="第二阶段（执行提交阶段）"></a>第二阶段（执行提交阶段）</h3><p><strong>假设协调者没有宕机</strong>，相应会出现两种状态：</p>
 <ol>
-<li>成功，发生在所有的参与者节点都返回VOTE_COMMIT</li>
-<li>失败，发生在任意参与者节点返回VOTE_ABORT，或者有的参与者timeout</li>
+<li>成功，发生在所有的参与者节点都返回VOTE_COMMIT<br> 此时协调者向所有参与者发送GLOBAL_COMMIT，参与者收到之后正式提交事务并释放资源，然后返回ACK确认</li>
+<li>失败，发生在任意参与者节点返回VOTE_ABORT，或者有的参与者timeout<br> 此时协调者向所有参与者发送GLOBAL_ROLLBACK，参与者收到之后UNDO回前像状态，然后返回ACK确认</li>
 </ol>
-<h4 id="成功"><a href="#成功" class="headerlink" title="成功"></a>成功</h4><p>此时协调者向所有参与者发送GLOBAL_COMMIT，参与者收到之后正式提交事务并释放资源，然后返回ACK确认</p>
-<h4 id="失败"><a href="#失败" class="headerlink" title="失败"></a>失败</h4><p>此时协调者向所有参与者发送GLOBAL_ROLLBACK，参与者收到之后UNDO回前像状态，然后返回ACK确认</p>
 <h3 id="协调者宕机情况对一致性的影响"><a href="#协调者宕机情况对一致性的影响" class="headerlink" title="协调者宕机情况对一致性的影响"></a>协调者宕机情况对一致性的影响</h3><p>OK，刚才协调者没有宕机，看起来很美好，可是如果协调者宕机了呢？首先如果有一台参与者收到来自协调者的信息GLOBAL_COMMIT，那么就能通过某种选举协议作为新的协调者重新掌控大局。可是如果这台参与者也宕机了呢？这就需要分类讨论</p>
-<h4 id="假设参与者全部宕机"><a href="#假设参与者全部宕机" class="headerlink" title="假设参与者全部宕机"></a>假设参与者<em>全部</em>宕机</h4><p>这时候整个集群“死绝了”，变成平凡情况，由于没人（有能力）commit，所以不一致性不会受到破坏。</p>
-<h4 id="假设参与者部分宕机"><a href="#假设参与者部分宕机" class="headerlink" title="假设参与者部分宕机"></a>假设参与者<em>部分</em>宕机</h4><p>这时候不一致性是一定遭到破坏的了。虽然未宕机的参与者中可能存在有收到来自协调者消息的，可以选一个新协调者出来，但是宕机的参与者究竟是否提交成功是个量子力学问题了，所以新协调者即使知道原协调者发出了commit指令，也不能断然决定去commit。</p>
+<ol>
+<li>假设参与者<em>全部</em>宕机<br> 这时候整个集群“死绝了”，变成平凡情况，由于没人（有能力）commit，所以不一致性不会受到破坏。</li>
+<li>假设参与者<em>部分</em>宕机<br> 这时候不一致性是一定遭到破坏的了。虽然未宕机的参与者中可能存在有收到来自协调者消息的，可以选一个新协调者出来，但是宕机的参与者究竟是否提交成功是个量子力学问题了，所以新协调者即使知道原协调者发出了commit指令，也不能断然决定去commit。</li>
+</ol>
 <h3 id="二阶段提交协议的不足"><a href="#二阶段提交协议的不足" class="headerlink" title="二阶段提交协议的不足"></a>二阶段提交协议的不足</h3><h4 id="阻塞"><a href="#阻塞" class="headerlink" title="阻塞"></a>阻塞</h4><p>2PC协议中，参与者一直是事务阻塞的，因此在事务进行的过程中，系统不能响应第三方节点的访问。这是偏于保守的，牺牲了一部分的可用性。<br>阻塞带来的另一个问题来自于协调者可能的故障。如果协调者挂掉，连接中断，可以重新选一个协调者。但如果协调者宕机，那么所有的参与者会跟着阻塞下去。这和参与者宕机形成比较，协调者对于参与者有timeout机制，但是参与者对协调者没有timeout机制。</p>
 <h4 id="不一致"><a href="#不一致" class="headerlink" title="不一致"></a>不一致</h4><p>我们知道2PC协议通过分出投票阶段能够根据所有节点上事务的执行情况判断执行提交或者回滚。但它在第二阶段依然会出现不一致问题。</p>
 <ol>
@@ -420,24 +421,65 @@
 </ol>
 <h2 id="三阶段提交协议"><a href="#三阶段提交协议" class="headerlink" title="三阶段提交协议"></a>三阶段提交协议</h2><p>三阶段提交协议针对以上2PC的两点不足采取了一些措施：对参与者也引入超时措施，将执行提交阶段拆为两步。</p>
 <h3 id="CanCommit阶段"><a href="#CanCommit阶段" class="headerlink" title="CanCommit阶段"></a>CanCommit阶段</h3><p>这个类似于2PC的投票阶段，协调者发出询问是否可以提交，Yes为可以提交，No相反。</p>
-<h3 id="PreCommit阶段"><a href="#PreCommit阶段" class="headerlink" title="PreCommit阶段"></a>PreCommit阶段</h3><h4 id="如果上阶段全部为Yes"><a href="#如果上阶段全部为Yes" class="headerlink" title="如果上阶段全部为Yes"></a>如果上阶段全部为Yes</h4><p><strong>协调者</strong>发送PreCommit请求并进入Prepared状态<br><strong>参与者</strong>接受到PreCommit后确保事务操作全部执行并记录UNDO与REDO，返回ACK</p>
-<h4 id="如果上阶段有No"><a href="#如果上阶段有No" class="headerlink" title="如果上阶段有No"></a>如果上阶段有No</h4><p><strong>协调者</strong>发送abort请求<br><strong>参与者</strong>接受到abort后，REDO，中断事务，发送ACK</p>
-<h4 id="例外情况：参与者未收到协调者的消息"><a href="#例外情况：参与者未收到协调者的消息" class="headerlink" title="例外情况：参与者未收到协调者的消息"></a>例外情况：参与者未收到协调者的消息</h4><p>这可以认为是<strong>协调者的timeout</strong>，此时<strong>中断事务</strong><br>注意到这里<strong>参与者</strong>是可以处理<strong>协调者</strong>的timeout的</p>
-<h3 id="DoCommit阶段"><a href="#DoCommit阶段" class="headerlink" title="DoCommit阶段"></a>DoCommit阶段</h3><p>这是真正的事务提交阶段</p>
-<h4 id="协调者收全上阶段ACK"><a href="#协调者收全上阶段ACK" class="headerlink" title="协调者收全上阶段ACK"></a>协调者收全上阶段ACK</h4><p><strong>协调者</strong>发送DoCommit请求<br><strong>参与者</strong>接受到DoCommit后提交事务，返回ACK</p>
-<h4 id="协调者未收到上阶段ACK"><a href="#协调者未收到上阶段ACK" class="headerlink" title="协调者未收到上阶段ACK"></a>协调者未收到上阶段ACK</h4><p>这发生在<strong>协调者</strong>没有收到一些参与者的ACK（网络分区或该参与者abort）<br><strong>协调者</strong>发送abort请求<br><strong>参与者</strong>接受到abort，使用同上阶段的方式中断事务</p>
-<h4 id="例外情况：参与者未收到协调者的消息-1"><a href="#例外情况：参与者未收到协调者的消息-1" class="headerlink" title="例外情况：参与者未收到协调者的消息"></a>例外情况：参与者未收到协调者的消息</h4><p>这又是一个<strong>协调者的timeout</strong>，此时<strong>提交事务</strong><br>为什么选择提交事务而不是中断事务？因为此时提交事务成功的可能性非常非常大了，但仍有例外，例如：<br>进入PreCommit后，协调者发出的是abort请求，如果只有一个Cohort收到并进行了abort操作，而其他对于系统状态未知的Cohort会根据3PC选择继续Commit，这仍然会导致不一致，不过这个概率就显然非常小了</p>
-<h3 id="三阶段提交协议的不足"><a href="#三阶段提交协议的不足" class="headerlink" title="三阶段提交协议的不足"></a>三阶段提交协议的不足</h3><p>相对于2PC，3PC避免了协调者宕机之后可能出现的参与者们陷入状态停滞，群龙无首的情况。但仍然有较小的概率会导致不一致。</p>
-<h1 id="RWN"><a href="#RWN" class="headerlink" title="RWN"></a>RWN</h1><h1 id="Raft"><a href="#Raft" class="headerlink" title="Raft"></a>Raft</h1><h2 id="选举"><a href="#选举" class="headerlink" title="选举"></a>选举</h2><p>在Raft中，协调者被称为领袖、主(leader)，参与者被称为群众(follower)。<br>在2PC中我们看到，参与者必须对协调者有timeout机制，否则整个系统会阻塞。Raft实现了这样的功能。<br>Raft中leader是唯一的，leader存活时会不停的往所有的节点发送RPC心跳包，如果一个节点在election timeout时间（随机150ms-300ms，每个节点不同）中没有接到心跳包，那么它就会认为leader已经挂了（当然也可能是网络延迟等分区情况，先不考虑），成为candidates来选举领袖。这时候他需要获得过总结点数半数的票（每个节点赞成或反对遵循后面提到的规律），即N/2+1张，就能够成为新的leader。投票可能产生三种结果：</p>
+<h3 id="PreCommit阶段"><a href="#PreCommit阶段" class="headerlink" title="PreCommit阶段"></a>PreCommit阶段</h3><p>需要分为三种情况讨论：</p>
 <ol>
-<li>自己成为leader<br> 此时自己获得了N/2+1张票，自动成为leader，开始发送心跳包。Raft中的leader具有任期机制，如果老leader的任期为term_id，那么新选出的leader的任期即为term_id + 1。在心跳包中会加入表示任期的字段rpc_term_id，这样其余的节点能够知道已经选出一个新主了，此时选举结束，candidate重新变为follower。<br> 假设老leader先前是由于网络分区失联导致选举的产生，在新leader产生后网络又恢复了，此时他收到了来自新leader的心跳包。显然这个心跳包中的rpc_term_id比老leader自己的current_term_id要大，老leader因此知道自己失联之后产生了新的leader，也会切换回follower模式，并更新自己的current_term_id。<br> 如果老leader在切换回follower前依然履行了一次职责，发送了leader的心跳包，这也不会对系统产生影响，因为它心跳包的rpc_term_id比新leader的rpc_term_id要小，只要对方节点迟早收到新leader的心跳包，老leader的心跳包就会被忽略。</li>
-<li>别人成为leader<br> 参照上一情况</li>
-<li>没有leader产生<br> 这发生在没有节点获得过半数的票的情境下，例如有很多follower的timeout时间比较接近，在选举开始时都timeout变成了candidate，由于每个candidate都会投给自己，所以没有candidate能获得大多数。此时认为term_id + 1届以没有leader告终，这时候节点们开始下一轮的election timeout。</li>
+<li><p>如果上阶段全部为Yes<br> <strong>协调者</strong>发送PreCommit请求并进入Prepared状态<br> <strong>参与者</strong>接受到PreCommit后确保事务操作全部执行并记录UNDO与REDO，返回ACK</p>
+</li>
+<li><p>如果上阶段有No<br> <strong>协调者</strong>发送abort请求<br> <strong>参与者</strong>接受到abort后，REDO，中断事务，发送ACK</p>
+</li>
+<li><p>例外情况：参与者未收到协调者的消息<br> 这可以认为是<strong>协调者的timeout</strong>，此时<strong>中断事务</strong><br> 注意到这里<strong>参与者</strong>是可以处理<strong>协调者</strong>的timeout的</p>
+</li>
 </ol>
-<h2 id="Log-replication"><a href="#Log-replication" class="headerlink" title="Log replication"></a>Log replication</h2><p>在Raft集群的所有节点上都会维护一个Log Entries，保存着来自客户端的指令。每条Log记录有其发生的term以及是否提交。</p>
-<h2 id="脑裂（网络分区）的处理"><a href="#脑裂（网络分区）的处理" class="headerlink" title="脑裂（网络分区）的处理"></a>脑裂（网络分区）的处理</h2><p>由于某些节点的失效，部分节点的网络连接会断开，并形成一个与原集群一样名字的集群，这种情况称为集群脑裂（split-brain）现象。这个问题非常危险，因为两个新形成的集群会同时索引和修改集群的数据。<br>Raft协议能够解决由于网络分区导致的脑裂。我们知道每一届的leader都有一个term_id，</p>
-<p>特别地，当网络分区多于两块的时候，会不会存在有两个分区中都选出了新的term相同的leader呢？<br>应该是不可能的，因为成为leader必须达到全局的多数N/2+1张票，最多只能有一个。所以当分区较多的时候，很可能无法选出新leader。<br>另外某节点也不容易去“获得当前分区的多数票”，因为它也无法界定当前分区的范围。</p>
-<h1 id="Paxos"><a href="#Paxos" class="headerlink" title="Paxos"></a>Paxos</h1>
+<h3 id="DoCommit阶段"><a href="#DoCommit阶段" class="headerlink" title="DoCommit阶段"></a>DoCommit阶段</h3><p>这是真正的事务提交阶段，同样分为三种情况</p>
+<ol>
+<li><p>协调者收全上阶段ACK<br> <strong>协调者</strong>发送DoCommit请求<br> <strong>参与者</strong>接受到DoCommit后提交事务，返回ACK</p>
+</li>
+<li><p>协调者未收到上阶段ACK<br> 这发生在<strong>协调者</strong>没有收到一些参与者的ACK（网络分区或该参与者abort）<br> <strong>协调者</strong>发送abort请求<br> <strong>参与者</strong>接受到abort，使用同上阶段的方式中断事务</p>
+</li>
+<li><p>例外情况：参与者未收到协调者的消息<br> 这又是一个<strong>协调者的timeout</strong>，此时<strong>提交事务</strong><br> 为什么选择提交事务而不是中断事务？因为此时提交事务成功的可能性非常非常大了，但仍有例外，例如：<br> 进入PreCommit后，协调者发出的是abort请求，如果只有一个Cohort收到并进行了abort操作，而其他对于系统状态未知的Cohort会根据3PC选择继续Commit，这仍然会导致不一致，不过这个概率就显然非常小了</p>
+</li>
+</ol>
+<h3 id="三阶段提交协议的不足"><a href="#三阶段提交协议的不足" class="headerlink" title="三阶段提交协议的不足"></a>三阶段提交协议的不足</h3><p>相对于2PC，3PC避免了协调者宕机之后可能出现的参与者们陷入状态停滞，群龙无首的情况。但仍然有较小的概率会导致不一致。</p>
+<h1 id="RWN"><a href="#RWN" class="headerlink" title="RWN"></a>RWN</h1><h1 id="Raft"><a href="#Raft" class="headerlink" title="Raft"></a>Raft</h1><p>Raft协议的设计者们认为Paxos协议非常难于理解，并且需要作出很多修改才能够应用到工程中，因此设计了偏重于实现的Raft协议。Raft协议主要分为三个模块，Leader election、Log replication和Safety。<br>Raft将服务器节点分为leader、candidate和follower三种，协调者被称为领袖/主(leader)，参与者被称为群众(follower)。相对于其他的协议，Raft中的leader更强，这体现在</p>
+<ol>
+<li>Leader是唯一的</li>
+<li>Log entries只能从leader发送给其他服务器，事实上follower不主动发送，而只响应来自leader和candidate的请求</li>
+<li>客户端只能和leader交互，如果客户端首先连上了follower，那么会被follower转发给leader</li>
+</ol>
+<p>Raft的独特之处还在于其在Leader election的过程中Raft使用了随机计时器进行超时。此外，Raft还提供了一个joint consensus的算法处理Membership changes的问题。</p>
+<h2 id="Raft基础概念"><a href="#Raft基础概念" class="headerlink" title="Raft基础概念"></a>Raft基础概念</h2><h3 id="任期"><a href="#任期" class="headerlink" title="任期"></a>任期</h3><p>Raft中的leader具有任期机制，每个节点维护有自己节点上最新的<code>current_term_id</code>，出于网络分区等原因，它不一定是在全局最新的。服务器之间通信时会交换各自的任期号，如果一个节点检查到自己的<code>current_term_id</code>小于对方发来的<code>rpc_term_id</code>，则更新到较大的任期值；对应的，如果检测到自己的大于对方的，则忽略对方的请求。当一个leader发现自己具有过期的任期时，它会立刻切换成follower。</p>
+<h3 id="日志"><a href="#日志" class="headerlink" title="日志"></a>日志</h3><p>来自客户端的请求被表示成一系列将被应用到复制状态机上的指令，这些指令在Raft集群的所有节点上被记录为日志条目(Log Entries)。每个条目的日志都记录了其对应的term以及是否被提交。Raft协议下要求日志满足以下的约束：</p>
+<ol>
+<li>领导人只附加原则(Leader Append-Only)<br> Leader绝对不会删除或者覆盖自己的日志，只会增加</li>
+<li>日志匹配原则(Log Matching)<br> 如果不同日志中的两个条目具有相同的index和term，那么这两个日志index前的部分也相同。<br> 如果不同日志中的两个条目具有相同的index和term，</li>
+<li>领导人完全性(Leader Completeness)<br> 如果某个日志条目在某个term中已经被提交，那么这个条目必然出现在所有具有更大的term的leader中</li>
+<li>状态机安全特性(State Machine Safety)<br> 如果一个leader已经提交了给定的index的日志条目，那么任何其他的服务器在这个index不会提交一个不同的日志。<br> 一旦条目被提交，那么它是持久化的(durable)而不会被丢失或更改，并且一定会被所有可用的复制状态机执行。</li>
+</ol>
+<h3 id="RPC"><a href="#RPC" class="headerlink" title="RPC"></a>RPC</h3><p>Raft中定义了两种主要的RPC包，<code>AppendEntriesRPC</code>和<code>RequestVoteRPC</code>。</p>
+<h4 id="AppendEntriesRPC"><a href="#AppendEntriesRPC" class="headerlink" title="AppendEntriesRPC"></a>AppendEntriesRPC</h4><p><code>AppendEntriesRPC</code>具有心跳包和推送日志的作用，包含以下部分</p>
+<ol>
+<li>term<br> 表示当前领导人的任期号。为了表示区别，下面写作<code>rpc_term_id</code></li>
+<li>leaderId<br> 表示当前领导人的id，这样来自客户端的请求能被follower转发给leader</li>
+<li>prevLogIndex和prevLogTerm</li>
+<li>entries<br> <code>entries</code>是一个数组，记录了若干日志条目。这些日志条目被leader发送给所有的follower。</li>
+<li>leaderCommit<br> 表示leader已经提交的日志的序号，这样其他的服务器才能知道leader当前的提交位置，并跟随提交</li>
+</ol>
+<h2 id="Leader-election"><a href="#Leader-election" class="headerlink" title="Leader election"></a>Leader election</h2><p>在2PC中我们看到，参与者必须对协调者有timeout机制，否则整个系统会阻塞，Raft同样有这样的功能。Leader存活时会不停的往所有的节点发送RPC心跳包，考虑一个节点在election timeout时间（随机150ms-300ms，每个节点不同）中没有接到心跳包的情况。站在全局的角度来看，这可能是老leader挂了，所以得选举出一个新的leader出来；这也可能是网络延迟/分区的原因，因此可能在选举途中或者结束后老leader又回来了。但站在这个节点的角度来看，它只能认为leader已经挂了，因此成为candidates参加leader选举。此时它执行下面两个操作：</p>
+<ol>
+<li>递增自己的<code>current_term_id</code></li>
+<li>发送<code>RequestVoteRPC</code>消息给所有节点，这时候节点们根据一定规则进行投票</li>
+</ol>
+<p>成为leader需要获得<strong>整个集群</strong>共$N$个节点中过半数（$\ge N/2+1$）的票，才能成为新的leader，这是为了保证最多只会有一个候选人赢得选举。投票可能产生三种结果：</p>
+<ol>
+<li>自己成为leader<br> 获得过半数票的节点自动成为leader，并开始发送心跳包（<code>entry</code>为空的<code>AppendEntriesRPC</code>）。这样其余的节点发现<code>rpc_term_id</code>比自己的<code>current_term_id</code>大时就可以知道已经选出一个新主了，此时选举结束，candidate重新变为follower，并同步自己的<code>current_term_id</code>与新主一致。<br> 假设先前是老leader发生网络分区从而导致选举的产生，在新leader产生后网络又恢复了。此时他收到了来自新leader的心跳包。显然这个心跳包中的<code>rpc_term_id</code>比老leader自己的<code>current_term_id</code>要大，根据任期的约束，老leader知道了新leader的存在，切回follower状态并更新任期。如果老leader在发现新leader依然履行了一次职责，发送了一个<code>AppendEntriesRPC</code>。首先它会被candidate和已经发现新leader的节点拒绝，因为它们的任期号肯定比老leader的要大。如果某个follower还没看到新leader的产生，</li>
+<li>别人成为leader<br> 对应于第一种情况，此时自己发现了一个任期号更大的leader传来的心跳，于是自己退出选举。</li>
+<li>没有leader产生<br> 这发生在没有节点获得过半数的票的情境下，例如有很多follower的timeout时间比较接近，在选举开始时都timeout变成了candidate，这时候每个candidate都会投给自己，所以没有candidate能获得大多数。此时认为<code>current_term_id + 1</code>届的任期以没有leader告终，节点们开始下一轮的election timeout。由于每个节点election timeout时间都是随机的，所以下一次出现timeout时间接近的可能性并不高。</li>
+</ol>
+<h2 id="Log-replication"><a href="#Log-replication" class="headerlink" title="Log replication"></a>Log replication</h2><p>一旦由当前leader创建的某日志条目被成功复制到过半数的服务器上时，这个leader即可提交该条目及该条目之前的所有条目。注意到先前的条目可能是由其他leader创建的，但这不影响提交。</p>
+<h2 id="Safety"><a href="#Safety" class="headerlink" title="Safety"></a>Safety</h2><h2 id="脑裂（网络分区）的处理"><a href="#脑裂（网络分区）的处理" class="headerlink" title="脑裂（网络分区）的处理"></a>脑裂（网络分区）的处理</h2><p>由于某些节点的失效，部分节点的网络连接会断开，并形成一个与原集群一样名字的集群，这种情况称为集群脑裂（split-brain）现象。这个问题非常危险，因为两个新形成的集群会同时索引和修改集群的数据。<br>Raft协议能够解决由于网络分区导致的脑裂。我们知道每一届的leader都有一个<code>term_id</code>，</p>
+<p>特别地，当网络分区多于两块的时候，会不会存在有两个分区中都选出了新的term相同的leader呢？应该是不可能的，因为成为leader必须达到全局的多数N/2+1张票，最多只能有一个。所以当分区较多的时候，很可能无法选出新leader。另外某节点也不容易去“获得当前分区的多数票”，因为它也无法界定当前分区的范围。</p>
+<h1 id="Paxos"><a href="#Paxos" class="headerlink" title="Paxos"></a>Paxos</h1><p>Paxos将网络中的节点分为proposer、acceptor和learner三种类。其中proposer即提案的提出者，acceptor对提案经投票，投票的最终结果交给learner进行同步。</p>
+
       
     </div>
 
@@ -595,7 +637,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">97</span>
+                <span class="site-state-item-count">98</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -608,7 +650,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">111</span>
+                <span class="site-state-item-count">113</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -694,7 +736,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#分布式系统中的CAP理论"><span class="nav-number">1.</span> <span class="nav-text">分布式系统中的CAP理论</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#CAP理论"><span class="nav-number">1.1.</span> <span class="nav-text">CAP理论</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#一致性"><span class="nav-number">1.2.</span> <span class="nav-text">一致性</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#可用性"><span class="nav-number">1.3.</span> <span class="nav-text">可用性</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#分区容错性"><span class="nav-number">1.4.</span> <span class="nav-text">分区容错性</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#2PC和3PC"><span class="nav-number">2.</span> <span class="nav-text">2PC和3PC</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#事务"><span class="nav-number">2.1.</span> <span class="nav-text">事务</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#ACID准则"><span class="nav-number">2.1.1.</span> <span class="nav-text">ACID准则</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#前像与后像"><span class="nav-number">2.1.2.</span> <span class="nav-text">前像与后像</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#事务更新的两条规则"><span class="nav-number">2.1.3.</span> <span class="nav-text">事务更新的两条规则</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#提交规则"><span class="nav-number">2.1.3.1.</span> <span class="nav-text">提交规则</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#先记后写规则"><span class="nav-number">2.1.3.2.</span> <span class="nav-text">先记后写规则</span></a></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#两阶段提交协议"><span class="nav-number">2.2.</span> <span class="nav-text">两阶段提交协议</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#分布式事务"><span class="nav-number">2.2.1.</span> <span class="nav-text">分布式事务</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#第一阶段（投票阶段）"><span class="nav-number">2.2.2.</span> <span class="nav-text">第一阶段（投票阶段）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#第二阶段（执行提交阶段）"><span class="nav-number">2.2.3.</span> <span class="nav-text">第二阶段（执行提交阶段）</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#成功"><span class="nav-number">2.2.3.1.</span> <span class="nav-text">成功</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#失败"><span class="nav-number">2.2.3.2.</span> <span class="nav-text">失败</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#协调者宕机情况对一致性的影响"><span class="nav-number">2.2.4.</span> <span class="nav-text">协调者宕机情况对一致性的影响</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#假设参与者全部宕机"><span class="nav-number">2.2.4.1.</span> <span class="nav-text">假设参与者全部宕机</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#假设参与者部分宕机"><span class="nav-number">2.2.4.2.</span> <span class="nav-text">假设参与者部分宕机</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#二阶段提交协议的不足"><span class="nav-number">2.2.5.</span> <span class="nav-text">二阶段提交协议的不足</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#阻塞"><span class="nav-number">2.2.5.1.</span> <span class="nav-text">阻塞</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#不一致"><span class="nav-number">2.2.5.2.</span> <span class="nav-text">不一致</span></a></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#三阶段提交协议"><span class="nav-number">2.3.</span> <span class="nav-text">三阶段提交协议</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#CanCommit阶段"><span class="nav-number">2.3.1.</span> <span class="nav-text">CanCommit阶段</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#PreCommit阶段"><span class="nav-number">2.3.2.</span> <span class="nav-text">PreCommit阶段</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#如果上阶段全部为Yes"><span class="nav-number">2.3.2.1.</span> <span class="nav-text">如果上阶段全部为Yes</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#如果上阶段有No"><span class="nav-number">2.3.2.2.</span> <span class="nav-text">如果上阶段有No</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#例外情况：参与者未收到协调者的消息"><span class="nav-number">2.3.2.3.</span> <span class="nav-text">例外情况：参与者未收到协调者的消息</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#DoCommit阶段"><span class="nav-number">2.3.3.</span> <span class="nav-text">DoCommit阶段</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#协调者收全上阶段ACK"><span class="nav-number">2.3.3.1.</span> <span class="nav-text">协调者收全上阶段ACK</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#协调者未收到上阶段ACK"><span class="nav-number">2.3.3.2.</span> <span class="nav-text">协调者未收到上阶段ACK</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#例外情况：参与者未收到协调者的消息-1"><span class="nav-number">2.3.3.3.</span> <span class="nav-text">例外情况：参与者未收到协调者的消息</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#三阶段提交协议的不足"><span class="nav-number">2.3.4.</span> <span class="nav-text">三阶段提交协议的不足</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#RWN"><span class="nav-number">3.</span> <span class="nav-text">RWN</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Raft"><span class="nav-number">4.</span> <span class="nav-text">Raft</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#选举"><span class="nav-number">4.1.</span> <span class="nav-text">选举</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Log-replication"><span class="nav-number">4.2.</span> <span class="nav-text">Log replication</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#脑裂（网络分区）的处理"><span class="nav-number">4.3.</span> <span class="nav-text">脑裂（网络分区）的处理</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Paxos"><span class="nav-number">5.</span> <span class="nav-text">Paxos</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#分布式系统中的CAP理论"><span class="nav-number">1.</span> <span class="nav-text">分布式系统中的CAP理论</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#CAP理论"><span class="nav-number">1.1.</span> <span class="nav-text">CAP理论</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#一致性"><span class="nav-number">1.2.</span> <span class="nav-text">一致性</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#可用性"><span class="nav-number">1.3.</span> <span class="nav-text">可用性</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#分区容错性"><span class="nav-number">1.4.</span> <span class="nav-text">分区容错性</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#分布式共识"><span class="nav-number">2.</span> <span class="nav-text">分布式共识</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#关系型数据库中的事务"><span class="nav-number">2.1.</span> <span class="nav-text">关系型数据库中的事务</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#ACID准则"><span class="nav-number">2.1.1.</span> <span class="nav-text">ACID准则</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#前像与后像"><span class="nav-number">2.1.2.</span> <span class="nav-text">前像与后像</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#事务更新的两条规则"><span class="nav-number">2.1.3.</span> <span class="nav-text">事务更新的两条规则</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#提交规则"><span class="nav-number">2.1.3.1.</span> <span class="nav-text">提交规则</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#先记后写规则"><span class="nav-number">2.1.3.2.</span> <span class="nav-text">先记后写规则</span></a></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#分布式共识面临的问题"><span class="nav-number">2.2.</span> <span class="nav-text">分布式共识面临的问题</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#拜占庭将军问题"><span class="nav-number">2.2.1.</span> <span class="nav-text">拜占庭将军问题</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#复制状态机"><span class="nav-number">2.3.</span> <span class="nav-text">复制状态机</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#2PC和3PC"><span class="nav-number">3.</span> <span class="nav-text">2PC和3PC</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#两阶段提交协议"><span class="nav-number">3.1.</span> <span class="nav-text">两阶段提交协议</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#分布式事务"><span class="nav-number">3.1.1.</span> <span class="nav-text">分布式事务</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#第一阶段（投票阶段）"><span class="nav-number">3.1.2.</span> <span class="nav-text">第一阶段（投票阶段）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#第二阶段（执行提交阶段）"><span class="nav-number">3.1.3.</span> <span class="nav-text">第二阶段（执行提交阶段）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#协调者宕机情况对一致性的影响"><span class="nav-number">3.1.4.</span> <span class="nav-text">协调者宕机情况对一致性的影响</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#二阶段提交协议的不足"><span class="nav-number">3.1.5.</span> <span class="nav-text">二阶段提交协议的不足</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#阻塞"><span class="nav-number">3.1.5.1.</span> <span class="nav-text">阻塞</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#不一致"><span class="nav-number">3.1.5.2.</span> <span class="nav-text">不一致</span></a></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#三阶段提交协议"><span class="nav-number">3.2.</span> <span class="nav-text">三阶段提交协议</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#CanCommit阶段"><span class="nav-number">3.2.1.</span> <span class="nav-text">CanCommit阶段</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#PreCommit阶段"><span class="nav-number">3.2.2.</span> <span class="nav-text">PreCommit阶段</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#DoCommit阶段"><span class="nav-number">3.2.3.</span> <span class="nav-text">DoCommit阶段</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#三阶段提交协议的不足"><span class="nav-number">3.2.4.</span> <span class="nav-text">三阶段提交协议的不足</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#RWN"><span class="nav-number">4.</span> <span class="nav-text">RWN</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Raft"><span class="nav-number">5.</span> <span class="nav-text">Raft</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Raft基础概念"><span class="nav-number">5.1.</span> <span class="nav-text">Raft基础概念</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#任期"><span class="nav-number">5.1.1.</span> <span class="nav-text">任期</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#日志"><span class="nav-number">5.1.2.</span> <span class="nav-text">日志</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#RPC"><span class="nav-number">5.1.3.</span> <span class="nav-text">RPC</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#AppendEntriesRPC"><span class="nav-number">5.1.3.1.</span> <span class="nav-text">AppendEntriesRPC</span></a></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Leader-election"><span class="nav-number">5.2.</span> <span class="nav-text">Leader election</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Log-replication"><span class="nav-number">5.3.</span> <span class="nav-text">Log replication</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Safety"><span class="nav-number">5.4.</span> <span class="nav-text">Safety</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#脑裂（网络分区）的处理"><span class="nav-number">5.5.</span> <span class="nav-text">脑裂（网络分区）的处理</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Paxos"><span class="nav-number">6.</span> <span class="nav-text">Paxos</span></a></li></ol></div>
             
 
           </div>
@@ -1202,6 +1244,28 @@
   
 
   
+  
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Config({
+        tex2jax: {
+          inlineMath: [ ['$','$'], ["\\(","\\)"]  ],
+          processEscapes: true,
+          skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+        }
+      });
+    </script>
+
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax(), i;
+        for (i=0; i < all.length; i += 1) {
+          all[i].SourceElement().parentNode.className += ' has-jax';
+        }
+      });
+    </script>
+    <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+  
+
 
   
 
