@@ -91,11 +91,13 @@
 
 
 <meta name="description" content="上下文无关文法(CFG, Context Free Grammar)属于二类文法，其能力等价于下推自动机(PDA)。相对于三类文法即正则文法，上下文无关文法能够对非终结符做状态转移。自上而下和自下而上是两种常用的上下文无关文法分析方法。自上而下的方法的难点在于选择哪个产生式进行推导，自下而上的分析方法难点在于在不同的格局下选择移进或归约的矛盾。">
+<meta name="keywords" content="编译原理">
 <meta property="og:type" content="article">
 <meta property="og:title" content="语法分析实战">
 <meta property="og:url" content="http://www.calvinneo.com/2016/07/22/语法分析/index.html">
-<meta property="og:site_name" content="Calvin's Marbles">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="上下文无关文法(CFG, Context Free Grammar)属于二类文法，其能力等价于下推自动机(PDA)。相对于三类文法即正则文法，上下文无关文法能够对非终结符做状态转移。自上而下和自下而上是两种常用的上下文无关文法分析方法。自上而下的方法的难点在于选择哪个产生式进行推导，自下而上的分析方法难点在于在不同的格局下选择移进或归约的矛盾。">
+<meta property="og:locale" content="zh-Hans">
 <meta property="og:updated_time" content="2018-03-14T07:42:00.874Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="语法分析实战">
@@ -426,7 +428,7 @@ B -&gt; bB
 <li>左递归是针对文法而言的。不消除左递归，不能使用确定的自上向下分析</li>
 <li>尾调用是对于一个函数调用而言的。当一个函数的最后一个工作是调用自己的时候，这样的调用称为尾递归，例如计算阶乘的某些实现。当这个函数计算仅占用常量的栈空间的时候，特别是对于LISP这样的函数式语言，可以进行<strong>尾递归优化(Tail Call Optimization, TCO)</strong>，即可以不在调用栈上面添加一个新的栈帧，而是更新它，如同<strong>迭代</strong>一般。通过尾递归优化，可以将O(n)的栈帧使用变为O(1)，减少部分递归程序的开销</li>
 </ol>
-<h1 id="自下而上的分析方法"><a href="#自下而上的分析方法" class="headerlink" title="自下而上的分析方法"></a>自下而上的分析方法</h1><p>首先需要介绍一下短语、直接短语和句柄的概念。首先这三个概念的范围是依次缩小的。短语指的是一个符号串，根据对定义的解释，一个句型的语法树中任一子树叶节点所组成的符号串γ都是该句型的短语。我们称γ为这个句型相对于A的短语，其中A为该子树对应的非终结符。直接短语相对于短语进一步要求选择的子树不应该含有其他子树，即它的孩子全部都是叶子。值得注意的是这<a href="http://blog.csdn.net/wulingmin21/article/details/7488500" target="_blank" rel="external">并不意味着这些叶子都是终结符</a>。<br>不同于自上而下的分析，自下而上的分析方法总是等到句柄（最左直接短语）出现后进行归约。分析器在读取输入串的每一个符号时要选择对这个符号是移进还是归约、按那个产生式规约（LR0，SLR1，LR1，LALR1文法的差别体现于此）。但无论如何先要找到句柄，因此引入活前缀的概念。<br>定义活前缀，<code>S&#39;=&gt;αAw=&gt;αβw</code>。假设这里w是终结符串，因此A是最右非终结符，这里是规范（最右）推导过程。如果符号串γ是αβ的前缀，那么γ是S的一个活前缀。根据定义，β是句型αβw相对于非终结符A的短语。γ是规范句型（也就是右句型，最右推导得到的句型）的前缀，而一旦栈中出现αβ，也就是形成了A的句柄，那么就可以按照<code>A-&gt;β</code>归约，因此，只要输入串的已扫描部分可以归约成一个活前缀，那就意味着已经扫描的部分没有错误。LR分析栈中的文法符号总是构成活前缀。<br>LR分析器不需要扫描整个分析栈（状态栈和符号栈）就可以知道句柄是否出现在栈顶（而教科书中显示给出了栈是为了方便理解，在编译器实际处理过程中并不需要访问非栈顶元素），因为栈顶的状态符号包含了确定句柄所需要的一切信息。因此LR分析表的转移函数本质上等同于一个识别整个文法的活前缀和可归前缀的有限自动机。因此最直接的生成分析表的方法是构造一个NFA，其中所有产生式的每个项目都对应于NFA的一个状态，而规定拓展文法的开始符号的唯一产生式所对应的项目<code>S&#39;-&gt;·E</code>为初始状态。然后可以使用子集法把这个NFA确定化为一个DFA。但也可以不通过确定化NFA或正则文法构造分析表，这引入下面的方法。</p>
+<h1 id="自下而上的分析方法"><a href="#自下而上的分析方法" class="headerlink" title="自下而上的分析方法"></a>自下而上的分析方法</h1><p>首先需要介绍一下短语、直接短语和句柄的概念。首先这三个概念的范围是依次缩小的。短语指的是一个符号串，根据对定义的解释，一个句型的语法树中任一子树叶节点所组成的符号串γ都是该句型的短语。我们称γ为这个句型相对于A的短语，其中A为该子树对应的非终结符。直接短语相对于短语进一步要求选择的子树不应该含有其他子树，即它的孩子全部都是叶子。值得注意的是这<a href="http://blog.csdn.net/wulingmin21/article/details/7488500" target="_blank" rel="noopener">并不意味着这些叶子都是终结符</a>。<br>不同于自上而下的分析，自下而上的分析方法总是等到句柄（最左直接短语）出现后进行归约。分析器在读取输入串的每一个符号时要选择对这个符号是移进还是归约、按那个产生式规约（LR0，SLR1，LR1，LALR1文法的差别体现于此）。但无论如何先要找到句柄，因此引入活前缀的概念。<br>定义活前缀，<code>S&#39;=&gt;αAw=&gt;αβw</code>。假设这里w是终结符串，因此A是最右非终结符，这里是规范（最右）推导过程。如果符号串γ是αβ的前缀，那么γ是S的一个活前缀。根据定义，β是句型αβw相对于非终结符A的短语。γ是规范句型（也就是右句型，最右推导得到的句型）的前缀，而一旦栈中出现αβ，也就是形成了A的句柄，那么就可以按照<code>A-&gt;β</code>归约，因此，只要输入串的已扫描部分可以归约成一个活前缀，那就意味着已经扫描的部分没有错误。LR分析栈中的文法符号总是构成活前缀。<br>LR分析器不需要扫描整个分析栈（状态栈和符号栈）就可以知道句柄是否出现在栈顶（而教科书中显示给出了栈是为了方便理解，在编译器实际处理过程中并不需要访问非栈顶元素），因为栈顶的状态符号包含了确定句柄所需要的一切信息。因此LR分析表的转移函数本质上等同于一个识别整个文法的活前缀和可归前缀的有限自动机。因此最直接的生成分析表的方法是构造一个NFA，其中所有产生式的每个项目都对应于NFA的一个状态，而规定拓展文法的开始符号的唯一产生式所对应的项目<code>S&#39;-&gt;·E</code>为初始状态。然后可以使用子集法把这个NFA确定化为一个DFA。但也可以不通过确定化NFA或正则文法构造分析表，这引入下面的方法。</p>
 <h2 id="LR-0-分析表的一般构造方法"><a href="#LR-0-分析表的一般构造方法" class="headerlink" title="LR(0)分析表的一般构造方法"></a>LR(0)分析表的一般构造方法</h2><p>首先定义<strong>项目集规范族</strong>。定义项目集I是一组项目的集合，对应着DFA中的一个状态。定义构成识别一个文法活前缀的<strong>DFA项目集（状态）的全体</strong>称为这个文法的项目集规范族。项目集规范族包含一组项目集。<br>闭包CLOSURE是针对一个项目集I而言的。闭包的求法：</p>
 <ol>
 <li>I属于闭包</li>
@@ -660,7 +662,7 @@ endif_stmt : YY_END YY_IF
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">100</span>
+                <span class="site-state-item-count">101</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -673,7 +675,7 @@ endif_stmt : YY_END YY_IF
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">115</span>
+                <span class="site-state-item-count">118</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

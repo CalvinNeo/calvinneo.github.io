@@ -91,11 +91,13 @@
 
 
 <meta name="description" content="今天在MSVC2015上在用for遍历std::vector&amp;lt;T&amp;gt;时遇到一个Access Violation错误，关键代码如下1234for (auto i = v.size() - 1; i &amp;gt;= 0; i--)&amp;#123;	// ...&amp;#125;">
+<meta name="keywords" content="C++,auto,编译器优化">
 <meta property="og:type" content="article">
 <meta property="og:title" content="C++中编译器优化导致的一个问题">
 <meta property="og:url" content="http://www.calvinneo.com/2017/01/27/C++中编译器优化导致的一个问题/index.html">
-<meta property="og:site_name" content="Calvin's Marbles">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="今天在MSVC2015上在用for遍历std::vector&amp;lt;T&amp;gt;时遇到一个Access Violation错误，关键代码如下1234for (auto i = v.size() - 1; i &amp;gt;= 0; i--)&amp;#123;	// ...&amp;#125;">
+<meta property="og:locale" content="zh-Hans">
 <meta property="og:updated_time" content="2018-01-19T08:54:58.688Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="C++中编译器优化导致的一个问题">
@@ -383,9 +385,9 @@
       
 
       
-        <p>今天在MSVC2015上在用<code>for</code>遍历<code>std::vector&lt;T&gt;</code>时遇到一个Access Violation错误，关键代码如下<br><figure class="highlight matlab"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">for</span> (auto <span class="built_in">i</span> = v.<span class="built_in">size</span>() - <span class="number">1</span>; <span class="built_in">i</span> &gt;= <span class="number">0</span>; <span class="built_in">i</span>--)</div><div class="line">&#123;</div><div class="line">	// ...</div><div class="line">&#125;</div></pre></td></tr></table></figure></p>
+        <p>今天在MSVC2015上在用<code>for</code>遍历<code>std::vector&lt;T&gt;</code>时遇到一个Access Violation错误，关键代码如下<br><figure class="highlight matlab"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> (auto <span class="built_in">i</span> = v.<span class="built_in">size</span>() - <span class="number">1</span>; <span class="built_in">i</span> &gt;= <span class="number">0</span>; <span class="built_in">i</span>--)</span><br><span class="line">&#123;</span><br><span class="line">	// ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
 <a id="more"></a>
-<p>原因是C语言中一个符号数和一个无符号数进行运算时首先要将符号数转为无符号数，所以编译器会自动推导<code>i</code>的类型为<code>auto = size_t</code>。而对于无符号整数，编译器认为<code>i &gt;= 0</code>是一直成立的，如果循环体中不使用<code>i</code>，编译器很可能会优化成死循环。但即使编译器不做优化这个代码也不正确，当<code>v.size()</code>为0时，无论是有符号的减法还是无符号的减法，<code>i</code>的二进制表示都会是<code>0xffffffff</code>。而<code>0xffffffff</code>在无符号数里面是<code>UINT32_MAX</code>，而在有符号数里面是-1.于是将代码改成下面这样子后运行就正常了。<br><figure class="highlight arduino"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">int</span> vsize = v.<span class="built_in">size</span>(); <span class="comment">// 转换为有符号数</span></div><div class="line"><span class="built_in">for</span> (<span class="keyword">auto</span> i = vsize - <span class="number">1</span>; i &gt;= <span class="number">0</span>; i--)</div><div class="line">&#123;</div><div class="line">	s.push(make_pair(v[i], deep + <span class="number">1</span>));</div><div class="line">&#125;</div></pre></td></tr></table></figure></p>
+<p>原因是C语言中一个符号数和一个无符号数进行运算时首先要将符号数转为无符号数，所以编译器会自动推导<code>i</code>的类型为<code>auto = size_t</code>。而对于无符号整数，编译器认为<code>i &gt;= 0</code>是一直成立的，如果循环体中不使用<code>i</code>，编译器很可能会优化成死循环。但即使编译器不做优化这个代码也不正确，当<code>v.size()</code>为0时，无论是有符号的减法还是无符号的减法，<code>i</code>的二进制表示都会是<code>0xffffffff</code>。而<code>0xffffffff</code>在无符号数里面是<code>UINT32_MAX</code>，而在有符号数里面是-1.于是将代码改成下面这样子后运行就正常了。<br><figure class="highlight arduino"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">int</span> vsize = v.<span class="built_in">size</span>(); <span class="comment">// 转换为有符号数</span></span><br><span class="line"><span class="built_in">for</span> (<span class="keyword">auto</span> i = vsize - <span class="number">1</span>; i &gt;= <span class="number">0</span>; i--)</span><br><span class="line">&#123;</span><br><span class="line">	s.push(make_pair(v[i], deep + <span class="number">1</span>));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
 <p>在使用无符号类型时需要特别注意溢出问题，还有一个常见的错误来自于从有符号数到无符号数的narrowing conversion，在CSAPP2.2.8中给出了一个<code>getpeername</code>中的漏洞以说明窄化转换造成的非法读取。<br>其实在使用<code>auto</code>时坑还是比较多的，一个常见的就是<code>std::vector&lt;bool&gt;</code>的问题。众所周知<code>std::vector&lt;bool&gt;</code>被全特化了，是个超级大坑。全特化原因很容易理解，节省空间嘛，搞成一个动态的bitset。由此带来的影响是<code>reference</code>类型不再是<code>bool &amp;</code>而是一个代理类，在MSVC2015中是<code>_Vb_reference</code>，通过<code>_Vb_reference</code>重载的<code>opertor=</code>和<code>operator bool</code>进行读写。这时候用<code>auto &amp; = vec[0]</code>就会报错，原因是不能将左值引用绑定到右值上（不过MSVC2015很著名地允许这种写法）。</p>
 
       
@@ -536,7 +538,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">100</span>
+                <span class="site-state-item-count">101</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -549,7 +551,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">115</span>
+                <span class="site-state-item-count">118</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

@@ -91,12 +91,14 @@
 
 
 <meta name="description" content="总结一下最大流的各种算法">
+<meta name="keywords" content="ACM,图论">
 <meta property="og:type" content="article">
 <meta property="og:title" content="最大流">
 <meta property="og:url" content="http://www.calvinneo.com/2016/10/14/最大流/index.html">
-<meta property="og:site_name" content="Calvin's Marbles">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="总结一下最大流的各种算法">
-<meta property="og:updated_time" content="2016-10-17T03:01:15.294Z">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2018-04-05T15:48:44.992Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="最大流">
 <meta name="twitter:description" content="总结一下最大流的各种算法">
@@ -384,19 +386,20 @@
 
       
         <p>总结一下最大流的各种算法<br><a id="more"></a></p>
-<h1 id="最大流问题"><a href="#最大流问题" class="headerlink" title="最大流问题"></a>最大流问题</h1><p>设赋权<strong>有向图</strong>D(V,E,C)，其中每一条边的权值c∈C表示这条边的容量。流<code>f : V * V -&gt; R</code>是对于边e∈E的函数，且必须满足：</p>
-<blockquote>
-<p>f(u,v) &lt;= c(u,v)<br>f(u,v) = -f(v,u)<br>Σf(u,*) = 0, u不是S和T</p>
-</blockquote>
-<p>以上三个条件保证了每条边的流量|f(u,v)|（流出即为负流量）不能超过容量、流经中间节点的流量无损耗。<br>特别注意，对于条件2，可以得到只要有向边(u,v)上存在流f(u,v)，那有向边(v,u)（该边可能不存在，这意味着c(v,u)=0）上必然存在<code>f(v,u) = -f(u,v)</code>。但是实际上我们只考虑流量为正的边，所以在一些教程上也只画出了这样的边。<br>最大流问题就是求解从源S（唯一的开始节点）能够流出的最大流量，也就是汇T（唯一的结束节点）能够得到的最大流量。</p>
-<h1 id="Ford-Fulkerson方法"><a href="#Ford-Fulkerson方法" class="headerlink" title="Ford Fulkerson方法"></a>Ford Fulkerson方法</h1><h2 id="最大流最小割定理"><a href="#最大流最小割定理" class="headerlink" title="最大流最小割定理"></a>最大流最小割定理</h2><p>对于网络流G(V,E)，以下命题等价：</p>
+<h1 id="最大流问题"><a href="#最大流问题" class="headerlink" title="最大流问题"></a>最大流问题</h1><p>设赋权<strong>有向图</strong> $D(V,E,C)$，其中每一条边的权值$c \in C$表示这条边的容量。流$f: V * V \rightarrow R$是对于边$e \in E$的函数。我们定义唯一的开始节点$S$是源，只发出流量；唯一的结束节点$T$是汇，只接受流量。一个流网络具有以下的形式</p>
+<ol>
+<li>流入流量取正号，流出流量取负号</li>
+<li>每条边的流量$|f(u,v)|$不能超过容量</li>
+<li>流经中间节点的流量无损耗</li>
+</ol>
+<p>形式化的表述如下<br>$$<br>f(u, v) = -f(v,u) \\<br>f(u, v) \le c(u,v) \\<br>Σf(u, *) = 0, u \notin \{S, T\} \\<br>$$</p>
+<p>特别注意对于条件1，可以得到只要有向边$(u,v)$上存在流$f(u,v)$，那有向边$(v,u)$上必然存在$f(v,u) = -f(u,v)$。特别地该边不存在的情况可以表示成$c(v,u)=0$，但是实际上我们只考虑流量为正的边，所以在一些教程上也只画出了这样的边。<br>最大流问题就是求解通过流网络从源$S$能够流出的最大流量，也就是汇$T$能够得到的最大流量。</p>
+<h1 id="Ford-Fulkerson方法"><a href="#Ford-Fulkerson方法" class="headerlink" title="Ford Fulkerson方法"></a>Ford Fulkerson方法</h1><h2 id="最大流最小割定理"><a href="#最大流最小割定理" class="headerlink" title="最大流最小割定理"></a>最大流最小割定理</h2><p>对于网络流$G(V,E)$，以下命题等价：</p>
 <blockquote>
 <p>f是G的最大流<br>残余网络不存在增广路径<br>最大流的值就是这个网络的最小割。</p>
 </blockquote>
-<h3 id="残量网络"><a href="#残量网络" class="headerlink" title="残量网络"></a>残量网络</h3><p>残量网络是一个双向图。<br>定义剩余容量cv(u,v)</p>
-<pre><code>c(u,v) - f(u,v)                 若(u,v)∈E
-</code></pre><p>由cv为权的新有向图称为残量网络。并且当f(u,v)为负数时，cv(u,v)会大于c(u,v)。</p>
-<h3 id="增广路径"><a href="#增广路径" class="headerlink" title="增广路径"></a>增广路径</h3><h3 id="Ford-Fulkerson方法的Edmonds-Karp实现"><a href="#Ford-Fulkerson方法的Edmonds-Karp实现" class="headerlink" title="Ford Fulkerson方法的Edmonds Karp实现"></a>Ford Fulkerson方法的Edmonds Karp实现</h3><p>与朴素Ford-Fulkerson算法不同的是Edmonds-Karp要求每次找长度最短的增广路径，即使用BFS查找增广路径。<br>时间复杂度是O(n*m²)，空间复杂度是O(n²)。</p>
+<h3 id="残量网络"><a href="#残量网络" class="headerlink" title="残量网络"></a>残量网络</h3><p>残量网络是一个双向图。<br>定义剩余容量$cv(u,v)$<br>$$<br>c(u,v) - f(u,v) \qquad 若(u,v) \in E<br>$$<br>由cv为权的新有向图称为残量网络。并且当$f(u,v)$为负数时，$cv(u,v)$会大于$c(u,v)$。</p>
+<h3 id="增广路径"><a href="#增广路径" class="headerlink" title="增广路径"></a>增广路径</h3><h3 id="Ford-Fulkerson方法的Edmonds-Karp实现"><a href="#Ford-Fulkerson方法的Edmonds-Karp实现" class="headerlink" title="Ford Fulkerson方法的Edmonds Karp实现"></a>Ford Fulkerson方法的Edmonds Karp实现</h3><p>与朴素Ford-Fulkerson算法不同的是Edmonds-Karp要求每次找长度最短的增广路径，即使用BFS查找增广路径。<br>时间复杂度是$O(n  m^2)$，空间复杂度是$O(n^2)$。</p>
 <h1 id="Dinic算法"><a href="#Dinic算法" class="headerlink" title="Dinic算法"></a>Dinic算法</h1><h1 id="SAP算法"><a href="#SAP算法" class="headerlink" title="SAP算法"></a>SAP算法</h1>
       
     </div>
@@ -553,7 +556,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">100</span>
+                <span class="site-state-item-count">101</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -566,7 +569,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">115</span>
+                <span class="site-state-item-count">118</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -1160,6 +1163,28 @@
   
 
   
+  
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Config({
+        tex2jax: {
+          inlineMath: [ ['$','$'], ["\\(","\\)"]  ],
+          processEscapes: true,
+          skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+        }
+      });
+    </script>
+
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax(), i;
+        for (i=0; i < all.length; i += 1) {
+          all[i].SourceElement().parentNode.className += ' has-jax';
+        }
+      });
+    </script>
+    <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+  
+
 
   
 
