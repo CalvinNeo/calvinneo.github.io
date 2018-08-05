@@ -98,7 +98,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="C++历史概述C++是一门历史悠久的语言，原来叫C with classes，自1979年以来已经出现了98/03/11/14/17五个标准，因此C++中的Workaround和Best practice是随着标准演化而推进的。因此这里首先概览一下C++从开始设计以来的特性的引入、废止与更新的过程，以及对C++11及以后引入的重要特性的一些论述。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2018-07-25T09:57:25.156Z">
+<meta property="og:updated_time" content="2018-07-29T14:47:01.951Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="C++历史标准的发展及常见的Workaround和最佳实践">
 <meta name="twitter:description" content="C++历史概述C++是一门历史悠久的语言，原来叫C with classes，自1979年以来已经出现了98/03/11/14/17五个标准，因此C++中的Workaround和Best practice是随着标准演化而推进的。因此这里首先概览一下C++从开始设计以来的特性的引入、废止与更新的过程，以及对C++11及以后引入的重要特性的一些论述。">
@@ -391,9 +391,9 @@
 <ol>
 <li><p><code>auto</code>/<code>decltype</code>、尾随返回类型(trailing)</p>
  <figure class="highlight arduino"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">template</span>&lt;<span class="keyword">typename</span> T, <span class="keyword">typename</span> U&gt;</span><br><span class="line"><span class="keyword">auto</span> add(T x, U y) -&gt; <span class="keyword">decltype</span>(x + y)&#123;</span><br><span class="line">    <span class="built_in">return</span> x + y;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p> <code>decltype</code>和完美转发能够非常方便地替换<code>result_type</code>、<code>argument_type</code>之类的手动实现，于是在C++17中，这些机制被去除了。与之同时被去除的还有<code>result_of</code>现在变为<code>invoke_result</code></p>
 </li>
-<li><p>右值/移动语义<br> 详见我的文章<a href="/2017/02/11/C++右值/">C++右值</a></p>
-</li>
+<li>右值/移动语义/完美转发<br> 详见我的文章<a href="/2017/02/11/C++右值/">C++右值</a></li>
 <li>enum class</li>
 <li><code>=delete</code>和<code>=default</code></li>
 <li><code>final</code>/<code>override</code></li>
@@ -491,7 +491,7 @@
 <li><code>if</code>和<code>switch</code>里面也可以定义变量了，这个特性也不错</li>
 <li>copy-initialization and direct-initialization of objects of type T from prvalue expressions of type T (ignoring top-level cv-qualifiers) shall result in no copy or move constructors from the prvalue expression.</li>
 <li>Some extensions on over-aligned memory allocation</li>
-<li><p>构造函数可以模板推导了<br>下面的代码在C++17是可行的。这个之前在VS2015上写CFortranTranslator的时候就想有，上SoF查了一下发现原来真有，可惜是C++17，所以只能函数模板封装一层。</p>
+<li><p>构造函数可以模板推导了<br>下面的代码在C++17是可行的。这个之前在VS2015上写CFortranTranslator的时候就想有，上SoF查了一下发现原来真有，可惜是C++17，所以只能函数模板封装一层，做成<code>make_</code>系函数，估计C++20之后标准库里面这些<code>make_</code>函数都要deprecate吧。</p>
 <figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// C++17</span></span><br><span class="line"><span class="built_in">std</span>::pair(<span class="number">5.0</span>, <span class="literal">false</span>);</span><br><span class="line"><span class="comment">// C++14</span></span><br><span class="line"><span class="built_in">std</span>::pair&lt;<span class="keyword">double</span>,<span class="keyword">bool</span>&gt;(<span class="number">5.0</span>, <span class="literal">false</span>);</span><br></pre></td></tr></table></figure>
 </li>
 <li><p>Inline variable<br>在我的<a href="/2017/01/02/C++static-usage/">博文</a>中指出了这个特性的作用，以及没有这个特性之前的丑陋的Workaround</p>
@@ -526,6 +526,7 @@
 <li>缓冲区溢出<br> 由于现行冯洛伊曼架构，这个是老生常谈的话题了，由此还派生出专门的栈/<strong>堆</strong>溢出攻击。在C++层面，我们需要审慎使用<code>sprintf</code>或者<code>strcpy</code>等函数，或者使用能显式指定长度的<code>_s</code>系函数。在系统层面，有一些<a href="https://www.ibm.com/developerworks/cn/linux/l-sp/part4/index.html" target="_blank" rel="noopener">常见的方法</a>，例如金丝雀值。</li>
 <li>内存泄露<br> 假设我们的程序是一个批处理程序，那么内存泄露其实影响有限，如果我们能够确保我们的代码逻辑是没有问题的话。</li>
 <li>double free<br> double free一个悬空指针产生的问题相对内存泄露的<strong>后果</strong>要严重多，因为它会导致SegmentFault或者Double free or corruption。但一般来说这样的RE甚至是好事情，double free问题通常意味着代码存在严重的逻辑错误，这时候RE至少能dump，总比WA之后穷查log要好吧。</li>
+<li>非法访问<br> 非法访问包括访问越界地址和访问未初始化（完毕）或者被销毁的的变量。例如我们删除了某个指针，但没有置指针值为<code>nullptr</code>，那么现在这个指针就称为悬空指针，对它进行访问会造成Access Violation等错误。<br> C++中对此还有一些更为隐晦的规则，例如C++中在构造函数和析构函数中不能访问虚函数。或者有时候大家会情不自禁用一个被删除的对象来进行复制构造，抑或返回一个自动变量的指针等。</li>
 <li>new/delete不配对<br> 有关new/delete的问题可以查看我的文章<a href="/2016/12/30/C++初始化方式/">C++初始化方式</a></li>
 <li>内存碎片<br> 这个是一个复杂的问题。</li>
 </ol>
@@ -684,7 +685,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">106</span>
+                <span class="site-state-item-count">108</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -697,7 +698,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">121</span>
+                <span class="site-state-item-count">122</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

@@ -98,10 +98,12 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="对Effective C++在资源管理部分的内容进行总结。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2018-01-16T15:15:56.147Z">
+<meta property="og:image" content="http://www.calvinneo.com/img/cpp_res/linux_image.jpg">
+<meta property="og:updated_time" content="2018-07-31T06:53:19.524Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="C++资源管理">
 <meta name="twitter:description" content="对Effective C++在资源管理部分的内容进行总结。">
+<meta name="twitter:image" content="http://www.calvinneo.com/img/cpp_res/linux_image.jpg">
 
 
 
@@ -386,16 +388,17 @@
 
       
         <p>对Effective C++在资源管理部分的内容进行总结。<br><a id="more"></a></p>
-<h1 id="C-运行时内存"><a href="#C-运行时内存" class="headerlink" title="C++运行时内存"></a>C++运行时内存</h1><p>C++运行时内存主要分为常量区、全局/静态变量区、栈区、堆区和自由存储区。其中前两者存在于程序的整个生命周期，栈中的变量由编译器自动分配和清除，所以称作自动变量。堆区由new调用构造函数初始化，由delete调用析构函数回收。自由存储区由malloc分配一块指定大小的内存，由free释放。</p>
-<h1 id="RAII"><a href="#RAII" class="headerlink" title="RAII"></a>RAII</h1><p>可以看出对于动态分配的内存（堆和自由存储）必须能够在适当时机调用delete/free进行释放，否则会造成泄露，也有可能某处代码在先前已经delete/free了，造成悬空指针undefined behaviour。当然可以建立一张表（称为对象池）登记这些指针，当满足一些条件的时候进行删除的手动管理。不过最好的方法是通过RAII借助编译器管理指针。<br>编译器的自动回收机制包含了栈和对象两种。其中栈能够管理自动对象，但是它只会清除指针本身而非指针指向对象。</p>
+<h1 id="C-运行时内存"><a href="#C-运行时内存" class="headerlink" title="C++运行时内存"></a>C++运行时内存</h1><p>C++运行时内存主要分为data、bss(Block Started by Symbol)、stack、heap和常量区（包含init、text和rodata段）。其中bss段存储程序中<strong>未</strong>被初始化的变量（全局变量和static local），它们在程序运行开始前会被初始化为0，对应到C++中就是做了zero initialization，详见<a href="/2016/12/30/C++初始化方式/">我的博文</a>。这么做的目的是为了优化可执行文件的大小，考虑到我们未给这些变量赋值，所以他们在可执行文件并不存在实体，所谓的bss段在可执行文件中只是一个placeholder。data段则相反，存储程序中已经被初始化的变量。stack中的变量由编译器自动分配和清除，所以称作自动变量。heap区由<code>new</code>调用构造函数初始化，由<code>delete</code>调用析构函数回收。在部分文章中还将heap进一步细化出一个自由存储区，指由C系函数<code>malloc</code>等分配并由<code>free</code>等释放的内存。<br><figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// Demo in https://stackoverflow.com/questions/30838144/what-all-local-variables-goto-data-bss-segment</span></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">foo</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">static</span> <span class="keyword">char</span> array1[<span class="number">256</span>] = <span class="string">""</span>;            <span class="comment">// Goes in BSS, probably</span></span><br><span class="line">    <span class="keyword">static</span> <span class="keyword">char</span> array2[<span class="number">256</span>] = <span class="string">"ABCDEFXYZ"</span>;  <span class="comment">// Goes in Data</span></span><br><span class="line">    <span class="keyword">static</span> <span class="keyword">const</span> <span class="keyword">char</span> <span class="built_in">string</span>[] = <span class="string">"Kleptomanic Hypochondriac"</span>; <span class="comment">// Goes in Text, probably</span></span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p><img src="/img/cpp_res/linux_image.jpg" alt=""></p>
+<h1 id="RAII"><a href="#RAII" class="headerlink" title="RAII"></a>RAII</h1><p>可以看出对于动态分配的内存（堆和自由存储）必须能够在适当时机调用<code>delete</code>/<code>free</code>进行释放，否则会造成泄露，也有可能某处代码在先前已经<code>delete</code>/<code>free</code>了，造成悬空指针undefined behaviour。当然可以建立一张表（称为对象池）登记这些指针，当满足一些条件的时候进行删除的手动管理。一个Best Practice是通过RAII借助栈来管理对象。</p>
 <h1 id="复制"><a href="#复制" class="headerlink" title="复制"></a>复制</h1><p>一般对象之间的复制行为分为4种：</p>
 <ol>
 <li>浅复制：浅复制也是默认复制构造函数的实现，将源对象中的成员复制到新的对象中。因此如果源对象中存在指针，那么实际上源对象和新对象是共享指针指向的对象的，这并不是一个错误的逻辑，但是问题在于新老对象都没有意识到自己和别的对象共享着资源，如果存在析构函数（除非使用手动管理，否则必然要有析构函数用来释放指针指向对象），那么必然会造成悬空指针。</li>
 <li>深复制：需要自定义复制构造函数，在复制行为发生时递归地建立对象成员以及指针指向对象的副本。</li>
-<li>资源控制权转移：资源占用具有排他性</li>
-<li>资源控制权共享：类似于浅复制，但是这种方案解决了资源释放的问题，对于需要共享的资源设置引用计数，当引用计数变为0时销毁对象，而不再通过构造函数。</li>
+<li>资源控制权转移：资源占用具有排他性，这种有点类似于Rust的语义，其实应当作为移动语义来看。常见的有<code>std::unique_ptr</code>来维护这种语义。</li>
+<li>资源控制权共享：对应起来看就是<code>std::shared_ptr</code>，但这种方案解决了资源释放的问题，对于需要共享的资源设置引用计数，当引用计数变为0时销毁对象，而不再通过构造函数。</li>
 </ol>
-<h2 id="深复制"><a href="#深复制" class="headerlink" title="深复制"></a>深复制</h2><p>在深复制中可能存在一个问题，假设有若干个派生类继承基类<code>Derived_i : public Base</code>，现在有一个<code>Base * d</code>，但是不知道具体类型，现在希望对这个基类进行深复制。直接调用基类的复制构造函数<code>Base p = new Base(d)</code>显然是行不通的，一方面C++没有提供虚复制构造函数。常用的办法是自己定义一个clone函数。同样地，对于其他的构造函数，也是不存在多态的，因此如果需要对于不同的参数返回不同的派生类的指针，可以通过定义一个工厂函数来解决。<br>对于没有使用继承或派生的类型，当然可以定义三个函数（复制、赋值、析构）进行深复制，假设复制对象obj，可以认为复制了一棵树，树中任何节点（成员）的析构都会导致该节点为树根的子树被删除，所以对于这棵树只能修改树根或叶子，否则会造成内存泄露。</p>
+<h2 id="深复制"><a href="#深复制" class="headerlink" title="深复制"></a>深复制</h2><p>在深复制中可能存在一个问题，假设有若干个派生类继承基类<code>Derived_i : public Base</code>，现在有一个<code>Base * d</code>，但是不知道具体类型，现在希望对这个基类进行深复制。直接调用基类的复制构造函数<code>Base p = new Base(d)</code>显然是行不通的，这是因为C++标准规定了复制构造函数，包括构造函数都不能是虚的。<a href="https://stackoverflow.com/questions/9889488/can-we-make-a-class-copy-constructor-virtual-in-c" target="_blank" rel="noopener">StackOverflow上详细地说明了原因</a>，这是因为C++是静态类型的，所以多态地创建对象没有意义的。常用的办法是自己定义一个clone函数。同样地，对于其他的构造函数，也是不存在多态的，因此如果需要对于不同的参数返回不同的派生类的指针，可以通过定义一个工厂函数来解决。当然对于非继承的类型，当然可以定义三个函数（复制、赋值、析构）进行深复制，假设复制对象obj，可以认为复制了一棵树，树中任何节点（成员）的析构都会导致该节点为树根的子树被删除，所以对于这棵树只能修改树根或叶子，否则会造成内存泄露。</p>
 <h2 id="复制构造函数和赋值构造函数"><a href="#复制构造函数和赋值构造函数" class="headerlink" title="复制构造函数和赋值构造函数"></a>复制构造函数和赋值构造函数</h2><p>复制构造函数指的形如<code>T(const T &amp;)</code>的构造函数，涉及到C++的复制初始化。其中复制构造函数常被定义为<code>explicit</code>的，此时必须显式地使用该构造函数。在C++11标准之后扩大了范围，将非explicit构造函数都称为转换构造函数。这里要区分转换构造函数<code>T::T(const U &amp;)</code>和类型转换运算符<code>operator T::U()</code>，前者是从<code>U</code>构造<code>T</code>，后者是从自己<code>T</code>构造<code>U</code>。类型转换运算符有很多的作用，常见的是实现将函数返回值加入重载决议。<br>赋值运算符指的形如<code>T &amp; operator=(const T &amp;)</code>的运算符，指的是赋值而不是初始化操作。</p>
 
       
@@ -555,7 +558,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">106</span>
+                <span class="site-state-item-count">108</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -568,7 +571,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">121</span>
+                <span class="site-state-item-count">122</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
