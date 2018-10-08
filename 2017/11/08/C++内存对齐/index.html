@@ -98,7 +98,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="最近在看Inside the C++ Object Model，一种日经面试题，求sizeof(A)12345678910struct A&amp;#123;    char c;    int i;    long long ll;    int j;    virtual void f()&amp;#123;&amp;#125;;&amp;#125;;struct B&amp;#123;&amp;#125;; 这种题目其实考的知识点很多，包">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2018-07-23T14:09:49.689Z">
+<meta property="og:updated_time" content="2018-08-12T12:59:36.108Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="C++内存对齐与多态">
 <meta name="twitter:description" content="最近在看Inside the C++ Object Model，一种日经面试题，求sizeof(A)12345678910struct A&amp;#123;    char c;    int i;    long long ll;    int j;    virtual void f()&amp;#123;&amp;#125;;&amp;#125;;struct B&amp;#123;&amp;#125;; 这种题目其实考的知识点很多，包">
@@ -387,7 +387,7 @@
       
         <p>最近在看Inside the C++ Object Model，一种日经面试题，求<code>sizeof(A)</code><br><figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">A</span>&#123;</span></span><br><span class="line">    <span class="keyword">char</span> c;</span><br><span class="line">    <span class="keyword">int</span> i;</span><br><span class="line">    <span class="keyword">long</span> <span class="keyword">long</span> ll;</span><br><span class="line">    <span class="keyword">int</span> j;</span><br><span class="line">    <span class="function"><span class="keyword">virtual</span> <span class="keyword">void</span> <span class="title">f</span><span class="params">()</span></span>&#123;&#125;;</span><br><span class="line">&#125;;</span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">B</span>&#123;</span></span><br><span class="line"></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure></p>
 <p>这种题目其实考的知识点很多，包含了虚函数虚继承、内存对齐等一系列C++的语言特性。<br><a id="more"></a></p>
-<h1 id="普通情况下的align和padding"><a href="#普通情况下的align和padding" class="headerlink" title="普通情况下的align和padding"></a>普通情况下的align和padding</h1><p>首先，<code>int</code>长度是不固定的，与编译器和平台有关，所以首先可以回答“不知道”。但假设是按“通常情况来计算”，于是埋头苦算。<br>恩，出现了虚（包括构造、析构）函数就要创建虚表，在对象中会储存一个虚指针vptr，根据指令集字长定。这里可以考虑为4。但下面不能简单相加了，在实际输出下，答案是32。<br>究其原因是C++的内存对齐机制，对齐要求来自于一些CPU的架构、编译器或者系统设计上的考虑，在对齐的存储下，有些存储操作是原子的，所以可以很快。根据标准，对齐应该遵守下面的规则：</p>
+<h1 id="普通情况和继承条件下的align和padding"><a href="#普通情况和继承条件下的align和padding" class="headerlink" title="普通情况和继承条件下的align和padding"></a>普通情况和继承条件下的align和padding</h1><p>首先，<code>int</code>长度是不固定的，与编译器和平台有关，所以首先可以回答“不知道”。但假设是按“通常情况来计算”，于是埋头苦算。<br>恩，出现了虚（包括构造、析构）函数就要创建虚表，在对象中会储存一个虚指针vptr，根据指令集字长定。这里可以考虑为4。但下面不能简单相加了，在实际输出下，答案是32。<br>究其原因是C++的内存对齐机制，对齐要求来自于一些CPU的架构、编译器或者系统设计上的考虑，在对齐的存储下，有些存储操作是原子的，所以可以很快。根据标准，对齐应该遵守下面的规则：</p>
 <ol>
 <li>每个成员应该对其到它的大小，即开始位置应当能够被其size整除</li>
 <li>整个struct按最大成员大小进行对齐<br>在对齐的情况下，对象的大小也会改变。根据Inside the C++ Object Model Ch1.3中的注解，一个class object的大小包括其non-static data members的总大小，加上保持alignment时需要padding上去的空间（在members之间以及在objects之间），以及维持虚函数等的开销。因此上面的结构等价于<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">void</span> * vftable; <span class="comment">// 4</span></span><br><span class="line"><span class="keyword">char</span> c; <span class="comment">// 5</span></span><br><span class="line"><span class="keyword">char</span> gap[<span class="number">3</span>]; <span class="comment">// 8</span></span><br><span class="line"><span class="keyword">int</span> i; <span class="comment">// 12</span></span><br><span class="line"><span class="keyword">char</span> gap[<span class="number">4</span>]; <span class="comment">// 16</span></span><br><span class="line"><span class="keyword">long</span> <span class="keyword">long</span> ll; <span class="comment">// 24</span></span><br><span class="line"><span class="keyword">int</span> j; <span class="comment">// 28</span></span><br><span class="line"><span class="keyword">char</span> gap[<span class="number">4</span>]; <span class="comment">// 32</span></span><br></pre></td></tr></table></figure>
@@ -555,7 +555,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">108</span>
+                <span class="site-state-item-count">109</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -654,7 +654,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#普通情况下的align和padding"><span class="nav-number">1.</span> <span class="nav-text">普通情况下的align和padding</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#虚继承下的align和padding"><span class="nav-number">2.</span> <span class="nav-text">虚继承下的align和padding</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#虚函数-虚继承"><span class="nav-number">3.</span> <span class="nav-text">虚函数+虚继承</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#控制对象对齐方式"><span class="nav-number">4.</span> <span class="nav-text">控制对象对齐方式</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#C语言中的规定"><span class="nav-number">4.1.</span> <span class="nav-text">C语言中的规定</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#C-11标准中的规定"><span class="nav-number">4.2.</span> <span class="nav-text">C++11标准中的规定</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#指针与对齐"><span class="nav-number">5.</span> <span class="nav-text">指针与对齐</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#普通情况和继承条件下的align和padding"><span class="nav-number">1.</span> <span class="nav-text">普通情况和继承条件下的align和padding</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#虚继承下的align和padding"><span class="nav-number">2.</span> <span class="nav-text">虚继承下的align和padding</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#虚函数-虚继承"><span class="nav-number">3.</span> <span class="nav-text">虚函数+虚继承</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#控制对象对齐方式"><span class="nav-number">4.</span> <span class="nav-text">控制对象对齐方式</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#C语言中的规定"><span class="nav-number">4.1.</span> <span class="nav-text">C语言中的规定</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#C-11标准中的规定"><span class="nav-number">4.2.</span> <span class="nav-text">C++11标准中的规定</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#指针与对齐"><span class="nav-number">5.</span> <span class="nav-text">指针与对齐</span></a></li></ol></div>
             
 
           </div>
@@ -703,7 +703,7 @@
 
         
 <div class="busuanzi-count">
-  <script async src="https://dn-lbstatics.qbox.me/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
   
     <span class="site-uv">
       <i class="fa fa-user"></i>

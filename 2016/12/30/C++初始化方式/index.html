@@ -98,7 +98,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="C++新标准之后对初始化方式有了很多的变动，现在的初始化方式主要可以分为五种来讨论，分别是list initialization、aggregate initialization、zero initialization、default initialization、value initialization。本文根据标准以及cppreference上的相关资料论述了这五种初始化方式，并讨论了POD、">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2018-07-23T12:31:42.439Z">
+<meta property="og:updated_time" content="2018-08-06T14:25:33.827Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="C++初始化方式">
 <meta name="twitter:description" content="C++新标准之后对初始化方式有了很多的变动，现在的初始化方式主要可以分为五种来讨论，分别是list initialization、aggregate initialization、zero initialization、default initialization、value initialization。本文根据标准以及cppreference上的相关资料论述了这五种初始化方式，并讨论了POD、">
@@ -396,7 +396,7 @@
 <figure class="highlight scala"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">T</span> <span class="class"><span class="keyword">object</span> </span>= other;</span><br><span class="line"><span class="comment">// C++11后归入列表初始化</span></span><br><span class="line"><span class="type">T</span> <span class="class"><span class="keyword">object</span> </span>= &#123;other&#125; ;</span><br><span class="line">f(other)</span><br><span class="line"><span class="keyword">return</span> other;</span><br><span class="line"><span class="keyword">throw</span> <span class="class"><span class="keyword">object</span></span>;</span><br><span class="line"><span class="keyword">catch</span> (<span class="type">T</span> <span class="class"><span class="keyword">object</span>)</span></span><br><span class="line"><span class="class"><span class="title">T</span> <span class="title">array</span>[<span class="type">N</span>] </span>= &#123;other&#125;;</span><br></pre></td></tr></table></figure>
 <p>复制初始化调用复制构造函数，注意到复制初始化不是赋值，例如<code>std::string s = &quot;hello&quot;;</code>是（先cast再）复制初始化，<code>std::string s; s = &quot;hello&quot;;</code>后一句是赋值。虽然通过copy elision技术编译器可以省略复制初始化时创建临时对象的开销，但是复制初始化和直接初始化具有显著的不同。例如当复制构造函数或移动构造函数都delete时，无法进行复制初始化，典型的例子是atomic类型（不过VS2015可以编译）<br><figure class="highlight elixir"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="symbol">std:</span><span class="symbol">:atmoic&lt;int&gt;</span> = <span class="number">10</span>;</span><br></pre></td></tr></table></figure></p>
 <h1 id="list-initialization"><a href="#list-initialization" class="headerlink" title="list initialization"></a>list initialization</h1><h2 id="花括号初始化器"><a href="#花括号初始化器" class="headerlink" title="花括号初始化器"></a>花括号初始化器</h2><p>在C++11标准中，花括号初始化器的功能被增强了。<br>注意到在C++11前，初始化和函数声明需要区分，例如<code>std::vector&lt;int&gt; X()</code>既可以被看做一个变量定义，也可以被看做函数声明，这被称为<a href="https://en.wikipedia.org/wiki/Most_vexing_parse" target="_blank" rel="noopener">Most vexing parse</a>。<br>Most vexing parse会造成二义性的问题，一个<code>int f(x)</code>，既可以被看做使用<strong>变量</strong><code>type_or_var</code>来构造的对象<code>f</code>，又可以看做一个接受<code>type_or_var</code>类型的函数，这从某些方面也是不别扭的，如果将构造函数看成一类特殊的函数的话。例如在下面的语句中，<code>TimeKeeper</code>和<code>Timer</code>都是用户自定义的类型，<br><figure class="highlight lisp"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">TimeKeeper time_keeper(<span class="name">Timer</span>())<span class="comment">;</span></span><br></pre></td></tr></table></figure></p>
-<p>那么<code>time_keeper</code>既可以按照我们希望的那样被看做一个变量定义，也可能被看做一个函数声明，这个函数返回一个<code>TimerKeeper</code>，接受一个参数，一个匿名的<strong>返回<code>Timer</code>的函数指针</strong>。对于这种二义性，C++标准指出按照第二种方式来解释。<br>为了解决这个问题，在C++11标准前可以通过加上一组括号来强制按照第一种方式解释<code>TimeKeeper time_keeper( (Timer()) )</code>，但是对于具有0个参数的constructor，我们不能写成<code>A (())</code>的形式，<a href="https://stackoverflow.com/questions/1424510/most-vexing-parse-why-doesnt-a-a-work" target="_blank" rel="noopener">StackOverflow</a>详细论述了这一点。我们要不写成复制初始化的形式<code>A a = A()</code>，要不就需要写成一种很丑的办法。例如对于内置变量写成<code>A a((0))</code>，对于非POD写成<code>A a</code>利用其默认初始化特性等。<br>在C++11后，可以通过称为<a href="https://en.wikipedia.org/wiki/C%2B%2B11#Uniform_initialization" target="_blank" rel="noopener">uniform initialization syntax</a>的方法，使用花括号初始化的形式<code>std::vector&lt;int&gt; X{}</code>，通过list initialization的决议，最终完成value initialization。</p>
+<p>那么<code>time_keeper</code>既可以按照我们希望的那样被看做一个变量定义，也可能被看做一个函数声明，这个函数返回一个<code>TimerKeeper</code>，接受一个参数，一个匿名的<strong>返回<code>Timer</code>的函数指针</strong>。对于这种二义性，C++标准指出按照第二种方式来解释。<br>为了解决这个问题，在C++11标准前可以通过加上一组括号来强制按照第一种方式解释<code>TimeKeeper time_keeper( (Timer()) )</code>，但是对于具有0个参数的constructor，我们不能写成<code>A (())</code>的形式，<a href="https://stackoverflow.com/questions/1424510/most-vexing-parse-why-doesnt-a-a-work" target="_blank" rel="noopener">StackOverflow</a>详细论述了这一点。我们要不写成复制初始化的形式<code>A a = A()</code>，要不就需要写成一种很丑的办法。例如对于内置变量写成<code>A a((0))</code>，对于非POD写成<code>A a</code>利用其默认初始化特性。在我的<a href="https://stackoverflow.com/questions/51707710/how-can-i-avoid-most-vexing-parse-with-direct-value-initialization" target="_blank" rel="noopener">一篇提问中详细地讨论了这个问题</a><br>在C++11后，可以通过称为<a href="https://en.wikipedia.org/wiki/C%2B%2B11#Uniform_initialization" target="_blank" rel="noopener">uniform initialization syntax</a>的方法，使用花括号初始化的形式<code>std::vector&lt;int&gt; X{}</code>，通过list initialization的决议，最终完成value initialization。</p>
 <h2 id="列表初始化"><a href="#列表初始化" class="headerlink" title="列表初始化"></a>列表初始化</h2><p>list initialization是使用braced-init-list（花括号初始化器）的初始化语句。<br>尽管aggregate initialization被视为一种初始化聚合体的list initialization，但aggregate initialization有着自己的特点，例如aggregate initialization直接不允许有用户定义的构造函数。但是对于非aggregate的list initialization，如果提供了相应构造函数，还可以花括号列表作为一个<code>std::initializer_list</code>对象传给对应函数。<br>当一个类定义了从<code>std::initializer_list</code>的构造函数后，对于使用<code>{}</code>语法将调用该构造函数，例如<code>std::vector&lt;int&gt;(10)</code>创建10个元素并对每个元素进行zero initialization，<code>std::vector&lt;int&gt;{10}</code>创建一个值是10的元素。<br>下面的几种场景下会导致list initialization，这里根据上面的直接初始化/复制初始化分为两种。</p>
 <ol>
 <li><p>direct-list-initialization</p>
@@ -688,7 +688,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">108</span>
+                <span class="site-state-item-count">109</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -836,7 +836,7 @@
 
         
 <div class="busuanzi-count">
-  <script async src="https://dn-lbstatics.qbox.me/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
   
     <span class="site-uv">
       <i class="fa fa-user"></i>

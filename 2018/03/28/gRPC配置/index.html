@@ -93,14 +93,14 @@
 <meta name="description" content="gRPC的配置真的是蛋疼。主要原因是官方的推荐方式是从源码编译。于是我首先花了一个下午用小水管clone了下gRPC和它的十来个三方库。">
 <meta name="keywords" content="gRPC,protobuf">
 <meta property="og:type" content="article">
-<meta property="og:title" content="gRPC配置">
+<meta property="og:title" content="gRPC配置与用法">
 <meta property="og:url" content="http://www.calvinneo.com/2018/03/28/gRPC配置/index.html">
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="gRPC的配置真的是蛋疼。主要原因是官方的推荐方式是从源码编译。于是我首先花了一个下午用小水管clone了下gRPC和它的十来个三方库。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2018-08-04T08:00:21.714Z">
+<meta property="og:updated_time" content="2018-08-11T13:32:17.942Z">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="gRPC配置">
+<meta name="twitter:title" content="gRPC配置与用法">
 <meta name="twitter:description" content="gRPC的配置真的是蛋疼。主要原因是官方的推荐方式是从源码编译。于是我首先花了一个下午用小水管clone了下gRPC和它的十来个三方库。">
 
 
@@ -135,7 +135,7 @@
 
 
 
-  <title>gRPC配置 | Calvin's Marbles</title>
+  <title>gRPC配置与用法 | Calvin's Marbles</title>
 </head>
 
 <body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
@@ -319,7 +319,7 @@
             
             
               
-                gRPC配置
+                gRPC配置与用法
               
             
           </h1>
@@ -389,10 +389,12 @@
 <h1 id="protobuf"><a href="#protobuf" class="headerlink" title="protobuf"></a>protobuf</h1><p>首先Ubuntu默认的protobuf是2.6.1，而Google给的helloworld示例需要protobuf 3才能编译，于是我们的protobuf也要从源码编译装一下。注意gRPC不会自动帮你make install protobuf，所以需要到<strong>third_party</strong>目录下找到protobuf的源码编译安装。其命令如下<br><figure class="highlight brainfuck"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">git</span> <span class="comment">submodule</span> <span class="comment">update</span> <span class="literal">-</span><span class="literal">-</span><span class="comment">init</span> <span class="literal">-</span><span class="literal">-</span><span class="comment">recursive</span></span><br></pre></td></tr></table></figure></p>
 <p>进入protobuf目录<br><figure class="highlight smali"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">.</span>/autogen</span><br><span class="line">make</span><br><span class="line">make check</span><br><span class="line">sudo make install</span><br><span class="line">sudo ldconfig</span><br></pre></td></tr></table></figure></p>
 <p>注意<code>./autogen</code>里面会下载gmock，可能会失败，这里可以直接进去注释掉相关语句。</p>
-<h1 id="使用cmake编译gRPC"><a href="#使用cmake编译gRPC" class="headerlink" title="使用cmake编译gRPC"></a>使用cmake编译gRPC</h1><p>在编译gRPC项目时，对于客户端会生成<strong>.pb.h</strong>和<strong>.pb.cc</strong>两个文件；但是服务端则需要<strong>.grpc.pb.h</strong>和<strong>.grpc.pb.cc</strong>两个文件。这四个文件是由protoc通过不同的指令生成的，如下所示，这里<code>grpc_out</code>即表示生成服务端需要使用的带<strong>.grpc.pb</strong>系文件，<code>plugin</code>字段需要我们指明<strong>grpc_cpp_plugin</strong>这个插件所在的位置。如果我们从源码编译安装的话，这个插件一般会在<strong>/usr/local/lib</strong>里面，我们一般需要将这个路径export出来<br><figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="builtin-name">export</span> <span class="attribute">LD_LIBRARY_PATH</span>=/usr/local/lib:$LD_LIBRARY_PATH</span><br></pre></td></tr></table></figure></p>
-<p>当然也可以运行<a href="https://github.com/CalvinNeo/ARPC/blob/master/test/grpc/post_install_protobuf.sh" target="_blank" rel="noopener">这个脚本</a>来一劳永逸地解决问题。<br>如果直接使用Makefile来编译，我们需要先按照下面的规则生成四个文件，此外我们还需要将程序链接到<strong>protobuf</strong>、<strong>grpc++</strong>、<strong>grpc</strong>这三个库上。gRPC的<a href="https://github.com/grpc/grpc/tree/master/examples/cpp" target="_blank" rel="noopener">官方Git仓库</a>中提供了Makefile的demo。<br><figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">$ protoc -I <span class="built_in">..</span>/<span class="built_in">..</span>/protos <span class="attribute">--grpc_out</span>=. <span class="attribute">--plugin</span>=protoc-gen-grpc=`which grpc_cpp_plugin` <span class="built_in">..</span>/<span class="built_in">..</span>/protos/route_guide.proto</span><br><span class="line">$ protoc -I <span class="built_in">..</span>/<span class="built_in">..</span>/protos <span class="attribute">--cpp_out</span>=. <span class="built_in">..</span>/<span class="built_in">..</span>/protos/route_guide.proto</span><br></pre></td></tr></table></figure></p>
-<p>gRPC的官方Git仓库也提供了CMakeLists的Demo，不过我并没有能够成功进行编译，它提示缺少gRPCConfig.cmake或grpc-config.cmake文件，于是我放弃了来自官方的CMakeLists。在我先前的protobuf试用中，我了解了cmake中的<code>PROTOBUF_GENERATE_CPP</code>宏可以编译出<strong>.pb.h</strong>和<strong>.pb.cc</strong>两个文件，现在我们需要依葫芦画瓢搞出一个<code>PROTOBUF_GENERATE_GRPC_CPP</code>宏就行了。在<a href="https://stackoverflow.com/questions/32823563/using-cmake-to-create-protobuf-grpc-cc-files" target="_blank" rel="noopener">爆栈网的一篇回答</a>中我找到了一个实用的实现，借助于它我实现了<a href="https://github.com/CalvinNeo/ARPC/blob/master/test/grpc/CMakeLists.txt" target="_blank" rel="noopener">自己的CMakeLists</a>。注意目前gRPC的编译需要C++11标准的支持，所以这里我使用了<code>SET(CMAKE_CXX_COMPILER /usr/bin/g++-7 CACHE PATH &quot;&quot; FORCE)</code>来强制设置了编译器。</p>
+<h1 id="gRPC项目的编译"><a href="#gRPC项目的编译" class="headerlink" title="gRPC项目的编译"></a>gRPC项目的编译</h1><p>在编译gRPC项目时，对于客户端会生成<strong>.pb.h</strong>和<strong>.pb.cc</strong>两个文件；但是服务端则需要<strong>.grpc.pb.h</strong>和<strong>.grpc.pb.cc</strong>两个文件。这四个文件是由protoc通过不同的指令生成的，如下所示，这里<code>grpc_out</code>即表示生成服务端需要使用的带<strong>.grpc.pb</strong>系文件，<code>plugin</code>字段需要我们指明<strong>grpc_cpp_plugin</strong>这个插件所在的位置。如果我们从源码编译安装的话，这个插件一般会在<strong>/usr/local/lib</strong>里面，我们一般需要将这个路径export出来<br><figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="builtin-name">export</span> <span class="attribute">LD_LIBRARY_PATH</span>=/usr/local/lib:$LD_LIBRARY_PATH</span><br></pre></td></tr></table></figure></p>
+<p>当然也可以运行<a href="https://github.com/CalvinNeo/ARPC/blob/master/test/grpc/post_install_protobuf.sh" target="_blank" rel="noopener">这个脚本</a>来一劳永逸地解决问题。</p>
+<h2 id="Makefile"><a href="#Makefile" class="headerlink" title="Makefile"></a>Makefile</h2><p>如果直接使用Makefile来编译，我们需要先按照下面的规则生成四个文件，此外我们还需要将程序链接到<strong>protobuf</strong>、<strong>grpc++</strong>、<strong>grpc</strong>这三个库上。gRPC的<a href="https://github.com/grpc/grpc/tree/master/examples/cpp" target="_blank" rel="noopener">官方Git仓库</a>中提供了Makefile的demo。<br><figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">$ protoc -I <span class="built_in">..</span>/<span class="built_in">..</span>/protos <span class="attribute">--grpc_out</span>=. <span class="attribute">--plugin</span>=protoc-gen-grpc=`which grpc_cpp_plugin` <span class="built_in">..</span>/<span class="built_in">..</span>/protos/route_guide.proto</span><br><span class="line">$ protoc -I <span class="built_in">..</span>/<span class="built_in">..</span>/protos <span class="attribute">--cpp_out</span>=. <span class="built_in">..</span>/<span class="built_in">..</span>/protos/route_guide.proto</span><br></pre></td></tr></table></figure></p>
+<h2 id="CMake"><a href="#CMake" class="headerlink" title="CMake"></a>CMake</h2><p>gRPC的官方Git仓库也提供了CMakeLists的Demo，不过我并没有能够成功进行编译，它提示缺少gRPCConfig.cmake或grpc-config.cmake文件，于是我放弃了来自官方的CMakeLists。在我先前的protobuf试用中，我了解了cmake中的<code>PROTOBUF_GENERATE_CPP</code>宏可以编译出<strong>.pb.h</strong>和<strong>.pb.cc</strong>两个文件，现在我们需要依葫芦画瓢搞出一个<code>PROTOBUF_GENERATE_GRPC_CPP</code>宏就行了。在<a href="https://stackoverflow.com/questions/32823563/using-cmake-to-create-protobuf-grpc-cc-files" target="_blank" rel="noopener">爆栈网的一篇回答</a>中我找到了一个实用的实现，借助于它我实现了<a href="https://github.com/CalvinNeo/ARPC/blob/master/test/grpc/CMakeLists.txt" target="_blank" rel="noopener">自己的CMakeLists</a>。注意目前gRPC的编译需要C++11标准的支持，所以这里我使用了<code>SET(CMAKE_CXX_COMPILER /usr/bin/g++-7 CACHE PATH &quot;&quot; FORCE)</code>来强制设置了编译器。</p>
 <p>可以在<a href="https://github.com/CalvinNeo/ARPC/blob/master/test/grpc/中找到我的一个完整的配置" target="_blank" rel="noopener">https://github.com/CalvinNeo/ARPC/blob/master/test/grpc/中找到我的一个完整的配置</a></p>
+<h1 id="gRPC的坑"><a href="#gRPC的坑" class="headerlink" title="gRPC的坑"></a>gRPC的坑</h1><h2 id="14-Connection-Refused"><a href="#14-Connection-Refused" class="headerlink" title="14 Connection Refused"></a>14 Connection Refused</h2><p>Linux下的Connection Refused这是由于我们配置了<code>http_proxy</code>的缘故</p>
 
       
     </div>
@@ -458,8 +460,8 @@
         <div class="post-nav">
           <div class="post-nav-next post-nav-item">
             
-              <a href="/2018/03/18/C++-smart-pointer/" rel="next" title="C++智能指针的使用与实现">
-                <i class="fa fa-chevron-left"></i> C++智能指针的使用与实现
+              <a href="/2018/03/28/gRPC-usage/" rel="next" title="gRPC配置">
+                <i class="fa fa-chevron-left"></i> gRPC配置
               </a>
             
           </div>
@@ -549,7 +551,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">108</span>
+                <span class="site-state-item-count">109</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -648,7 +650,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#protobuf"><span class="nav-number">1.</span> <span class="nav-text">protobuf</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#使用cmake编译gRPC"><span class="nav-number">2.</span> <span class="nav-text">使用cmake编译gRPC</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#protobuf"><span class="nav-number">1.</span> <span class="nav-text">protobuf</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#gRPC项目的编译"><span class="nav-number">2.</span> <span class="nav-text">gRPC项目的编译</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Makefile"><span class="nav-number">2.1.</span> <span class="nav-text">Makefile</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#CMake"><span class="nav-number">2.2.</span> <span class="nav-text">CMake</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#gRPC的坑"><span class="nav-number">3.</span> <span class="nav-text">gRPC的坑</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#14-Connection-Refused"><span class="nav-number">3.1.</span> <span class="nav-text">14 Connection Refused</span></a></li></ol></li></ol></div>
             
 
           </div>
@@ -697,7 +699,7 @@
 
         
 <div class="busuanzi-count">
-  <script async src="https://dn-lbstatics.qbox.me/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
   
     <span class="site-uv">
       <i class="fa fa-user"></i>
@@ -816,7 +818,7 @@
         var disqus_config = function () {
           this.page.url = 'http://www.calvinneo.com/2018/03/28/gRPC配置/';
           this.page.identifier = '2018/03/28/gRPC配置/';
-          this.page.title = 'gRPC配置';
+          this.page.title = 'gRPC配置与用法';
         };
         var d = document, s = d.createElement('script');
         s.src = 'https://calvinneo.disqus.com/embed.js';
