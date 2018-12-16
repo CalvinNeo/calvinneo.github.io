@@ -98,7 +98,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="模板编程是C++的一个重点和难点，标准库中有非常多的内容都是通过模板实现的（STL）。C++11标准以来，C++在泛型编程方面引入了许多新的特性。本文讨论了围绕C++模板的诸多技术与编程方法。包括traits">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2018-07-30T06:06:37.820Z">
+<meta property="og:updated_time" content="2018-12-06T16:22:16.575Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="C++模板编程">
 <meta name="twitter:description" content="模板编程是C++的一个重点和难点，标准库中有非常多的内容都是通过模板实现的（STL）。C++11标准以来，C++在泛型编程方面引入了许多新的特性。本文讨论了围绕C++模板的诸多技术与编程方法。包括traits">
@@ -438,7 +438,12 @@
 <pre><code>Test().find(&quot;a&quot;, &quot;b&quot;);
 </code></pre><h3 id="隐式类型转换的顺序"><a href="#隐式类型转换的顺序" class="headerlink" title="隐式类型转换的顺序"></a>隐式类型转换的顺序</h3><p>类型隐式转换具有下面的顺序：</p>
 <ol>
-<li><p>精确匹配<br> 这里对应着几种decay，即<code>T[] -&gt; T*</code>、<code>T&amp; -&gt; T</code>、<code>F(...) -&gt; F (*)(...)</code>、<code>T const -&gt; T</code>，具体解释如下</p>
+<li><p>精确匹配<br> 这里对应着几种decay，即<code>T[] -&gt; T*</code>、<code>T&amp; -&gt; T</code>、<code>F(...) -&gt; F (*)(...)</code>、<code>T const -&gt; T</code>。<br> 我们首先来看一下什么是decay。例如，对于数组<code>T a[n]</code>，除了<code>sizeof</code>、<code>alignof</code>、引用限定符<code>&amp;</code>以及字符串常量等<a href="https://stackoverflow.com/questions/16570716/c-warning-format-s-expects-type-char-but-argument-2-has-type-char" target="_blank" rel="noopener">少数情形</a>外，<code>a</code>出现时会被decay成指向T的指针。例如下面代码往<code>char s[N]</code>数组中读入了数据。</p>
+ <figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">scanf</span>(<span class="string">"%s"</span>, s);</span><br></pre></td></tr></table></figure>
+<p> 而很多人会误写为以下的代码</p>
+ <figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">scanf</span>(<span class="string">"%s"</span>, &amp;s);</span><br></pre></td></tr></table></figure>
+<p> 此时，<code>s</code>的类型实际上是<code>char (*) [N]</code>（pointer to an array of char），而<code>scanf</code>希望接受到的是<code>char *</code>（pointer to char）类型。</p>
+<p> 下面列举出了几种情况：</p>
 <ol>
 <li>无转换</li>
 <li>lvalue到rvalue、数组到指针、函数到指针</li>
@@ -456,10 +461,10 @@
 <p>同样是类型转换问题，在<a href="http://www.cnblogs.com/liyuan989/p/4138378.html" target="_blank" rel="noopener">文章</a>中提到了一个特别的情况<br><figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> T&gt;</span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">compare</span><span class="params">(<span class="keyword">const</span> T&amp; a, <span class="keyword">const</span> T&amp; b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="built_in">std</span>::<span class="built_in">cout</span> &lt;&lt; <span class="string">"template"</span> &lt;&lt; <span class="built_in">std</span>::<span class="built_in">endl</span>;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">compare</span><span class="params">(<span class="keyword">const</span> <span class="keyword">char</span>* a, <span class="keyword">const</span> <span class="keyword">char</span>* b)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="built_in">std</span>::<span class="built_in">cout</span> &lt;&lt; <span class="string">"normal"</span> &lt;&lt; <span class="built_in">std</span>::<span class="built_in">endl</span>;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
 <p>现在调用</p>
 <pre><code>compare(&quot;123456&quot;, &quot;123456&quot;);
-</code></pre><p>请问是调用了那个函数呢？有意思的是，对于不同编译器，结果还不一样。作者指出对G++/clang来说是调用了模板版本，而我使用VS2015发现调用的是普通版本。<br>调用模板版本的原因是<code>T = const char [6]</code>相比退化后的<code>const char *</code>更精确。但是调用普通版本的原因是数组传参时要decay成对应的指针。因此对于模板函数和普通函数实际上都不是精确匹配的（都要经过一次类型转换）。根据C++重载决议原则，如果调用具有二义性，则优先选择调用普通函数。<br>在本篇结尾，作者引用陈硕的观点，认为G++/clang的实现是符合标准的，但是这属于标准的bug。其原因是<strong>模板实参推断<a href="https://zh.wikipedia.org/wiki/%E6%A8%A1%E6%9D%BF%E5%8F%82%E6%95%B0%E6%8E%A8%E5%AF%BC" target="_blank" rel="noopener">(template argument deduction)</a></strong>时，除了产生新的实例化之外，编译器只会执行两种转换</p>
+</code></pre><p>请问是调用了那个函数呢？有意思的是，对于不同编译器，结果还不一样。作者指出对G++/clang来说是调用了模板版本，而我使用VS2015发现调用的是普通版本。<br>调用模板版本的原因是<code>T = const char [6]</code>相比decay后的<code>const char *</code>更精确；但是调用普通版本的原因是数组传参时要decay成对应的指针。因此对于模板函数和普通函数实际上都不是精确匹配的（都要经过一次类型转换）。根据C++重载决议原则，如果调用具有二义性，则优先选择调用普通函数。<br>在本篇结尾，作者引用陈硕的观点，认为G++/clang的实现是符合标准的，但是这属于标准的bug。其原因是<strong>模板实参推断<a href="https://zh.wikipedia.org/wiki/%E6%A8%A1%E6%9D%BF%E5%8F%82%E6%95%B0%E6%8E%A8%E5%AF%BC" target="_blank" rel="noopener">(template argument deduction)</a></strong>时，除了产生新的实例化之外，编译器只会执行两种转换：</p>
 <ol>
 <li>const转换：接受const引用或指针的函数可以分别用非const对象的引用或指针来调用，无须产生新的实例化。也就是可以传一个非const到需要const参数的函数。</li>
-<li>数组或函数到指针的转换：<strong>如果模板形参不是引用类型</strong>，则对数组或函数类型的实参应用常规指针转换。数组实参将当作指向其第一个元素的指针，函数实参当作指向函数类型的指针。</li>
+<li>数组或函数到指针的转换：<strong>如果模板形参不是引用类型</strong>，则对数组或函数类型的实参应用常规指针转换。数组实参将当作指向其第一个元素的指针（如前文所说），函数实参当作指向函数类型的指针。</li>
 </ol>
 <p>由于模板参数使用了数组的const引用类型，所以按照标准应该不将数组向指针进行decay。</p>
 <h2 id="考虑继承"><a href="#考虑继承" class="headerlink" title="考虑继承"></a>考虑继承</h2><h1 id="SFINAE"><a href="#SFINAE" class="headerlink" title="SFINAE"></a>SFINAE</h1><p>在C++中常常出现一些ill-formed的代码，这些代码在函数体或者其他地方出现编译器都是要报错的，SFINAE(Substitution Failure Is Not An Error)规定，当<strong>推导模板参数</strong>失败(fail)时，编译器不产生错误，而是放弃使用这个重载集推导参数。我们需要注意，这样的替换发生在下面四种情况下：</p>
@@ -676,7 +681,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">109</span>
+                <span class="site-state-item-count">110</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -689,7 +694,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">122</span>
+                <span class="site-state-item-count">125</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

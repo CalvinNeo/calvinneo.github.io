@@ -98,7 +98,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="在C++史前时代只有一种智能指针std::auto_ptr&amp;lt;T&amp;gt;，它的行为类似一个lock_guard&amp;lt;T&amp;gt;，或者经过封装的RAII，但在使用中发现，依托于RAII是不够的，为了方便地实现更复杂逻辑下的资源管理，我们需要从资源的所有权上对智能指针进行更加细致的分类。在C++11之后，标准库引入了std::shared_ptr&amp;lt;T&amp;gt;、std::unique_ptr">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2018-07-23T12:32:01.184Z">
+<meta property="og:updated_time" content="2018-12-09T13:09:30.531Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="C++智能指针的使用与实现">
 <meta name="twitter:description" content="在C++史前时代只有一种智能指针std::auto_ptr&amp;lt;T&amp;gt;，它的行为类似一个lock_guard&amp;lt;T&amp;gt;，或者经过封装的RAII，但在使用中发现，依托于RAII是不够的，为了方便地实现更复杂逻辑下的资源管理，我们需要从资源的所有权上对智能指针进行更加细致的分类。在C++11之后，标准库引入了std::shared_ptr&amp;lt;T&amp;gt;、std::unique_ptr">
@@ -401,8 +401,8 @@
 <p> 特别地，我们也可以从一个<code>unique_ptr</code>构造<code>shard_ptr</code>，这时候我们和上面的裸指针是类似的。</p>
 </li>
 </ol>
-<p>我们不能忽视<code>this</code>也是一个raw pointer，但我们又不能在内部直接定义一个<code>std::shared_ptr&lt;T*&gt;(this)</code>，这毫无疑问会导致循环引用。更严重的是在对象内部传出<code>this</code>是非常常见的，例如<code>bind</code>系列的函数，会使用<code>this</code>作为一个context。为了能够正确使用<code>this</code>，就得让我们的类继承一个<code>enable_shared_from_this&lt;T&gt;</code>，并传入一个<code>shared_from_this()</code>作为<code>this</code>的化身。写起来的代码是类似这样的，书中甚至对这种继承一个以自己为模板参数的父类的方法介绍了一种专门的称呼，叫The Curiously Recurring Template Pattern(CRTP)。<br><figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">Widget</span>:</span> <span class="keyword">public</span> <span class="built_in">std</span>::enable_shared_from_this&lt;Widget&gt;&#123;</span><br><span class="line">    <span class="function"><span class="keyword">void</span> <span class="title">process</span><span class="params">()</span></span>&#123;</span><br><span class="line">        processedWidgets.emplace_back(shared_from_this());</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure></p>
-<p>我们下面来探究一下这个类的实现原理。它首先寻找当前对象的控制块，然后创建一个新的<code>std::shared_ptr</code>来引用那个控制块。</p>
+<p>我们不能忽视<code>this</code>也是一个raw pointer，但我们又不能在内部直接定义一个<code>std::shared_ptr&lt;T*&gt;(this)</code>，这毫无疑问会导致循环引用。更严重的是在对象内部传出<code>this</code>是非常常见的，例如<code>bind</code>系列的函数，会使用<code>this</code>作为一个context。为了能够正确使用<code>this</code>，就得让我们的类继承一个<code>enable_shared_from_this&lt;T&gt;</code>，并传入一个<code>shared_from_this()</code>作为<code>this</code>的化身。书中甚至对这种继承一个以自己为模板参数的父类的方法介绍了一种专门的称呼，叫The Curiously Recurring Template Pattern(CRTP)。<br><figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">Widget</span>:</span> <span class="keyword">public</span> <span class="built_in">std</span>::enable_shared_from_this&lt;Widget&gt;&#123;</span><br><span class="line">    <span class="function"><span class="keyword">void</span> <span class="title">process</span><span class="params">()</span></span>&#123;</span><br><span class="line">        processedWidgets.emplace_back(shared_from_this());</span><br><span class="line">    &#125;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure></p>
+<p>在使用<code>shared_from_this()</code>时我们需要注意可能造成的二次析构问题。<br>我们下面来探究一下这个类的实现原理。它首先寻找当前对象的控制块，然后创建一个新的<code>std::shared_ptr</code>来引用那个控制块。</p>
 <h3 id="使用make函数而不是使用智能指针的构造函数"><a href="#使用make函数而不是使用智能指针的构造函数" class="headerlink" title="使用make函数而不是使用智能指针的构造函数"></a>使用make函数而不是使用智能指针的构造函数</h3><p>这个来自于<em>Effective Modern C++</em>的条款21。原因之一是make函数是异常安全的，下面的代码可能导致内存泄露<br><figure class="highlight lisp"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">processWidget(<span class="name">std</span>:<span class="symbol">:shared_ptr&lt;Widget&gt;</span>(<span class="name">new</span> Widget), computePriority())<span class="comment">; // potential resource leak!</span></span><br></pre></td></tr></table></figure></p>
 <p>原因是什么呢？我们考虑这个调用的过程可以分为下面三个阶段：</p>
 <ol>
@@ -507,8 +507,8 @@
 
           <div class="post-nav-prev post-nav-item">
             
-              <a href="/2018/03/28/gRPC-usage/" rel="prev" title="gRPC配置">
-                gRPC配置 <i class="fa fa-chevron-right"></i>
+              <a href="/2018/03/28/gRPC配置/" rel="prev" title="gRPC配置与用法">
+                gRPC配置与用法 <i class="fa fa-chevron-right"></i>
               </a>
             
           </div>
@@ -588,7 +588,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">109</span>
+                <span class="site-state-item-count">110</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -601,7 +601,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">122</span>
+                <span class="site-state-item-count">125</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
