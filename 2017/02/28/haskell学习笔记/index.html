@@ -98,7 +98,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="Channel 9上有个非常好的介绍Haskell和函数式编程的视频，这个视频是根据Programming in Haskell这本书讲述的。Slides和Codes可以在http://www.cs.nott.ac.uk/~pszgmh/上下载，不过后面几章会和实际的课程内容有出入。此外Learn You a Haskell上的教程，以及Wikipedia上有关Haskell的词条也是非常有用的。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2018-07-23T14:10:35.244Z">
+<meta property="og:updated_time" content="2019-01-16T16:45:30.165Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Haskell学习笔记">
 <meta name="twitter:description" content="Channel 9上有个非常好的介绍Haskell和函数式编程的视频，这个视频是根据Programming in Haskell这本书讲述的。Slides和Codes可以在http://www.cs.nott.ac.uk/~pszgmh/上下载，不过后面几章会和实际的课程内容有出入。此外Learn You a Haskell上的教程，以及Wikipedia上有关Haskell的词条也是非常有用的。">
@@ -602,9 +602,12 @@ div :: Integral a =&gt; a -&gt; a -&gt; a
 </code></pre><p>注意到Haskell中的<code>-&gt;</code>符号是<strong>右结合</strong>的，因为柯里化是从左边开始的，所以可以省略括号写成<code>a -&gt; a -&gt; a</code><br>使用lambda可以写为</p>
 <pre><code>add = \x -&gt; (\y -&gt; x + y)
 add x = \y -&gt; x + y
-</code></pre><h2 id="多态函数"><a href="#多态函数" class="headerlink" title="多态函数"></a>多态函数</h2><h3 id="typeclass"><a href="#typeclass" class="headerlink" title="typeclass"></a>typeclass</h3><p>Haskell中的函数默认可以接受任意类型的参数，但有时需要限定类型，例如<code>sum</code>函数，去接受一个<code>Bool</code>类型是没有意义的，所以使用<code>sum :: (Num a) =&gt; [a] -&gt; a</code>来为<code>a</code>提供类型约束，称之为type class，类似于C#中接口(interface)，这在Ch2.5自定义函数一节中已经提到过。不过相比interface，我们看到typeclass中可以<a href="https://www.jianshu.com/p/b641cf2908cf" target="_blank" rel="noopener">定义具有ad-hoc多态类型的值</a>的，不过我们也注意到其实Haskell中的值也可以看成一种特殊的函数：<br><figure class="highlight clean"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> TypeClassWithValue t <span class="keyword">where</span> </span><br><span class="line">    plainValue :: t </span><br><span class="line">    functionValue :: t -&gt; t</span><br></pre></td></tr></table></figure></p>
-<p>此外typeclass中定义的函数也是可以具有所谓的类型多态（见最后的专题讨论）的，例如典型的<code>Monad</code><br><figure class="highlight livescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Monad</span> <span class="title">m</span> <span class="title">where</span></span></span><br><span class="line">    <span class="function"><span class="params">(&gt;&gt;=)</span> :: <span class="title">m</span> <span class="title">a</span> -&gt;</span> <span class="function"><span class="params">(a -&gt; m b)</span> -&gt;</span> m b</span><br></pre></td></tr></table></figure></p>
-<p>这里的<code>Monad</code>是一个typeclass，<code>m</code>将来是用<code>instance</code>产生的实例类型，也是一个type constructor，而<code>m a</code>则是由type constructor产生的具体类型(concrete type)。具体可查看<code>instance</code>与<code>type</code>的相关章节<br>常用的type classes有</p>
+</code></pre><h2 id="多态函数"><a href="#多态函数" class="headerlink" title="多态函数"></a>多态函数</h2><p>关于这一部分，在文末有专题讨论。<br>Haskell中的函数默认可以接受任意类型的参数，这称为Haskell的类型多态。但有时需要限定类型，例如<code>sum</code>函数，去接受一个<code>Bool</code>类型是没有意义的。因此我们需要引入另一种多态即Ad-hoc多态。Ad-hoc多态的实现是基于typeclass和class instance的。</p>
+<h3 id="typeclass"><a href="#typeclass" class="headerlink" title="typeclass"></a>typeclass</h3><p>下面的语句为<code>a</code>提供typeclass为<code>Num</code>的类型约束<br><figure class="highlight haskell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="title">sum</span> :: (<span class="type">Num</span> a) =&gt; [a] -&gt; a</span><br></pre></td></tr></table></figure></p>
+<p>如前面Ch2.5提到过的那样，typeclass类似于C#中interface而非class。不过相比interface，我们看到typeclass中可以<a href="https://www.jianshu.com/p/b641cf2908cf" target="_blank" rel="noopener">定义具有ad-hoc多态类型的值</a>的。此外我们也注意到其实Haskell中，值也可以看成一种特殊的函数：<br><figure class="highlight clean"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> TypeClassWithValue t <span class="keyword">where</span> </span><br><span class="line">    plainValue :: t </span><br><span class="line">    functionValue :: t -&gt; t</span><br></pre></td></tr></table></figure></p>
+<p>在typeclass中定义的函数<a href="https://wiki.haskell.org/Polymorphism" target="_blank" rel="noopener">也可以是</a>类型多态或Ad-hoc多态的，例如典型的<code>Monad</code><br><figure class="highlight livescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Monad</span> <span class="title">m</span> <span class="title">where</span></span></span><br><span class="line">    <span class="function"><span class="params">(&gt;&gt;=)</span> :: <span class="title">m</span> <span class="title">a</span> -&gt;</span> <span class="function"><span class="params">(a -&gt; m b)</span> -&gt;</span> m b</span><br></pre></td></tr></table></figure></p>
+<p>这里的<code>Monad</code>是一个typeclass，<code>m</code>将来是可以用<code>instance</code>产生的实例(instance)类型，也是一个type constructor，类似C++中的模板，可以用来构造类型。而<code>m a</code>则是由type constructor产生的具体类型(concrete type)——这里概念有点乱的话是正常的，可先查看<code>instance</code>与<code>type</code>的相关章节——我们注意到实例<code>m</code>受到Ad-hoc多态的typeclass <code>Monad</code>的约束，但它自己确是类型多态的，因为它可以是任意的类型<code>a</code>。</p>
+<p>常用的typeclasse有</p>
 <ul>
 <li><code>Eq</code>：表示能判断相等的类型<ul>
 <li><code>Num</code>：表示数字，不继承<code>Ord</code>。<code>Num</code>没有<code>(/)</code><ul>
@@ -851,7 +854,22 @@ foldlX f acc (x:xs) = trace (&quot;acc == &quot; ++ show acc) foldlX f acc&apos;
 
 foldrX f acc [] = acc
 foldrX f acc (x:xs) = trace (&quot;acc == &quot; ++ show acc) f x (foldrX f acc xs)
-</code></pre><p>执行结果<br>    &gt; main = print $ foldlX (+) 0 [1..5]<br>    acc == 0<br>    acc == 1<br>    acc == 3<br>    acc == 6<br>    acc == 10<br>    15<br>    &gt; main = print $ foldrX (+) 0 [1..5]<br>    acc == 0<br>    acc == 0<br>    acc == 0<br>    acc == 0<br>    acc == 0<br>    15<br>提炼出来<br>    foldl = foldl f(x, acc) xs<br>    foldr = f x foldr(acc, xs)<br>可以发现<code>foldl</code>是从左到右计算的，但<code>foldr</code>是从右到左计算的。由此导致的<code>foldl</code>会产生一个尾递归（右递归），<code>foldr</code>产生一个左递归。由于编译器可以针对尾递归优化，所以<code>foldl</code>可能会快一点。此外，利用strict特性（详见Ch12 strict application）的<code>foldl&#39;</code>能够减少空间。<br>那么<code>foldr</code>的优势在于处理无穷列表的时候，考虑</p>
+</code></pre><p>执行结果</p>
+<pre><code>&gt; main = print $ foldlX (+) 0 [1..5]
+acc == 0
+acc == 1
+acc == 3
+acc == 6
+acc == 10
+15
+&gt; main = print $ foldrX (+) 0 [1..5]
+acc == 0
+acc == 0
+acc == 0
+acc == 0
+acc == 0
+15
+</code></pre><p>提炼出来<br>    foldl = foldl f(x, acc) xs<br>    foldr = f x foldr(acc, xs)<br>可以发现<code>foldl</code>是从左到右计算的，但<code>foldr</code>是从右到左计算的。由此导致的<code>foldl</code>会产生一个尾递归（右递归），<code>foldr</code>产生一个左递归。由于编译器可以针对尾递归优化，所以<code>foldl</code>可能会快一点。此外，利用strict特性（详见Ch12 strict application）的<code>foldl&#39;</code>能够减少空间。<br>那么<code>foldr</code>的优势在于处理无穷列表的时候，考虑</p>
 <pre><code>myAndL = foldl (&amp;&amp;) True 
 myAndR = foldr (&amp;&amp;) True 
 &gt; myAndL (repeat False)
@@ -1502,7 +1520,8 @@ sumWith v (x:xs) = (sumWith $! (v+x) ) xs
 <li>Monad（包括ST Monad）</li>
 <li>强类型、静态类型</li>
 </ol>
-<h2 id="有关多态"><a href="#有关多态" class="headerlink" title="有关多态"></a>有关多态</h2><p>多态(polymorphism)在C++/Java等面向对象语言中常指子类多态(Subtype polymorphism)，也就是在继承关系中子类可以修改或者扩展父类中的方法，但此时在包含关系上它也被视作是父类型的对象。例如在C++中调用虚函数时会根据当前<code>this</code>的类型查阅虚函数表从而选择正确的函数，这个多态是在运行期的。在<a href="http://rwh.readthedocs.io/en/latest/chp/2.html" target="_blank" rel="noopener">Real World Haskell</a>一书中指出Haskell虽然不具有子类多态，但它有类型多态和参数多态。类型多态是我们之前提过的higher kinded polymorphic，比如Haskell中的列表<code>[]</code>就是类型多态的，因为我们常常可以见到如<code>map</code>这样的函数中出现<code>[a]</code>，也就是说我们不关心<code>a</code>到底是什么，这里的<code>[]</code>也被称为一个type constructor。与此同时我们称<code>map :: (a -&gt; b) -&gt; [a] -&gt; [b]</code>为参数多态(Parametric polymorphism)，因为<code>map</code>接受的参数可以是符合某些规则的任意类型的。特别地，函数重载也被视为一种Ad-hoc多态，一个例子是<br><figure class="highlight clean"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// https://www.jianshu.com/p/b641cf2908cf</span></span><br><span class="line"><span class="keyword">class</span> BasicEq a <span class="keyword">where</span> </span><br><span class="line">    isEqual :: a -&gt; a -&gt; Bool</span><br><span class="line"></span><br><span class="line"><span class="keyword">instance</span> BasicEq Bool <span class="keyword">where</span> </span><br><span class="line">    isEqual <span class="literal">True</span> <span class="literal">True</span> = <span class="literal">True</span> </span><br><span class="line">    isEqual <span class="literal">False</span> <span class="literal">False</span> = <span class="literal">True</span> </span><br><span class="line">    isEqual _ _ = <span class="literal">False</span></span><br></pre></td></tr></table></figure></p>
+<h2 id="有关多态"><a href="#有关多态" class="headerlink" title="有关多态"></a>有关多态</h2><p>多态(polymorphism)在C++/Java等面向对象语言中常指子类多态(Subtype polymorphism)，也就是在继承关系中子类可以修改或者扩展父类中的方法，但此时在包含关系上它也被视作是父类型的对象。例如在C++中调用虚函数时会根据当前<code>this</code>的类型查阅虚函数表从而选择正确的函数，这个多态是在运行期的。在<a href="http://rwh.readthedocs.io/en/latest/chp/2.html" target="_blank" rel="noopener">Real World Haskell</a>一书中指出Haskell虽然不具有子类(subtype)多态，但它有类型多态和参数多态。类型多态是我们之前提过的higher kinded polymorphic（注意<a href="https://www.stephanboyer.com/post/115/higher-rank-and-higher-kinded-types" target="_blank" rel="noopener">区别higher rank polymorphic</a>），比如Haskell中的列表<code>[]</code>就是类型多态的，因为我们常常可以见到如<code>map</code>这样的函数中出现<code>[a]</code>，也就是说我们不关心<code>a</code>到底是什么，这里的<code>[]</code>也被称为一个type constructor。与此同时我们称<code>map :: (a -&gt; b) -&gt; [a] -&gt; [b]</code>为参数多态(Parametric polymorphism)，因为<code>map</code>接受的参数可以是符合其signature的任意（<a href="https://wiki.haskell.org/Polymorphism" target="_blank" rel="noopener">unconstrained 的</a>）类型的。Ad-hoc多态强调一个值对应于不同类型时拥有分别的定义。显而易见的，函数重载也被视为一种Ad-hoc多态，一个例子是<br><figure class="highlight clean"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// https://www.jianshu.com/p/b641cf2908cf</span></span><br><span class="line"><span class="keyword">class</span> BasicEq a <span class="keyword">where</span> </span><br><span class="line">    isEqual :: a -&gt; a -&gt; Bool</span><br><span class="line"></span><br><span class="line"><span class="keyword">instance</span> BasicEq Bool <span class="keyword">where</span> </span><br><span class="line">    isEqual <span class="literal">True</span> <span class="literal">True</span> = <span class="literal">True</span> </span><br><span class="line">    isEqual <span class="literal">False</span> <span class="literal">False</span> = <span class="literal">True</span> </span><br><span class="line">    isEqual _ _ = <span class="literal">False</span></span><br></pre></td></tr></table></figure></p>
+<p>有关Parametric polymorphism、higher kinded polymorphism和higher rank polymorphism的概念我们将在另外一篇文章中进行探讨。</p>
 <h1 id="备注"><a href="#备注" class="headerlink" title="备注"></a>备注</h1><p>在学习完这本书后，能够对Haskell的关键概念有比较清晰的理解，但是如果需要应用Haskell编程还有一些困难，这时候可以再看看另一本很好的书《Haskell趣学指南》<br>此外，我这个笔记其实有部分的碎碎念，这导致笔记的逻辑可能不太连贯。但是我还是记录下这部分，如果有和我一样在某些地方钻了牛角尖的，至少我这里能给出我的一些见解。</p>
 <p>【未完待续】</p>
 
@@ -1659,7 +1678,7 @@ sumWith v (x:xs) = (sumWith $! (v+x) ) xs
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">110</span>
+                <span class="site-state-item-count">113</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -1672,7 +1691,7 @@ sumWith v (x:xs) = (sumWith $! (v+x) ) xs
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">125</span>
+                <span class="site-state-item-count">128</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -1781,7 +1800,7 @@ sumWith v (x:xs) = (sumWith $! (v+x) ) xs
         <div class="copyright">
   
   &copy;  2015 - 
-  <span itemprop="copyrightYear">2018</span>
+  <span itemprop="copyrightYear">2019</span>
   <span class="with-love">
     <i class="fa fa-heart"></i>
   </span>

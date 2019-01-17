@@ -98,7 +98,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="C++中static关键字具有很多迥然不同的意义与用途，常在不同的情景下出现。例如声明局部静态变量、声明静态函数、声明类的静态成员。这三种用法的背后分别对应着不同的linkage。本文还将static与inline、extern等存储类指定符进行简单的比较，以期了解C++编译阶段和连接阶段的行为。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2018-08-08T15:39:56.275Z">
+<meta property="og:updated_time" content="2018-12-24T17:00:46.606Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="C++中static关键字的用法">
 <meta name="twitter:description" content="C++中static关键字具有很多迥然不同的意义与用途，常在不同的情景下出现。例如声明局部静态变量、声明静态函数、声明类的静态成员。这三种用法的背后分别对应着不同的linkage。本文还将static与inline、extern等存储类指定符进行简单的比较，以期了解C++编译阶段和连接阶段的行为。">
@@ -392,14 +392,15 @@
 <p>但是匿名名字空间还适用于修饰类型的情况如<br><figure class="highlight thrift"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">namespace</span> &#123;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> _<span class="title">struct</span> </span>&#123;</span><br><span class="line">    &#125;;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
 <p>但匿名名字空间和static变量还是不同的，匿名名字空间具有外部链接性（但是不知道具体名字），而static变量具有内部链接性</p>
 <h1 id="声明静态函数-变量"><a href="#声明静态函数-变量" class="headerlink" title="声明静态函数/变量"></a>声明静态函数/变量</h1><p>在这里，static表示该函数/变量名字只能在该编译单元内部使用，而不导出。例如在不同的编译单元中使用static关键字允许出现多个同名的变量/函数。因此可以利用static实现在头文件中直接给出函数定义，也就是使用static修饰。但这是非常不好的做法，正确的做法应该是分情况使用<code>constexpr</code>或者<code>inline</code>。<br>static常和const一起搭配用来声明一个编译期常量。</p>
-<h1 id="声明类的静态成员-成员函数"><a href="#声明类的静态成员-成员函数" class="headerlink" title="声明类的静态成员/成员函数"></a>声明类的静态成员/成员函数</h1><p>C++标准只允许static const的integral/enumeration类型(integral types)在class声明中初始化。注意在《STL源码分析一书中》指出在CB4对在类外部初始化如<code>static int</code>成员的支持有限，见有关组态<code>__STL_STATIC_TEMPLATE_MEMBER_BUG</code>的部分。<br>在C++中禁止以下两种初始化，原因详见<a href="https://stackoverflow.com/questions/9656941/why-cant-i-initialize-non-const-static-member-or-static-array-in-class" target="_blank" rel="noopener">Stackoverflow</a></p>
+<h1 id="声明类的静态成员-成员函数"><a href="#声明类的静态成员-成员函数" class="headerlink" title="声明类的静态成员/成员函数"></a>声明类的静态成员/成员函数</h1><h2 id="在class声明中初始化的规定"><a href="#在class声明中初始化的规定" class="headerlink" title="在class声明中初始化的规定"></a>在class声明中初始化的规定</h2><p>C++标准只允许static const的integral/enumeration类型(integral types)在class声明中初始化。注意在《STL源码分析一书中》指出在CB4对在类外部初始化如<code>static int</code>成员的支持有限，见有关组态<code>__STL_STATIC_TEMPLATE_MEMBER_BUG</code>的部分。<br>在C++中禁止以下两种初始化，原因详见<a href="https://stackoverflow.com/questions/9656941/why-cant-i-initialize-non-const-static-member-or-static-array-in-class" target="_blank" rel="noopener">Stackoverflow</a></p>
 <ol>
 <li><p>禁止在声明时同时初始化非const的static类成员<br> 我们注意事实上不能static member作为类的一部分，典型的就是我们需要在<a href="https://msdn.microsoft.com/en-us/library/b1b5y48f.aspx" target="_blank" rel="noopener">类外进行定义</a></p>
  <figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">Foo</span>&#123;</span></span><br><span class="line">    <span class="keyword">static</span> <span class="keyword">int</span> i;</span><br><span class="line">&#125;;</span><br><span class="line"><span class="keyword">int</span> Foo::i;</span><br></pre></td></tr></table></figure>
 </li>
-<li><p>禁止在声明时同时初始化const的非literal的static类成员<br>这是由于C++ requires that every object has a unique definition. That rule would be broken if C++ allowed in-class definition of entities that needed to be stored in memory as objects</p>
+<li><p>禁止在声明时同时初始化const的非literal的static类成员<br> 这是由于C++ requires that every object has a unique definition. That rule would be broken if C++ allowed in-class definition of entities that needed to be stored in memory as objects</p>
 </li>
 </ol>
+<p>C++11之后的标准似乎允许（待考证）在class声明中用默认值初始化non-static non-const的integral字段，但当定义了构造函数之后就应当用<a href="https://stackoverflow.com/questions/24149924/has-the-new-c11-member-initialization-feature-at-declaration-made-initializati" target="_blank" rel="noopener">构造函数初始化</a>。</p>
 <h1 id="linkage"><a href="#linkage" class="headerlink" title="linkage"></a>linkage</h1><p>链接性(linkage)指的是一个名字在整个程序或某个编译单元中是否会绑定到同一个实体(entity)上。在上面的用法中，static都限定了一个名字的链接性，然而这三种情况下的链接性都不一样。<br>函数中的static限定了名字只在某个函数内可见，是没有链接性的，因为它既不是全局可见，也不对当前的编译单元可见。没有链接性的实体包括局部变量和函数的形参。<br>一个static的函数具有内部链接性，即对当前编译单元可见，而在全局不可见，即对链接器而言不可见。具有内部链接性的实体包括声明、名字空间中static的自由函数（不带上下文的函数，相对于成员函数）、友元函数、变量和const常量（特别地在C++中单独的const也是内部链接性的，除非是<code>extern const</code>，这和C语言不一样）、enum、inline自由函数和非自由函数、class/struct、union。<br>一个static的类成员/成员函数具有外部链接性。具有外部链接性的实体包括非inline的函数（包括非static自由函数、类非static成员函数和类static成员函数）、类的static成员和名字空间（不包括无名命名空间）中的非static变量。</p>
 <h2 id="static和inline的区别"><a href="#static和inline的区别" class="headerlink" title="static和inline的区别"></a>static和inline的区别</h2><h3 id="单一定义原则-ODR"><a href="#单一定义原则-ODR" class="headerlink" title="单一定义原则(ODR)"></a>单一定义原则(ODR)</h3><p>我们首先查看C++中重要的<a href="http://zh.cppreference.com/w/cpp/language/definition" target="_blank" rel="noopener">单一定义规则(ODR)</a>，该规则不允许同名的强符号(strong symbol)，但允许同名的弱符号(weak symbol)。根据CSAPP，strong symbol包含了函数和已初始化的全局变量，而weak symbol包含<strong>未初始化的全局变量*</strong>。当weak symbol和strong symbol出现冲突时，链接器选择strong symbol。当没有strong symbol，而各weak symbol间产生冲突时，链接器选择占用空间最大的一个。选择占空间最大的原因在于在编译期时并不能决定这些未初始化的全局变量实际的占用大小，因为作为一个弱符号，它有可能在某个编译单元内被定义为某个4字节的长度然后在另一个编译单元内被定义为8个字节的长度。如果出现这样的情况，那么程序有大概率是出错的，但是在未开启<code>fno-common</code>选项时GCC并不会输出警告。但是链接期的时候链接期需要为这个弱符号在.bss注册大小，为了能够适应所有编译单元中的空间需求，所以只能取最大的一个。<br>作为用户，为了保证weak symbol间不出现冲突，必须保证所有的声明都是一样的。特别地对于同名的重载函数，我们需要理解对于编译器和链接器，其处理的函数名字并不是其本名，而是经过mangling变成一堆乱码一样的东西以保证唯一性，这导致同一个函数通过C或C++编译出来的符号是不一样的。</p>
 <h3 id="inline-function"><a href="#inline-function" class="headerlink" title="inline function"></a>inline function</h3><p>相对于C89标准，C++引入了inline函数。为了了解其作用，我们首先考虑一个static的函数具有internal linkage，当这个函数位于头文件中被多次包含时，编译器会生成对每个编译单元生成一个独立函数（也有可能进行内联优化），编译器不保证所有编译单元中生成的所有函数是一样的。容易发现，static会导致生成的binary变大。C++的<code>inline</code>关键字提供了另一个更好的方案，<code>inline</code>并不会保证一定会被编译器内联（可以使用<code>__forceinline</code>或<code>__attribute__((always_inline))</code>提高内联的<a href="https://msdn.microsoft.com/zh-cn/library/bw1hbe6y.aspx" target="_blank" rel="noopener">几率</a>），当编译器没有真正内联该函数时，就可能出现重复定义的情况（例如当这个inline定义被多次包含时），而这违背了C++重要的单一定义规则。为了解决未进行内联下的符号问题，编译器为这些inline函数创建了weak symbol。</p>
@@ -565,7 +566,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">110</span>
+                <span class="site-state-item-count">113</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -578,7 +579,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">125</span>
+                <span class="site-state-item-count">128</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -664,7 +665,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#声明局部静态变量"><span class="nav-number">1.</span> <span class="nav-text">声明局部静态变量</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#静态变量和匿名名字空间"><span class="nav-number">1.1.</span> <span class="nav-text">静态变量和匿名名字空间</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#声明静态函数-变量"><span class="nav-number">2.</span> <span class="nav-text">声明静态函数/变量</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#声明类的静态成员-成员函数"><span class="nav-number">3.</span> <span class="nav-text">声明类的静态成员/成员函数</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#linkage"><span class="nav-number">4.</span> <span class="nav-text">linkage</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#static和inline的区别"><span class="nav-number">4.1.</span> <span class="nav-text">static和inline的区别</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#单一定义原则-ODR"><span class="nav-number">4.1.1.</span> <span class="nav-text">单一定义原则(ODR)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#inline-function"><span class="nav-number">4.1.2.</span> <span class="nav-text">inline function</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#inline-variable"><span class="nav-number">4.1.3.</span> <span class="nav-text">inline variable</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#static的可访问性"><span class="nav-number">4.2.</span> <span class="nav-text">static的可访问性</span></a></li></ol></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#声明局部静态变量"><span class="nav-number">1.</span> <span class="nav-text">声明局部静态变量</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#静态变量和匿名名字空间"><span class="nav-number">1.1.</span> <span class="nav-text">静态变量和匿名名字空间</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#声明静态函数-变量"><span class="nav-number">2.</span> <span class="nav-text">声明静态函数/变量</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#声明类的静态成员-成员函数"><span class="nav-number">3.</span> <span class="nav-text">声明类的静态成员/成员函数</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#在class声明中初始化的规定"><span class="nav-number">3.1.</span> <span class="nav-text">在class声明中初始化的规定</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#linkage"><span class="nav-number">4.</span> <span class="nav-text">linkage</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#static和inline的区别"><span class="nav-number">4.1.</span> <span class="nav-text">static和inline的区别</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#单一定义原则-ODR"><span class="nav-number">4.1.1.</span> <span class="nav-text">单一定义原则(ODR)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#inline-function"><span class="nav-number">4.1.2.</span> <span class="nav-text">inline function</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#inline-variable"><span class="nav-number">4.1.3.</span> <span class="nav-text">inline variable</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#static的可访问性"><span class="nav-number">4.2.</span> <span class="nav-text">static的可访问性</span></a></li></ol></li></ol></div>
             
 
           </div>
@@ -687,7 +688,7 @@
         <div class="copyright">
   
   &copy;  2015 - 
-  <span itemprop="copyrightYear">2018</span>
+  <span itemprop="copyrightYear">2019</span>
   <span class="with-love">
     <i class="fa fa-heart"></i>
   </span>

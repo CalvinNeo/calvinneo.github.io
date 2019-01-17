@@ -98,7 +98,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="C++的预处理机制令人诟病的一点是在不同的编译器中的表现是不同的，在boost/preprocessor/config/config.hpp列举出了非常多的case，所以在本篇文章中我们只考虑g++-7的编译结果。此外，出于便于阅读的考虑，对名字进行了简化，去掉了诸如BOOST_PP等前缀。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2018-12-08T11:47:47.222Z">
+<meta property="og:updated_time" content="2019-01-16T14:06:28.497Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="通过C++预处理实现if">
 <meta name="twitter:description" content="C++的预处理机制令人诟病的一点是在不同的编译器中的表现是不同的，在boost/preprocessor/config/config.hpp列举出了非常多的case，所以在本篇文章中我们只考虑g++-7的编译结果。此外，出于便于阅读的考虑，对名字进行了简化，去掉了诸如BOOST_PP等前缀。">
@@ -397,8 +397,10 @@
 <h1 id="可变参数模板部分"><a href="#可变参数模板部分" class="headerlink" title="可变参数模板部分"></a>可变参数模板部分</h1><p>下面我们研究<code>BOOST_PP_TUPLE_ELEM</code>的实现，它位于<strong>boost/preprocessor/tuple/elem.hpp</strong>。这个宏接受两个或三个参数，当接受三个参数是，前两个分别是size和index，后面的<code>__VA_ARGS__</code>被括号包起来。<br><figure class="highlight lisp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">#define ADD_SIZE_TO_SURFIX(<span class="name">prefix</span>, ...) CAT(<span class="name">prefix</span>, SIZE(<span class="name">__VA_ARGS__</span>))</span><br><span class="line">#define TUPLE_ELEM(...) ADD_SIZE_TO_SURFIX(<span class="name">TUPLE_ELEM_O_</span>, __VA_ARGS__)(<span class="name">__VA_ARGS__</span>)</span><br><span class="line">#define TUPLE_ELEM_O_2(<span class="name">n</span>, tuple) VARIADIC_ELEM(<span class="name">n</span>, BOOST_PP_REM tuple)</span><br><span class="line">#define TUPLE_ELEM_O_3(<span class="name">size</span>, n, tuple) TUPLE_ELEM_O_2(<span class="name">n</span>, tuple)</span><br></pre></td></tr></table></figure></p>
 <p>其中<code>ADD_SIZE_TO_SURFIX</code>对应boost中的<code>BOOST_PP_OVERLOAD</code>方法，其作用是使用<code>SIZE</code>获得<code>__VA_ARGS_</code>的大小，并将这个值放到prefix之后形成新的token。我们看到<code>TUPLE_ELEM</code>视参数个数调用<code>TUPLE_ELEM_O_2</code>或<code>TUPLE_ELEM_O_3</code>，而最后都归结为<code>VARIADIC_ELEM</code>。也就是说TUPLE模块的实现借助了VARIADIC模块，TUPLE宏由于有个“重载”，所以它的<code>__VA__ARGS__</code>被用括号括起来，所以要把这一层括号去掉才能调用VARIADIC宏。<code>BOOST_PP_REM</code>定义在<strong>boost/preprocessor/tuple/rem.hpp</strong>里面，它的实现似乎是用来处理<code>...</code>部分的<code>__VA_ARGS__</code>是空的情况，或者是single element的情况。</p>
 <h2 id="获取一个序列的长度"><a href="#获取一个序列的长度" class="headerlink" title="获取一个序列的长度"></a>获取一个序列的长度</h2><p>这段构思巧妙地代码来自于<strong>boost/preprocessor/variadic/size.hpp</strong>：<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SIZE(...) SIZE_I(__VA_ARGS__, 4, 3, 2, 1,)</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SIZE_I(e0, e1, e2, e3, e4, size, ...) size</span></span><br></pre></td></tr></table></figure></p>
-<p><code>SIZE</code>在调用<code>SIZE_I</code>时，<code>__VA_ARGS__</code>能够填补从<code>e0</code>开始的形参，那么用来标记大小的<code>4, 3, ...</code>的序列就会被往后挤。美中不足的是这个宏<a href="https://stackoverflow.com/questions/5588855/standard-alternative-to-gccs-va-args-trick/16111873#16111873" target="_blank" rel="noopener">不能处理size为0的情况</a>，这是因为空参数表也占一个位置。虽然我们知道对于某些编译期，我们可以使用<code>##__VA_ARGS__</code>去掉前面的逗号，以避免<code>func(non_va_arg1, non_va_arg2, )</code>的情况，但它并不能去掉后面的逗号。事实上我们只能通过<a href="https://stackoverflow.com/questions/25198787/how-do-i-count-the-number-of-macro-arguments-passed-to-a-variadic-macro/25201772#25201772" target="_blank" rel="noopener">编译期</a>来处理。</p>
+<p><code>SIZE</code>在调用<code>SIZE_I</code>时，<code>__VA_ARGS__</code>能够填补从<code>e0</code>开始的形参，那么用来标记大小的<code>4, 3, ...</code>的序列就会被往后挤。美中不足的是这个宏<a href="https://stackoverflow.com/questions/5588855/standard-alternative-to-gccs-va-args-trick/16111873#16111873" target="_blank" rel="noopener">不能处理size为0的情况</a>，这是因为空参数表也占一个位置。虽然我们知道对于某些编译期，我们可以使用<code>##__VA_ARGS__</code>去掉前面的逗号，以避免<code>func(non_va_arg1, non_va_arg2, )</code>的情况，但它并不能去掉后面的逗号。事实上我们只能通过<a href="https://stackoverflow.com/questions/25198787/how-do-i-count-the-number-of-macro-arguments-passed-to-a-variadic-macro/25201772#25201772" target="_blank" rel="noopener">编译期</a>来处理。<br>如果熟悉C++模板，我们可以注意到这种做法很容易对应到<code>std::make_index_sequence</code>之类的做法。</p>
 <h2 id="实现ELEM"><a href="#实现ELEM" class="headerlink" title="实现ELEM"></a>实现ELEM</h2><p><code>BOOST_PP_VARIADIC_ELEM</code>定义在<strong>boost/preprocessor/variadic/elem.hpp</strong>，同样也是运用了和size一样的思路<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> VARIADIC_ELEM(n, ...) CAT(VARIADIC_ELEM_, n)(__VA_ARGS__,)</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> VARIADIC_ELEM_0(e0, ...) e0</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> VARIADIC_ELEM_1(e0, e1, ...) e1</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> VARIADIC_ELEM_2(e0, e1, e2, ...) e2</span></span><br></pre></td></tr></table></figure></p>
+<h1 id="其他的if实现方法"><a href="#其他的if实现方法" class="headerlink" title="其他的if实现方法"></a>其他的if实现方法</h1><p>我们在宏里面使用到的if实现方法非常典型，在C中我们可以通过函数数组的方式来实现，类似于我们在宏里面生成了两个函数<code>*_0</code>和<code>*_1</code>。在Python中，我们使用<code>and</code>的短路原则来替代三目运算符（虽然我更喜欢<code>T if C then F</code>这样写）。<br>这里引用<a href="https://www.zhihu.com/question/308901598" target="_blank" rel="noopener">知乎上另外一个有趣的方法</a>。<br><figure class="highlight stylus"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 来自知乎 https://www.zhihu.com/question/308901598</span></span><br><span class="line">true = λ <span class="selector-tag">a</span>. λ <span class="selector-tag">b</span>. a</span><br><span class="line">false = λ <span class="selector-tag">a</span>. λ <span class="selector-tag">b</span>. b</span><br><span class="line"><span class="keyword">if</span> = λ <span class="selector-tag">a</span>. λ <span class="selector-tag">b</span>. λ c. a(b)(c)</span><br></pre></td></tr></table></figure></p>
+<p>把<code>true</code>和<code>false</code>分别带到<code>if</code>函数里面即可了解思路。</p>
 
       
     </div>
@@ -475,6 +477,10 @@
           <span class="post-nav-divider"></span>
 
           <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2018/12/29/MIT6.824note/" rel="prev" title="MIT6.824做题笔记">
+                MIT6.824做题笔记 <i class="fa fa-chevron-right"></i>
+              </a>
             
           </div>
         </div>
@@ -553,7 +559,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">110</span>
+                <span class="site-state-item-count">113</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -566,7 +572,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">125</span>
+                <span class="site-state-item-count">128</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -652,7 +658,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#一个最简单的原型"><span class="nav-number">1.</span> <span class="nav-text">一个最简单的原型</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#判断是否为空"><span class="nav-number">2.</span> <span class="nav-text">判断是否为空</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#可变参数模板部分"><span class="nav-number">3.</span> <span class="nav-text">可变参数模板部分</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#获取一个序列的长度"><span class="nav-number">3.1.</span> <span class="nav-text">获取一个序列的长度</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#实现ELEM"><span class="nav-number">3.2.</span> <span class="nav-text">实现ELEM</span></a></li></ol></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#一个最简单的原型"><span class="nav-number">1.</span> <span class="nav-text">一个最简单的原型</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#判断是否为空"><span class="nav-number">2.</span> <span class="nav-text">判断是否为空</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#可变参数模板部分"><span class="nav-number">3.</span> <span class="nav-text">可变参数模板部分</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#获取一个序列的长度"><span class="nav-number">3.1.</span> <span class="nav-text">获取一个序列的长度</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#实现ELEM"><span class="nav-number">3.2.</span> <span class="nav-text">实现ELEM</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#其他的if实现方法"><span class="nav-number">4.</span> <span class="nav-text">其他的if实现方法</span></a></li></ol></div>
             
 
           </div>
@@ -675,7 +681,7 @@
         <div class="copyright">
   
   &copy;  2015 - 
-  <span itemprop="copyrightYear">2018</span>
+  <span itemprop="copyrightYear">2019</span>
   <span class="with-love">
     <i class="fa fa-heart"></i>
   </span>
