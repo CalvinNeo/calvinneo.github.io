@@ -108,7 +108,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/concur/mesi.jpg">
 <meta property="og:image" content="http://www.calvinneo.com/img/concur/speed_cmp.jpg">
 <meta property="og:image" content="http://www.calvinneo.com/img/bfbc/dclpjj.png">
-<meta property="og:updated_time" content="2019-01-16T16:48:59.399Z">
+<meta property="og:updated_time" content="2019-01-20T07:37:05.820Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="并发编程重要概念及比较">
 <meta name="twitter:description" content="在本篇中比较了各种并发、并行技术。并发(concurrency)强调的是逻辑上的同时发生，是语义上的模型(semantic model)，在实际上并发程序可能是由一个处理器同时(simultaneously)处理多个任务，因此并发过程中常出现一个线程等待其他资源的情况。此时常伴随着线程的阻塞和调度。并发过程通常可划分为多个级别：Blocking、Obstruction-Free、Lock-Free">
@@ -359,17 +359,6 @@
 
           
             
-              <span class="post-comments-count">
-                <span class="post-meta-divider">|</span>
-                <span class="post-meta-item-icon">
-                  <i class="fa fa-comment-o"></i>
-                </span>
-                <a href="/2017/12/28/Concurrency-Programming-Compare/#comments" itemprop="discussionUrl">
-                  <span class="post-comments-count disqus-comment-count"
-                        data-disqus-identifier="2017/12/28/Concurrency-Programming-Compare/" itemprop="commentCount"></span>
-                </a>
-              </span>
-            
           
 
           
@@ -503,8 +492,8 @@
 <p>POSIX中还描述了异步信号安全(async-signal-safe)的概念，并<a href="http://man7.org/linux/man-pages/man7/signal-safety.7.html" target="_blank" rel="noopener">列举了一系列信号安全的系统调用</a>。从本质上讲一个异步信号安全的函数要不是可重入的，要不对信号处理函数来说是原子的，即不能被打断。</p>
 <h3 id="线程安全"><a href="#线程安全" class="headerlink" title="线程安全"></a>线程安全</h3><p>异步可重入和线程安全是两个不同的概念，线程安全指一个函数能够同时被多个线程安全地调用。<br>一般来说线程安全的函数不一定是可重入的，如<code>malloc</code>，而反之则一般是成立的。所以我们可以体会到Linux提供的signal机制虽然能够实现异步，但是却添加了许多需要考虑的成分。</p>
 <h3 id="中断安全"><a href="#中断安全" class="headerlink" title="中断安全"></a>中断安全</h3><h1 id="内核和运行时向外提供的并发与同步设施"><a href="#内核和运行时向外提供的并发与同步设施" class="headerlink" title="内核和运行时向外提供的并发与同步设施"></a>内核和运行时向外提供的并发与同步设施</h1><h2 id="多进程与多线程"><a href="#多进程与多线程" class="headerlink" title="多进程与多线程"></a>多进程与多线程</h2><p>进程是UNIX设计模型中的一个重要部分，UNIX推崇以多进程+IPC的方式组成应用系统，充分贯彻了KISS的方针。在UNIX产生的年代，这种方式无疑是很健壮的。<br>从定义上看，进程是资源分配的最小单位，那么线程是程序执行的最小单位。线程通常和同一程序下的其他线程共享一套地址空间，其中包含应用程序拥有的程序代码与资源，每个线程自己维护一套运行上下文。</p>
-<h3 id="同步与异步"><a href="#同步与异步" class="headerlink" title="同步与异步"></a>同步与异步</h3><p>在进程IPC中同步和异步是两种编程模型，描述了IPC中<strong>被调用者</strong>的行为。在同步模型中一个调用只有在等到结果（也就是被调用者完成计算）时才返回，被调用者并不会进行通知。而异步模型中调用会立即返回，而由<strong>被调用者</strong>选择在结果达到后通过回调函数或者信号等机制进行通知。UNP书中还强调异步过程中用户不需要手动将数据从内核复制到用户（即不需要在被通知后调用<code>read</code>等函数），但我觉得这是异步过程所必须具备的特性，而不是其根本的区分点。<br>需要和同步异步进行区分的是阻塞和非阻塞的概念，这两个描述了调用结果未到达时<strong>调用者</strong>的状态。阻塞调用会直接睡眠线程，而非阻塞调用不会阻塞线程。在<strong>非阻塞同步</strong>调用中，当调用者还没有收到来自调用者的返回时，调用者可以原地进行轮询等待，此时虽然逻辑无法持续，但线程并没有进入睡眠。此外，非阻塞模型还可以是异步的，此时线程可以继续执行下面无关返回值的逻辑，消息到达时线程收到一个异步信号或者回调，或者采用类似协程的方法。<br>IO多路复用是一种特殊的同步模型，并且它们在消息到来前必须在一个循环中轮询，而不是立即返回并跳出循环。不过IO多路复用并不属于同步阻塞模型，因为当一个fd在等待结果时，线程可能在处理来自其它fd的IO，因此并不一定会进入睡眠。IO多路复用也不属于同步非阻塞模型，因为当没有任何一个fd产生IO事件时，线程还是会被阻塞的。此外UNP还指出<code>poll</code>函数中仍然需要手动将数据从内核复制回来。<br>以UNIX套接口为例，<code>SS_NBIO</code>和<code>SS_ASYNC</code>标志分别表示非阻塞和异步的选项，其中非阻塞套接口在请求资源不满足时会返回<code>EWOULDBLOCK</code>，而异步套接口则会通过<code>SIGIO</code>信号来通知进程。</p>
-<h2 id="协程"><a href="#协程" class="headerlink" title="协程"></a>协程</h2><p>协程(Coroutine)是具有多个入口点的函数，协程内部可通过<code>yield</code>进行中断，此时处理器可能被调度到执行其他的函数。虽然线程也可以被睡眠，睡眠本身涉及用户态与内核态的上下文切换，开销较大。对于套接字等IO密集型的应用，协程在提高CPU使用率上比线程轻很多。<br>协程通常分为stackful和stackless两种。stackless实现不保存调用栈和寄存器等上下文，因此效率比较高。stackless的协程实现例如C++中的setjmp、Python中的生成器等。stackful即栈式构造，这时候协程拥有自己的堆栈等上下文。stackful的协程类似于C++中的ucontext、libco等。</p>
+<h3 id="同步与异步"><a href="#同步与异步" class="headerlink" title="同步与异步"></a>同步与异步</h3><p>在进程IPC中同步和异步是两种编程模型，描述了IPC中<strong>被调用者</strong>的行为。在同步模型中一个调用只有在等到结果（也就是被调用者完成计算）时才返回，被调用者并不会进行通知。而异步模型中调用会立即返回，而由<strong>被调用者</strong>选择在结果达到后通过回调函数或者信号等机制进行通知。UNP书中还强调异步过程中用户不需要手动将数据从内核复制到用户（即不需要在被通知后调用<code>read</code>等函数），但我觉得这是异步过程所必须具备的特性，而不是其根本的区分点。<br>需要和同步异步进行区分的是阻塞和非阻塞的概念，这两个描述了调用结果未到达时<strong>调用者</strong>的状态。阻塞调用会直接睡眠线程，而非阻塞调用不会阻塞线程。在<strong>非阻塞同步</strong>调用中，当调用者还没有收到来自调用者的返回时，调用者可以原地进行轮询等待，此时虽然逻辑无法持续，但线程并没有进入睡眠。此外，非阻塞模型还可以是异步的，此时线程可以继续执行下面无关返回值的逻辑，消息到达时线程收到一个异步信号或者回调，或者采用类似协程的方法。<br>IO多路复用是一种特殊的同步模型，并且它们在消息到来前必须在一个循环中轮询，而不是立即返回并跳出循环。不过IO多路复用并不属于同步阻塞模型，因为当一个fd在等待结果时，线程可能在处理来自其它fd的IO，因此并不一定会进入睡眠。IO多路复用也不属于同步非阻塞模型，因为当没有任何一个fd产生IO事件时，线程还是会被阻塞的。此外UNP还特别指出<code>poll</code>函数中仍然需要手动将数据从内核复制回来，并把它作为多路复用和异步之间的一个区别。<br>以UNIX套接口为例，<code>SS_NBIO</code>和<code>SS_ASYNC</code>标志分别表示非阻塞和异步的选项，其中非阻塞套接口在请求资源不满足时会返回<code>EWOULDBLOCK</code>，而异步套接口则会通过<code>SIGIO</code>信号来通知进程。</p>
+<h2 id="协程"><a href="#协程" class="headerlink" title="协程"></a>协程</h2><p>协程(Coroutine)是具有多个入口点的函数，协程内部可通过<code>yield</code>进行中断，此时处理器可能被调度到执行其他的函数。虽然线程也可以睡眠，但睡眠本身涉及用户态与内核态的上下文切换，开销较大。对于套接字等IO密集型的应用，协程在提高CPU使用率上比线程轻很多。<br>协程根据其底层实现可以分为stackful和stackless两种。stackless实现不保存调用栈和寄存器等上下文，因此效率比较高。stackless的协程实现例如C++中的setjmp、Python中的生成器等。stackful即栈式构造，这时候协程拥有自己的堆栈等上下文。stackful的协程类似于C++中的ucontext、libco等。<br>协程根据控制传递方式可以分为对称(symmetric)协程和非对称协程(asymmetric)。我们知道协程实际上是一种对CPU控制权的转移，对称协程在转移时可以转移到其指定的任一对称协程，而非对称协程只能转移到其“调用者”。理论上已经证明了这两种协程是<a href="https://www.jianshu.com/p/9330e6d61f34" target="_blank" rel="noopener">等价</a>的，但显然非对称协程在使用上更友好。</p>
 <h2 id="C-下协程的实现方式"><a href="#C-下协程的实现方式" class="headerlink" title="C++下协程的实现方式"></a>C++下协程的实现方式</h2><h3 id="基于ucontext"><a href="#基于ucontext" class="headerlink" title="基于ucontext"></a>基于ucontext</h3><p>ucontext是POSIX上的一套用于保存上下文的库，这里上下文包括寄存器（通用和浮点）、信号等。</p>
 <h3 id="黑科技1"><a href="#黑科技1" class="headerlink" title="黑科技1"></a>黑科技1</h3><p>Protothreads基于C的是围绕switch展开的一系列黑科技实现的协程。我们首先看它定义的一些原语，原来这就是一个简易的，关于行号的状态机。我在<a href="https://paste.ubuntu.com/p/MDjGpX3999/" target="_blank" rel="noopener">这里模仿Protothreads实现了一个简易版的协程</a><br><figure class="highlight d"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">#define PT_BEGIN() <span class="built_in">bool</span> ptYielded = <span class="literal">true</span>; (<span class="keyword">void</span>) ptYielded; <span class="keyword">switch</span> (_ptLine) &#123; <span class="keyword">case</span> <span class="number">0</span>:</span><br><span class="line">#define PT_YIELD() \</span><br><span class="line">    <span class="keyword">do</span> &#123; ptYielded = <span class="literal">false</span>; _ptLine = <span class="keyword">__LINE__</span>; <span class="keyword">case</span> <span class="keyword">__LINE__</span>: \</span><br><span class="line">    <span class="keyword">if</span> (!ptYielded) <span class="keyword">return</span> <span class="literal">true</span>; &#125; <span class="keyword">while</span> (<span class="number">0</span>)</span><br><span class="line">#define PT_END() <span class="keyword">default</span>: ; &#125; Stop(); <span class="keyword">return</span> <span class="literal">false</span>;</span><br></pre></td></tr></table></figure></p>
 <p>为了理解这段代码，我们回想C++实现协程需要实现的一个核心问题，并不是调度，而是实现从多个入口点进入。这就意味着我们需要在退出协程函数时记录下已经到了哪里，然后在下一次进入函数时回到这个地方。对于第一个需求，我们可以借助于<code>__LINE__</code>这个宏表示执行到的行号，每次将这个行号赋值给一个int。对于第二个需求，我们可以借助于<code>switch</code>实现跳转。这里用<code>switch</code>而不用<code>goto</code>的原因是<code>switch</code>能够根据int变量来实现<code>goto</code>的功能，而<code>goto</code>需要依赖静态的label。这种巧妙的机制不禁让我想起了称为<a href="https://en.wikipedia.org/wiki/Duff%27s_device" target="_blank" rel="noopener">Duff’s device</a>的优化方案。<br>不过这种机制有一个语法缺陷就是在里面嵌套的switch语句会产生干扰。</p>
@@ -647,7 +636,7 @@ pthread_cond_wait(&amp;cond, &amp;mutex);
 <h2 id="基于线程的异步调用"><a href="#基于线程的异步调用" class="headerlink" title="基于线程的异步调用"></a>基于线程的异步调用</h2><p><code>std::thread</code>是实现并行最简单的方式了，不过在使用时我们要注意一下几点：</p>
 <ol>
 <li>分清<code>std::thread</code>对象和实际线程<br> 一个实际的例子是detach之后的<code>std::thread</code>对象销毁后线程并不会结束，反而是<code>*this</code>不在<a href="https://en.cppreference.com/w/cpp/thread/thread/detach" target="_blank" rel="noopener">指向任何线程</a>。</li>
-<li>区分<code>std::thread</code>对象和线程实体<br> 线程实体是由操作系统管理的，它不等同于<code>std::thread</code>对象。特别地，<code>std::thread</code>的生命周期是不同于线程实体的。当主线程退出时所有的子线程释放，或者当子线程执行完毕时子线程释放。而<code>std::thread</code>对象遵循所有C++对象的生命周期。<br> <code>std::thread</code>是由程序员管理生命周期的，程序员应当在<code>join()</code>或者<code>detach()</code>后释放<code>std::thread</code>。程序员可以通过<code>std::thread</code>控制线程实体。<br> 一个简单的场景是<code>std::thread::detach()</code>之后，线程就和<code>std::thread</code>无关了，此时<code>std::thread</code>对象即使析构也无碍于线程实体。<br> 试图从主线程fire掉子线程<a href="https://stackoverflow.com/questions/23454793/whats-the-c-11-way-to-fire-off-an-asynchronous-task-and-forget-about-it" target="_blank" rel="noopener">一个坏主意</a>。如果我们希望某个线程的生命周期等同于某个对象，那么我们可以在该线程的loop里面去跟踪一个flag，这个flag可以是全局变量，也可以作为参数传入或者直接捕获。当对象需要析构时，我们设置这个flag使得线程内部的loop检测并最终退出，此时只要在析构函数中join这个线程即可。</li>
+<li>区分<code>std::thread</code>对象和线程实体<br> 线程实体是由操作系统管理的，它不等同于<code>std::thread</code>对象。特别地，<code>std::thread</code>的生命周期是不同于线程实体的。当主线程退出时所有的子线程释放，或者当子线程执行完毕时子线程释放。而<code>std::thread</code>对象遵循所有C++对象的生命周期。<br> <code>std::thread</code>是由程序员管理生命周期的，程序员应当在<code>join()</code>或者<code>detach()</code>后释放<code>std::thread</code>。如果我们强行析构一个joinable的<code>std::thread</code>会导致异常terminate。<br> 程序员可以通过<code>std::thread</code>控制线程实体，直到调用<code>detach</code>之后。一个简单的场景是<code>std::thread::detach()</code>之后，线程就和<code>std::thread</code>无关了，此时<code>std::thread</code>对象即使析构也无碍于线程实体。<br> 试图从主线程fire掉子线程<a href="https://stackoverflow.com/questions/23454793/whats-the-c-11-way-to-fire-off-an-asynchronous-task-and-forget-about-it" target="_blank" rel="noopener">一个坏主意</a>。如果我们希望某个线程的生命周期等同于某个对象，那么我们可以在该线程的loop里面去跟踪一个flag，这个flag可以是全局变量，也可以作为参数传入或者直接捕获。当对象需要析构时，我们设置这个flag使得线程内部的loop检测并最终退出，此时只要在析构函数中join这个线程即可。</li>
 <li>注意线程带来的开销<br> 因此我们需要线程池。</li>
 </ol>
 <h3 id="线程池"><a href="#线程池" class="headerlink" title="线程池"></a>线程池</h3><p>线程池的产生是为了解决维护线程生命周期所带来的开销的问题，同时节约操作系统资源。一个线程池维护多个线程，当任务到来时在池中取出一个线程来执行这个任务。线程池可以动态地进行扩展。<br>一般对于IO型的任务，我们维护线程池在<code>2x</code>或者<code>2x+2</code>的规模，而对于计算型的任务，盲目加线程是不正确的。甚至对于一些HT超线程的架构线程还要少一点会更好。</p>
@@ -848,7 +837,7 @@ pthread_cond_wait(&amp;cond, &amp;mutex);
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">113</span>
+                <span class="site-state-item-count">117</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -861,7 +850,7 @@ pthread_cond_wait(&amp;cond, &amp;mutex);
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">128</span>
+                <span class="site-state-item-count">131</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -1106,8 +1095,6 @@ pthread_cond_wait(&amp;cond, &amp;mutex);
 
   
 
-    
-      <script id="dsq-count-scr" src="https://calvinneo.disqus.com/count.js" async></script>
     
 
     

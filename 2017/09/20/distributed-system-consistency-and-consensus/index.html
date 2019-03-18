@@ -1,0 +1,1263 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="分布式,raft,paxos,一致性," />
+
+
+
+
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="在非分布式系统中的数据库系统的一个基本特性是ACID，即atomicity、consistency、isolation和durability。但在分布式系统下，CAP理论认为一致性C、可用性A和分区容错P不可能同时做到。">
+<meta name="keywords" content="分布式,raft,paxos,一致性">
+<meta property="og:type" content="article">
+<meta property="og:title" content="分布式一致性和分布式共识协议">
+<meta property="og:url" content="http://www.calvinneo.com/2017/09/20/distributed-system-consistency-and-consensus/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="在非分布式系统中的数据库系统的一个基本特性是ACID，即atomicity、consistency、isolation和durability。但在分布式系统下，CAP理论认为一致性C、可用性A和分区容错P不可能同时做到。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:image" content="http://www.calvinneo.com/img/fbs/lin.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/fbs/fzztj.jpg">
+<meta property="og:updated_time" content="2019-03-18T07:29:22.199Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="分布式一致性和分布式共识协议">
+<meta name="twitter:description" content="在非分布式系统中的数据库系统的一个基本特性是ACID，即atomicity、consistency、isolation和durability。但在分布式系统下，CAP理论认为一致性C、可用性A和分区容错P不可能同时做到。">
+<meta name="twitter:image" content="http://www.calvinneo.com/img/fbs/lin.png">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2017/09/20/distributed-system-consistency-and-consensus/"/>
+
+
+
+
+
+  <title>分布式一致性和分布式共识协议 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2017/09/20/distributed-system-consistency-and-consensus/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                分布式一致性和分布式共识协议
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2017-09-20T12:33:22+08:00">
+                2017-09-20
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>在非分布式系统中的数据库系统的一个基本特性是ACID，即atomicity、consistency、isolation和durability。但在分布式系统下，CAP理论认为一致性C、可用性A和分区容错P不可能同时做到。</p>
+<a id="more"></a>
+<h1 id="非分布式系统上的一致性"><a href="#非分布式系统上的一致性" class="headerlink" title="非分布式系统上的一致性"></a>非分布式系统上的一致性</h1><p>我们首先回顾一下非分布式系统上一致性的相关知识。</p>
+<h2 id="两种事务控制模型"><a href="#两种事务控制模型" class="headerlink" title="两种事务控制模型"></a>两种事务控制模型</h2><h3 id="ACID"><a href="#ACID" class="headerlink" title="ACID"></a>ACID</h3><p>对于关系型数据库，存在ACID事务控制模型维护事务的正确可靠性。</p>
+<ol>
+<li>原子性<br> 原子性(atomicity)表现为事务中的所有操作要么全部完成，要么全部不完成（回滚），不会出现中间状态。以转账为例，假设A向B转账200元，那么原子性要求事务不存在A的钱扣了，但是B的钱没到账。</li>
+<li>一致性<br> 一致性(consistency)表现为在事务开始前和结束后完整性约束（不变量）不被破坏。这里的“一致性<a href="https://www.jianshu.com/p/2c30d1fe5c4e" target="_blank" rel="noopener">常被称为“内部一致性”</a>，以区别分布式系统中的外部一致性C。</li>
+<li>隔离性<br> 隔离性(isolation)表现为数据库支持多个并发事务同时进行增删改。以转账为例，假设A和B同时向C转账200元，那么结束后C应当收到400元，而不存在只收到200块的情况。</li>
+<li>持久性<br> 持久性(durability)表现为事务结束后对数据的修改是持久化的。例如系统发生宕机后，已提交的事务不应当消失。丢数据的一个常见例子是主从架构+异步复制，这种情况下durability难以保证。</li>
+</ol>
+<h3 id="BASE"><a href="#BASE" class="headerlink" title="BASE"></a>BASE</h3><p>BASE理论，即Basically Available、Soft State和Eventually Consistent，是相对于ACID准则的另一种事务控制模型，<a href="https://www.epubit.com/selfpublish/article/737;jsessionid=83634E0880EC6456C20EEA2AC8FCA282" target="_blank" rel="noopener">常被用在一些非RDBMS的事务控制的NoSQL中</a>。</p>
+<p>在分布式系统的上下文下，BASE可以看做是对CAP理论做出的一种权衡，通常被以最终一致性的形式实现，参考下文。</p>
+<h3 id="事务更新的两条规则"><a href="#事务更新的两条规则" class="headerlink" title="事务更新的两条规则"></a>事务更新的两条规则</h3><h4 id="提交规则"><a href="#提交规则" class="headerlink" title="提交规则"></a>提交规则</h4><p>后像必须在提交前写入非易失存储器（数据库或运行记录）中。<br>当后像只写入日志而没写入数据库中也可以提交事务，因为出现故障之后可以使用后像REDO进行恢复。</p>
+<h4 id="先记后写规则"><a href="#先记后写规则" class="headerlink" title="先记后写规则"></a>先记后写规则</h4><p>数据库中有先记后写原则，如果在事务提交前将后像写入数据库，则必须首先把前像记入日志。这样做的好处是在事务提交完成前如果出现故障，可以通过日志文件中的该前像进行UNDO，此时即使数据库没有被修改，也只是进行一次多余的UNDO操作。</p>
+<h2 id="故障恢复"><a href="#故障恢复" class="headerlink" title="故障恢复"></a>故障恢复</h2><h3 id="WAL"><a href="#WAL" class="headerlink" title="WAL"></a>WAL</h3><p>在关系数据库中常使用预写式日志Write ahead log(WAL)算法，WAL要求在数据实际写入之前先写日志，这样能够保证在故障发生后能通过日志进行恢复。<br>事务有只有两种完成方式，提交即全做事务中的操作，和回滚即全不做事务中的操作。在事务的中间过程中可能对数据块的值进行修改，但最终这些修改必须要通过提交和回滚来实现持久化。<br>AI（后像，After Image），指的是每次更新时数据块的新值。对于一个已提交的事务，当故障发生时应当REDO它的后像。注意一旦事务提交，就不能UNDO它的前像，会破坏完整性约束；但是事务提交前任意的删改都可以通过UNDO来撤销。事务提交和往数据库写值（执行事务）是两个不同概念。<br>BI（前像，Before Image），指的是每次更新时数据块的旧值。对于一个未提交的事务或提交进行到一半，当故障发生时应当UNDO它的前像。<br>UNDO和REDO操作具有幂等性，即对前像UNDO或对后像REDO任意多次，结果都是相同的。</p>
+<h3 id="Shadow-paging"><a href="#Shadow-paging" class="headerlink" title="Shadow paging"></a>Shadow paging</h3><h2 id="并发事务控制"><a href="#并发事务控制" class="headerlink" title="并发事务控制"></a>并发事务控制</h2><p>为了保证<a href="http://catkang.github.io/2018/09/19/concurrency-control.html" target="_blank" rel="noopener">并发执行的事务在某一隔离级别上的正确执行的机制</a>，我们需要并发事务控制。并发控制可以根据乐观程度分为基于Lock（如2PL）、Timestamp（如Basic T/O）和Validation（OCC系列算法）。</p>
+<h3 id="事务的隔离等级"><a href="#事务的隔离等级" class="headerlink" title="事务的隔离等级"></a>事务的隔离等级</h3><p>在了解并发事务控制前，首先需要了解事务的隔离等级。<br>事务具有ACID的要求，隔离性I要求数据库能够支持<strong>并发事务</strong>。隔离性I的要求主要对应了四种隔离级别，分别是Read uncommitted、Read committed(Sql Server、Oracle等的默认隔离级别)、Repeatable read(MySQL的默认隔离级别)、Serializable，分别可以解决脏读、不可重复读(Nonrepeatable Read)、幻读几类问题。</p>
+<ol>
+<li><p>脏读<br> 事务A在访问数据时，如果另一个事务在并发修改了该数据且<strong>未</strong>提交，在Read Uncommitted隔离级别下可能产生脏读。考虑下面的序列。</p>
+<ul>
+<li>A写入X</li>
+<li>B读出X</li>
+<li>A回滚</li>
+<li>B读出的X是不合法的</li>
+</ul>
+</li>
+<li><p>不可重复读<br> 事务A在访问数据时，如果另一个事务在并发修改了该数据且<strong>已</strong>提交，在Read committed隔离级别下可能产生不可重复读。考虑下面的序列。</p>
+<ul>
+<li>A读取X</li>
+<li>B写入Y</li>
+<li>B提交</li>
+<li>A写入Z</li>
+<li>A提交失败</li>
+</ul>
+</li>
+<li><p>幻读<br> 在Repeatable Read隔离等级之下，事务A在访问数据时，事务开始后其他事务就不能对该数据进行修改了，因此杜绝了不可重复读。但是如果另一个事务在对其他的数据进行修改，例如在数据表中插入了一个新数据，那么会产生幻读现象，也就是一个事务的两次查询中数据笔数不一致。</p>
+</li>
+<li><p>Serializable<br> 等同于在每个读的数据行上加S锁</p>
+</li>
+</ol>
+<h3 id="2PL"><a href="#2PL" class="headerlink" title="2PL"></a>2PL</h3><p>我们知道死锁有四个条件：互斥、占有且申请、不可抢占和循环等待。而为了解决死锁问题，一个方案就是一次性获得所有的锁，这样实际上破坏了占有且申请的条件。不过这样一次性锁协议牺牲了并发性。为此我们引入了2PL，2PL将加解锁过程分为两个阶段，在第一阶段只能加锁或者操作数据，不能解锁；在第二阶段只能解锁或者操作数据，不能加锁。相比于1PL并发度提高了，但是存在死锁问题了。</p>
+<h4 id="意向锁"><a href="#意向锁" class="headerlink" title="意向锁"></a>意向锁</h4><p>意向锁的产生是为了提高执行效率，它要求如果我们对一个下层节点加锁，那么我们会对上层节点加意向锁。我们考虑一个数据表中有一些行正在被锁定，而我们现在试图加一个表级锁，这显然是要被阻塞的，但阻塞前我们需要遍历数据表的每一行才知道我们表中有些行被锁定了。为此意向锁要求在锁定行时对数据表也维护一个状态，表示当前数据表中有些行时被锁定的，因此你意向是获得表锁，那么请原地阻塞，别往下找了，现在是不可能的。<br>以意向共享锁IS为例，如果我们想对一行加S锁，那么我们先要对表加IS锁，表示我们对表中的某一行有加共享锁的意向。此外，如果把上下层节点组合起来看，能组合成四种锁的类型即SIS、SIX、XIS、XIX。以共享意向排他锁SIX为例，对数据表加S锁，说明要读取整个表，对数据表加IX锁，表示要更新数据表中的一些行。除了SIX，其他的锁并没有提高强度，可以退化为一个表级锁或者行级锁。以SIS为例，我们要读取整个表，对表加S锁，然后要读取其中一行，对表加IS锁，实际上可以简化为一个对表加S锁的操作。</p>
+<h3 id="T-O"><a href="#T-O" class="headerlink" title="T/O"></a>T/O</h3><h3 id="OCC"><a href="#OCC" class="headerlink" title="OCC"></a>OCC</h3><h3 id="MVCC"><a href="#MVCC" class="headerlink" title="MVCC"></a>MVCC</h3><p>多版本并发控制(Multi-Version Concurrency Control, MVCC)是相对于单版本的概念， 有不同方式的实现，如基于锁的MV2PL，基于时间戳的MVTO，基于OCC的MVOCC。MVCC是为了提高数据库的读性能产生的一种思路，是一种<a href="https://www.zhihu.com/question/27876575" target="_blank" rel="noopener">解决读写冲突的无锁并发控制方式</a>。</p>
+<h1 id="分布式系统的特性"><a href="#分布式系统的特性" class="headerlink" title="分布式系统的特性"></a>分布式系统的特性</h1><h2 id="高可用性HA与容错FT"><a href="#高可用性HA与容错FT" class="headerlink" title="高可用性HA与容错FT"></a>高可用性HA与容错FT</h2><p>FT即Fault Tolerant，根据DDIA，这里的fault应当与failure区别，故障通常定义为系统的一部分状态偏离其标准，而失效则是系统作为一个整体停止向用户提供服务。能预料并应对故障的系统特性可称为容错(fault-tolerant)或韧性(resilient)。</p>
+<p>从定义上来看，<a href="https://www.ibm.com/support/knowledgecenter/en/SSPHQG_7.2/concept/ha_concepts_fault.htm" target="_blank" rel="noopener">Fault tolerant的系统不允许服务中断(service interruption)，但其开销较高；High availability的系统追求最小的服务中断</a>。</p>
+<p>衡量容错能力通常可以通过MTBF、MTTR、MTTF等指标，分别表示开始工作到第一个故障的时间的平均值，平均修复时间和平均失效时间。</p>
+<h3 id="主从复制"><a href="#主从复制" class="headerlink" title="主从复制"></a>主从复制</h3><p>对于逐步增长的用户规模和并发量，最初我们的做法是在单服务器单数据库的架构上修修补补。对于高并发的请求，我们使用服务器集群+负载均衡，对于数据库的压力，我们在服务器和数据库之间加上一层缓存。随着数据库压力的进一步增大，我们升级架构为<a href="https://www.cnblogs.com/chanshuyi/p/mycat_enlighten.html" target="_blank" rel="noopener">主从架构</a>，我们写请求始终在主库，并不断向从库同步，读请求则始终在从库。主从架构实际上是一个HA解决方案，能实现<strong>读写分离</strong>，从而提高读写效率。主从数据库还可以互为热备份，但会带来一些一致性的问题。</p>
+<p>主从复制可以是同步的，也可以是异步的。其中异步复制在性能上是美好的，<a href="http://www.voidcn.com/article/p-sfcgwsjt-zg.html" target="_blank" rel="noopener">具有高吞吐量和低延迟</a>。但是在一致性上会打折扣，一个例子就是Redis的哨兵机制。</p>
+<h3 id="分区"><a href="#分区" class="headerlink" title="分区"></a>分区</h3><p>对于更大并发的要求，我们还可以实行<strong>垂直拆分</strong>/<strong>水平拆分</strong>，将数据表按列/行拆分为多个。</p>
+<h3 id="分布式集群"><a href="#分布式集群" class="headerlink" title="分布式集群"></a>分布式集群</h3><p>分布式集群相比主从架构提供了更好的冗余方式，集群可以管理超过两个节点，并且所有节点都是对等的，称为replica，这些replica可以（并且应当）在空间位置上广泛分布，并且具有负载均衡的能力。而主从数据库一般将一主n从整体<a href="http://duqingfeng.net/2018/06/12/%E5%93%88%E5%B8%8C%E5%88%86%E5%8C%BA%E6%8A%80%E6%9C%AF%E4%B9%8B%E9%97%B4%E7%9A%84%E5%AF%B9%E6%AF%94%EF%BC%88%E4%B8%80%E8%87%B4%E6%80%A7%E5%93%88%E5%B8%8C%E3%80%81Redis%20cluster%E8%99%9A%E6%8B%9F%E6%A7%BD%EF%BC%89/" target="_blank" rel="noopener">视为一个节点</a>，并不适用分库分表。</p>
+<h2 id="一致性"><a href="#一致性" class="headerlink" title="一致性"></a>一致性</h2><h3 id="强一致性"><a href="#强一致性" class="headerlink" title="强一致性"></a>强一致性</h3><p>分布式系统，特别是CAP理论中对一致性(consistency)的定义是<em>all nodes see the same data at the same time</em>，这个要求是比较高的，通常<a href="https://blog.csdn.net/chao2016/article/details/81149674#%E5%8E%9F%E5%AD%90%E4%B8%80%E8%87%B4%E6%80%A7atomic-consistency" target="_blank" rel="noopener">也称为</a>强一致性(Strong consistency)、线性一致性(Linearizability)、外部一致性(External consistency)、原子一致性(atomic consistency)。<br>强一致性强调each operation appears to execute instantaneously, exactly once, at some point between its invocation and its response。<br>考虑一个简单的主从架构的例子(来自<em>Designing Data-Intensive Applications</em>)，在下图中比赛结果由Referee写入Leader主库，并向两个Follower同步复制，线性一致性需要这个过程是透明的。在本场景中即当我们任何一个读取返回新值后，所有后续读取都必须返回新值（可以参考<a href="/2017/12/28/Concurrency-Programming-Compare/">C++内存模型</a>中的可见性一块）。但简单的读写分离主从复制会出现当Leader只同步了Follower1而没有同步到Follower2时，对两个副本的读取结果分别返回新值和旧值的现象。<br><img src="/img/fbs/lin.png" alt=""></p>
+<p>通过线性一致性<a href="https://www.jianshu.com/p/64b7b286ef7c" target="_blank" rel="noopener">可以实现</a>分布式锁、选举、和唯一性约束等功能。我们使用共识算法实现的是<strong>线性一致性</strong>，而主从复制则不是。由此可见，分布式一致性(Consistency)和共识(Consensus)是完全不同的两个概念，但是后者是实现前者的一个工具。</p>
+<p>我们还需要区分<a href="http://www.bailis.org/blog/linearizability-versus-serializability/" target="_blank" rel="noopener">Linearizability和Serializability</a>。Linearizability来源于分布式系统和并发编程，其语境是single-operation, single-object, real-time order，线性一致性保证了写操作对后续的读操作是可见的。线性一致性往往对应于CAP中的C，线性一致性是composable 即local的，即如果每一个对象上的操作是线性的，那么系统上的所有操作都是线性的。Serializability来源于数据库，其语境是multi-operation, multi-object, arbitrary total order，它是一个有关事务的保证，涉及一组操作。它保证了在多个对象上执行的多个事务等同于<strong>某个</strong>序列化的执行过程。Serializability相当于ACID中的I，如果用户的每一个事务都能保证correctness即ACID中的C，那么顺序执行的事务也能保证correctness。不同于Linearizability，Serializability本身不给事务的执行顺序加上任何的real-time约束，也就是<a href="https://www.jianshu.com/p/76ff7718d381" target="_blank" rel="noopener">不需要操作是按照真实时间严格排序的</a>。Serializability 也不是composable的，它也不表示任何的确定性的顺序，它只是要求存在一些等价的执行序列。</p>
+<p>Serializability + Linearizability = Strict Serializability。</p>
+<h3 id="全序广播"><a href="#全序广播" class="headerlink" title="全序广播"></a>全序广播</h3><p>全序广播(total order boardcast)有关一致性的另一个概念。首先，total order即全序关系，是相对于偏序关系(partial order)的一个概念。全序要求在序列中的任何元素都能有确定的先后关系，而偏序则只要求序列中某些元素具有先后关系。整除关系是一个典型的偏序关系。</p>
+<p><a href="https://www.zhihu.com/question/275845393/answer/386816571" target="_blank" rel="noopener">实现全序广播等价于实现线性一致的存储</a>。</p>
+<h3 id="弱一致性"><a href="#弱一致性" class="headerlink" title="弱一致性"></a>弱一致性</h3><p>有的时候系统保证在更新操作后的一段时间后，系统能够达到一致性状态，这称为弱一致性。弱一致性和强一致性的区别是弱一致性存在“不一致窗口”，在不一致窗口中系统不一定保证用户总能看到最新的值。<br>弱一致性可以分为最终一致性、因果一致性、单调读一致性、单调写一致性等。</p>
+<p>最终一致性也被称为乐观复制(optimistic replication)，是一种<a href="https://en.wikipedia.org/wiki/Eventual_consistency" target="_blank" rel="noopener">获得HA的常见方式</a>，要求当没有新的对X的提交发生时，最终所有对X的访问都返回最后一次更新的值。最终一致性通常用来提供BASE语义。我们常见的主从架构实现的是<strong>最终一致性</strong>。</p>
+<h3 id="分布式一致性与事务一致性"><a href="#分布式一致性与事务一致性" class="headerlink" title="分布式一致性与事务一致性"></a>分布式一致性与事务一致性</h3><p>从概念上分布式中的一致性(CAP中的C)和事务一致性(ACID中的C)是完全不一样的，CAP中的一致性要求多副本的系统的行为表现得像单系统一样，并且对这个系统的修改是原子的。而事务一致性强调事务前后不变量不能改变。</p>
+<h2 id="可用性"><a href="#可用性" class="headerlink" title="可用性"></a>可用性</h2><p>可用性即<em>reads and writes always succeed</em>。这个要求系统能够始终在<strong>正常时间</strong>内对用户的请求进行响应。当然由于可能出现的一致性问题，这个响应不一定是正确的。</p>
+<h2 id="分区容错性"><a href="#分区容错性" class="headerlink" title="分区容错性"></a>分区容错性</h2><p>分区容错性即<em>the system continues to operate despite arbitrary message loss or failure of part of the system</em>。由于分布式集群中常出现网络分区情况，即集群中的一部分机器与另一部分机器中断连接，这可能是由于网络故障，产生网络分区；也可能是由于某些节点宕机。网络分区可能产生的一个后果是脑裂(split brain)，也就是存在多个节点认为自己是领导者。</p>
+<p>我们除非设计出一个永远不会出故障的网络，否则我们必须要容忍P。于是C和A便成为了trade-off。由于网络分区的概率比较小，并且是易于探测的，所以C和A大多数情况是能够比较好地满足的，所以说我们要做的不是根除网络分区及其导致的部分失效(partial failure)问题，而是去正确地处理它，这就引入了诸如2PC、RWN、Paxos等协议。</p>
+<h1 id="分布式事务"><a href="#分布式事务" class="headerlink" title="分布式事务"></a>分布式事务</h1><p>由于分布式系统中存在多个副本，所以维护这些副本的一致性成为核心问题之一。分布式事务相对于仅涉及单个数据库事务的难点在于其提交或回滚不仅决定于自身，还决定于其他节点上事务执行的状态。从理想考虑，只要有一台节点失效，其他节点就要进行rollback。为了实现这一点，需要一个协调者(Coordinator)来根据所有参与者(Cohorts)的情况判断是否完成提交或终止提交。同时协调者的故障称为单点故障，也就是这个故障能够直接导致集群无法运行，需要特别考虑。<br>为了解决分布式事务上的ACID问题，我们引入了2PC、3PC、消息队列之类的算法。</p>
+<h2 id="2PC和3PC"><a href="#2PC和3PC" class="headerlink" title="2PC和3PC"></a>2PC和3PC</h2><p>出于篇幅限制，见文章<a href="/2019/03/12/2pc-3pc/">2PC和3PC</a>。</p>
+<h2 id="可调一致性"><a href="#可调一致性" class="headerlink" title="可调一致性"></a>可调一致性</h2><p>诸如Cassandra的系统在最终一致性的基础上提供了可调一致性。对于任何读写操作，系统允许用户配置成功写操作的最小节点数W、成功读操作的最小节点数R和副本节点的数量N。我们可以根据读写请求的数量来动态调整可用性C和一致性A之间的trade-off。</p>
+<h1 id="分布式共识"><a href="#分布式共识" class="headerlink" title="分布式共识"></a>分布式共识</h1><h2 id="分布式共识的特性"><a href="#分布式共识的特性" class="headerlink" title="分布式共识的特性"></a>分布式共识的特性</h2><p>分布式共识协议被用来解决一个fault-tolerant的分布式系统上出现的一致性问题。通过共识协议，我们能够让一个集群的行为如同一个单机版的可靠的节点一样，即使其中有一小部分的节点宕机或分区。分布式共识协议常被用作在replicated state machine的上下文中。<br>具体地讲，分布式共识具有以下三个特性</p>
+<ol>
+<li>agreement<br> 决议需要得到所有节点的认同，通常是首先批准一个多数票的决议，然后进行同步。</li>
+<li>validity<br> 决议的值需要满足合法性要求。</li>
+<li>termination(liveness)<br> 决议过程能够在有限步内结束，并产生结果。</li>
+</ol>
+<h2 id="FLP不可能性"><a href="#FLP不可能性" class="headerlink" title="FLP不可能性"></a>FLP不可能性</h2><p>论文Impossibility of Distributed Consensus with One Faulty Process证明了异步通信情况下的只要有一个进程宕机，就无法达成共识。这里的共识需要满足termination、agreement和validity。相对于同步通信，</p>
+<h2 id="拜占庭将军问题"><a href="#拜占庭将军问题" class="headerlink" title="拜占庭将军问题"></a>拜占庭将军问题</h2><p>拜占庭将军问题指在一个有<code>n</code>个节点的集群内部，有<code>t</code>个节点可能发生任意错误的情况下，如果<code>n &lt;= 3t</code>，一个正确的共识不可能达成。</p>
+<h2 id="CAP理论"><a href="#CAP理论" class="headerlink" title="CAP理论"></a>CAP理论</h2><p>CAP理论认为一致性(consistency)、可用性(availability)和分区容错性(partition tolerance)是不可能同时被满足的。这里的一致性指的是强一致性。</p>
+<h2 id="复制状态机"><a href="#复制状态机" class="headerlink" title="复制状态机"></a>复制状态机</h2><p>复制状态机(Replicated State Machine)的提出源自Paxos算法。复制状态机通过同步日志，使得多个节点从相同的初始状态开始，按顺序执行相同的命令，转移到相同的状态，复制状态机中向所有节点同步的内容是操作本身，我们可以理解为同步的是某个值的增量。与复制状态机相对应的是在ZAB等协议中常出现的primary backup system，它向所有节点同步的是操作的结果，我们可以认为同步的是值本身。<a href="https://zhuanlan.zhihu.com/p/30856272" target="_blank" rel="noopener">容易看出RSM的设计使得我们回滚操作变得简单，仅仅删除掉后面的日志即可，但不好的地方在于RSM往往需要比PBS系统较多的日志条目，因为PBS可以只保存对状态机有修改的操作</a>。<br><img src="/img/fbs/fzztj.jpg" alt=""></p>
+<p>基于RSM的日志复制形式是State-machine replication，<a href="https://www.microsoft.com/en-us/research/wp-content/uploads/2016/06/HPSMR.pdf" target="_blank" rel="noopener">能够实现FT</a>。<a href="https://en.wikipedia.org/wiki/State_machine_replication" target="_blank" rel="noopener">通常地</a>，一个支持F个（独立随机的）故障的系统需要2F+1个replica，对于fail-stop情况，即故障的系统保证不产生任何输出时，只需要F+1个replica即可。特别地，对于拜占庭故障，即某个节点向不同方向发送不同值的情况下，根据消息是否加密验证需要2F+1和3F+1个节点。</p>
+<p>通常的SMR的实现是串行的，即每一个SMR的副本以单线程的形式处理<a href="https://alexstocks.github.io/html/etcd.html" target="_blank" rel="noopener">Propose-Append-Broadcast-Apply</a>的过程，只有当客户A的请求Apply之后，才能继续处理客户B的Propose。事实上，SMR的一个实现细节就是为所有的输入选择一个特定的顺序，注意到现实中的输入是偏序的，但SMR要求一个全序(total order)的输入。<a href="https://en.wikipedia.org/wiki/State_machine_replication" target="_blank" rel="noopener">这样每一个非故障的副本才能在同样的状态通过同样的输入到达同样的结果</a>。</p>
+<p>Pipeline是对串行方式SMR的一个优化，即<a href="https://zhuanlan.zhihu.com/p/30043911" target="_blank" rel="noopener">使用一个线程接收请求，一个线程处理请求，一个线程响应客户端</a>。</p>
+<p>分布式共识算法被用来解决SMR中存在的问题，例如如何选主，如何处理网络分区等，常见的分布式共识算法包括Paxos和Raft等。这里的共识(Consensus)指的是<a href="https://en.wikipedia.org/wiki/State_machine_replication" target="_blank" rel="noopener">由一系列独立的实体为一个值进行投票</a>。</p>
+<h2 id="2PC、RWN、Paxos等分布式共识算法的区别"><a href="#2PC、RWN、Paxos等分布式共识算法的区别" class="headerlink" title="2PC、RWN、Paxos等分布式共识算法的区别"></a>2PC、RWN、Paxos等分布式共识算法的区别</h2><p>首先从设计上讲2PC和Paxos之流就奔着不同的目标而去。诸如2PC之类的协议是为了实现分布式事务，因此它涉及到的是对多个值修改的ACID性质，而分布式共识协议是为了管理一个值的多个replica。<a href="https://www.zhihu.com/question/266759495/answer/312931690" target="_blank" rel="noopener">例如</a>，我们可以认为2PC针对多个Partition，而共识算法针对于多个Replication。</p>
+<p>再从可用性上考虑，分布式共识协议是为了维护复制状态机，即通过Leader保证复制状态机的输入是全序(total order的)，从而可以通过复制状态机保证各个节点上的日志是一致的。进一步地，共识协议提供了Leader宕机情况下的选主策略，从而保证了集群的HA。特别注意到在这里，2PC算法中的Leader，也就是协调者在宕机之后集群会整体阻塞，而分布式共识算法能够极大程度避免这一点。</p>
+<p><a href="http://matt33.com/2018/07/08/distribute-system-consistency-protocol/" target="_blank" rel="noopener">从CAP理论</a>上来讲，2PC是CA的，它要求所有节点保持全体一致。诸如Paxos的Quorum类算法是CP的，它仅要求实现多数一致。RWN是AP的，因此它实现的是可调一致性而不是强一致性。</p>
+<h1 id="Raft"><a href="#Raft" class="headerlink" title="Raft"></a>Raft</h1><p>出于篇幅限制，有关Raft已经移到新文章<a href="/2019/03/12/raft-algorithm/">Raft公式算法</a>中。</p>
+<h1 id="Paxos"><a href="#Paxos" class="headerlink" title="Paxos"></a>Paxos</h1><p>Paxos将网络中的节点分为proposer、acceptor和learner三种类。其中proposer即提案的提出者，acceptor对提案经投票，投票的最终结果交给learner进行同步。</p>
+<h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><p>除去在原文中标注引用的内容外，本文还参考了一下内容：</p>
+<ol>
+<li>DDIA</li>
+<li>本文中提到的所有概念的原论文，例如FLP定理等。</li>
+<li>Staring into the Abyss: An Evaluation of Concurrency Control with One Thousand Cores</li>
+</ol>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/分布式/" rel="tag"># 分布式</a>
+          
+            <a href="/tags/raft/" rel="tag"># raft</a>
+          
+            <a href="/tags/paxos/" rel="tag"># paxos</a>
+          
+            <a href="/tags/一致性/" rel="tag"># 一致性</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2017/08/20/黄山游记/" rel="next" title="黄山游记">
+                <i class="fa fa-chevron-left"></i> 黄山游记
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2017/09/23/HDU2089不要62/" rel="prev" title="HDU 2089 不要62 数位DP">
+                HDU 2089 不要62 数位DP <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">117</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">131</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#非分布式系统上的一致性"><span class="nav-number">1.</span> <span class="nav-text">非分布式系统上的一致性</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#两种事务控制模型"><span class="nav-number">1.1.</span> <span class="nav-text">两种事务控制模型</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#ACID"><span class="nav-number">1.1.1.</span> <span class="nav-text">ACID</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#BASE"><span class="nav-number">1.1.2.</span> <span class="nav-text">BASE</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#事务更新的两条规则"><span class="nav-number">1.1.3.</span> <span class="nav-text">事务更新的两条规则</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#提交规则"><span class="nav-number">1.1.3.1.</span> <span class="nav-text">提交规则</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#先记后写规则"><span class="nav-number">1.1.3.2.</span> <span class="nav-text">先记后写规则</span></a></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#故障恢复"><span class="nav-number">1.2.</span> <span class="nav-text">故障恢复</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#WAL"><span class="nav-number">1.2.1.</span> <span class="nav-text">WAL</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Shadow-paging"><span class="nav-number">1.2.2.</span> <span class="nav-text">Shadow paging</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#并发事务控制"><span class="nav-number">1.3.</span> <span class="nav-text">并发事务控制</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#事务的隔离等级"><span class="nav-number">1.3.1.</span> <span class="nav-text">事务的隔离等级</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2PL"><span class="nav-number">1.3.2.</span> <span class="nav-text">2PL</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#意向锁"><span class="nav-number">1.3.2.1.</span> <span class="nav-text">意向锁</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#T-O"><span class="nav-number">1.3.3.</span> <span class="nav-text">T/O</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#OCC"><span class="nav-number">1.3.4.</span> <span class="nav-text">OCC</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#MVCC"><span class="nav-number">1.3.5.</span> <span class="nav-text">MVCC</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#分布式系统的特性"><span class="nav-number">2.</span> <span class="nav-text">分布式系统的特性</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#高可用性HA与容错FT"><span class="nav-number">2.1.</span> <span class="nav-text">高可用性HA与容错FT</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#主从复制"><span class="nav-number">2.1.1.</span> <span class="nav-text">主从复制</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#分区"><span class="nav-number">2.1.2.</span> <span class="nav-text">分区</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#分布式集群"><span class="nav-number">2.1.3.</span> <span class="nav-text">分布式集群</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#一致性"><span class="nav-number">2.2.</span> <span class="nav-text">一致性</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#强一致性"><span class="nav-number">2.2.1.</span> <span class="nav-text">强一致性</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#全序广播"><span class="nav-number">2.2.2.</span> <span class="nav-text">全序广播</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#弱一致性"><span class="nav-number">2.2.3.</span> <span class="nav-text">弱一致性</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#分布式一致性与事务一致性"><span class="nav-number">2.2.4.</span> <span class="nav-text">分布式一致性与事务一致性</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#可用性"><span class="nav-number">2.3.</span> <span class="nav-text">可用性</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#分区容错性"><span class="nav-number">2.4.</span> <span class="nav-text">分区容错性</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#分布式事务"><span class="nav-number">3.</span> <span class="nav-text">分布式事务</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#2PC和3PC"><span class="nav-number">3.1.</span> <span class="nav-text">2PC和3PC</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#可调一致性"><span class="nav-number">3.2.</span> <span class="nav-text">可调一致性</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#分布式共识"><span class="nav-number">4.</span> <span class="nav-text">分布式共识</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#分布式共识的特性"><span class="nav-number">4.1.</span> <span class="nav-text">分布式共识的特性</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#FLP不可能性"><span class="nav-number">4.2.</span> <span class="nav-text">FLP不可能性</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#拜占庭将军问题"><span class="nav-number">4.3.</span> <span class="nav-text">拜占庭将军问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#CAP理论"><span class="nav-number">4.4.</span> <span class="nav-text">CAP理论</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#复制状态机"><span class="nav-number">4.5.</span> <span class="nav-text">复制状态机</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2PC、RWN、Paxos等分布式共识算法的区别"><span class="nav-number">4.6.</span> <span class="nav-text">2PC、RWN、Paxos等分布式共识算法的区别</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Raft"><span class="nav-number">5.</span> <span class="nav-text">Raft</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Paxos"><span class="nav-number">6.</span> <span class="nav-text">Paxos</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">7.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2019</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2017/09/20/distributed-system-consistency-and-consensus/';
+          this.page.identifier = '2017/09/20/distributed-system-consistency-and-consensus/';
+          this.page.title = '分布式一致性和分布式共识协议';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+  
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Config({
+        tex2jax: {
+          inlineMath: [ ['$','$'], ["\\(","\\)"]  ],
+          processEscapes: true,
+          skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+        }
+      });
+    </script>
+
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax(), i;
+        for (i=0; i < all.length; i += 1) {
+          all[i].SourceElement().parentNode.className += ' has-jax';
+        }
+      });
+    </script>
+    <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+  
+
+
+  
+
+  
+
+</body>
+</html>
