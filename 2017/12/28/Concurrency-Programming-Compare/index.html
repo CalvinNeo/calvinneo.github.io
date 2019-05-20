@@ -74,7 +74,7 @@
 <link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="C++,多线程,并行计算,Linux," />
+  <meta name="keywords" content="C++,Linux,并行计算,多线程," />
 
 
 
@@ -91,7 +91,7 @@
 
 
 <meta name="description" content="在本篇中比较了各种并发、并行技术。并发(concurrency)强调的是逻辑上的同时发生，是语义上的模型(semantic model)，在实际上并发程序可能是由一个处理器同时(simultaneously)处理多个任务，因此并发过程中常出现一个线程等待其他资源的情况。此时常伴随着线程的阻塞和调度。并发过程通常可划分为多个级别：Blocking、Obstruction-Free、Lock-Free">
-<meta name="keywords" content="C++,多线程,并行计算,Linux">
+<meta name="keywords" content="C++,Linux,并行计算,多线程">
 <meta property="og:type" content="article">
 <meta property="og:title" content="并发编程重要概念及比较">
 <meta property="og:url" content="http://www.calvinneo.com/2017/12/28/Concurrency-Programming-Compare/index.html">
@@ -108,7 +108,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/concur/mesi.jpg">
 <meta property="og:image" content="http://www.calvinneo.com/img/concur/speed_cmp.jpg">
 <meta property="og:image" content="http://www.calvinneo.com/img/bfbc/dclpjj.png">
-<meta property="og:updated_time" content="2019-04-08T09:28:17.951Z">
+<meta property="og:updated_time" content="2019-05-07T09:30:35.682Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="并发编程重要概念及比较">
 <meta name="twitter:description" content="在本篇中比较了各种并发、并行技术。并发(concurrency)强调的是逻辑上的同时发生，是语义上的模型(semantic model)，在实际上并发程序可能是由一个处理器同时(simultaneously)处理多个任务，因此并发过程中常出现一个线程等待其他资源的情况。此时常伴随着线程的阻塞和调度。并发过程通常可划分为多个级别：Blocking、Obstruction-Free、Lock-Free">
@@ -403,7 +403,7 @@
 <li>减少连续指令的相关性<br> 这一点是针对数据冒险而言的。</li>
 <li>进行循环展开<br> 这一点是针对控制冒险而言的。循环处必然出现分支，这就带来了可能的分支预测失败的成本。因此我们展开循环能够减少这样的跳转次数。</li>
 </ol>
-<h2 id="CPU的缓存和缓存一致性"><a href="#CPU的缓存和缓存一致性" class="headerlink" title="CPU的缓存和缓存一致性"></a>CPU的缓存和缓存一致性</h2><p>x86往往都有高速缓存Cache，而且有多级。高速缓存基于静态RAM(SRAM)技术，区别于主存的动态RAM(DRAM)技术。现代CPU中寄存器与内存之间没有直接的渠道，而必须通过多级的高速缓存才能到内存。高速缓存的作用依然是为了弥补CPU和内存在速度上的差异，高速缓存提高效率的原理是基于时间局部性和空间局部性，我们稍后将详细讨论这个概念。虽然高速缓存对用户来说是透明的，我们的代码要不直接操作寄存器，要不直接操作内存，但它并不是不存在，如果深究下去会发现如何保障内存和对应CPU缓存的同步是个问题。但是我们不要担心诸如此类的“一个核心写另一个核心脏读”的情况，缓存一致性协议能够解决内存和多核CPU缓存之间以及缓存与缓存之间的同步性问题。但我们仍然要关注缓存这个概念以写出高质量的程序。</p>
+<h2 id="CPU的缓存和缓存一致性"><a href="#CPU的缓存和缓存一致性" class="headerlink" title="CPU的缓存和缓存一致性"></a>CPU的缓存和缓存一致性</h2><p>x86往往都有高速缓存Cache，而且有多级。高速缓存基于静态RAM(SRAM)技术，区别于主存的动态RAM(DRAM)技术。现代CPU中寄存器与内存之间没有直接的渠道，而必须通过多级的高速缓存才能到内存。高速缓存的作用依然是为了弥补CPU和内存在速度上的差异，高速缓存提高效率的原理是基于时间局部性(Temporal Locality)和空间局部性(Spatial Locality)，我们稍后将详细讨论这个概念。虽然高速缓存对用户来说是透明的，我们的代码要不直接操作寄存器，要不直接操作内存，但它并不是不存在，如果深究下去会发现如何保障内存和对应CPU缓存的同步是个问题。但是我们不要担心诸如此类的“一个核心写另一个核心脏读”的情况，缓存一致性协议能够解决内存和多核CPU缓存之间以及缓存与缓存之间的同步性问题。但我们仍然要关注缓存这个概念以写出高质量的程序。</p>
 <h3 id="局部性原理"><a href="#局部性原理" class="headerlink" title="局部性原理"></a>局部性原理</h3><p>时间局部性和空间局部性原理表示被引用过一次的存储器位置很可能在不远的将来再次被引用，而存储器中的某一个地址被引用过，那么它附近的地址很可能也会被使用。我们考虑对一个向量求和<br><figure class="highlight matlab"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">int s = <span class="number">0</span>;</span><br><span class="line"><span class="keyword">for</span>(int <span class="built_in">i</span> = <span class="number">0</span>; <span class="built_in">i</span> &lt; N; <span class="built_in">i</span>++)&#123;</span><br><span class="line">    s += v[i];</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">return</span> s;</span><br></pre></td></tr></table></figure></p>
 <p>首先对于标量<code>s</code>，它并没有空间局部性一说，但是它在每次循环中都被访问，因此具有较好的时间局部性。而向量<code>v</code>是被<strong>逐一</strong>访问的，即具有步长为1的引用模式，因此空间局部性很好，不过用一次就不用了，所以时间局部性不好。一般来说步长越小，空间局部性越好。这样的空间局部性在对二维数组的访问上会更加明显，例如对于行存储的模型，如果以列为单位遍历，那么就会破坏空间局部性，这个在我CFortranTranslator工程的设计上曾有所考虑。</p>
 <h3 id="多级缓存和缓存不命中"><a href="#多级缓存和缓存不命中" class="headerlink" title="多级缓存和缓存不命中"></a>多级缓存和缓存不命中</h3><p>往下深究局部性原理，我们能够想到缓存不命中的问题。我们始终希望能够在当前缓存找到我们需要的对象，这样最快，但缓存的容量总是有限的。当缓存不能命中时，我们就需要从下一级缓存中找。当系统开始运行时缓存是空的，这时候的命中称为冷不命中或者强制不命中，没有什么道理可讲。下面我们考虑如何快速地根据地址<code>m</code>来定位和映射Cache，由于一般高层<code>k</code>缓存的容量要小，所以缓存在设计的时候会分成几个桶（高速缓存组），这样可以Hash到桶里面。事实上高速缓存一般将地址分为三段，即组索引位<code>s</code>、行标记位<code>t</code>和偏移位<code>b</code>。这样的Hash可能存在问题，例如我们<code>mod 4</code>一下到四个桶里面。那么假如说我们从<code>k+1</code>层交替访问0号和8号块，那么我们发现其实缓存会一直不命中，即使其他的块还是空的，这被称为冲突不命中(conflict miss)。当然有的时候缓存就是太小了，这个就是容量不命中(capacity miss)。<br><img src="/img/concur/hchang.jpg" alt=""><br>在组织时，我们按照桶的数量和桶中元素数量的区别将高速缓存分为了直接映射高速缓存、组相联高速缓存和全相联高速缓存。直接映射(direct-mapped)高速缓存每一个桶里面只有一行，缓存根据是否命中会选择直接返回或者向下层请求对应块。整个匹配过程分为三步，第一步是组选择，我们在地址的<strong>中间</strong>部分抽出<code>s</code>个位作为组索引位<code>s</code>，<code>s</code>的大小取决于组数<code>S</code>，我们有关系$S = log_2^S$。我们选择中间部分是出于对空间局部性的利用，如果我们使用高位做索引，那么我们空间局部性好的连续的块就会被映射到一个桶里面，这样的话就会导致缓存的频繁刷新。然后第二步是行匹配，我们根据标记位<code>t</code>去寻找一个<strong>有效位被设置了的</strong>缓存，这是因为缓存可能会失效，这个对于只有一行的直接映射缓存来说的trivial的。<code>t</code>是由<code>s</code>和<code>b</code>决定的，假设地址长度为<code>m</code>，块偏移位数为<code>b</code>，那么我们的<code>t = m - s - b</code>，这样做的话，一旦我们找到匹配的<code>t</code>，我们就可以认为这个地址在缓存行中。由于<code>s</code>占了中间位，所以<code>t</code>实际上就占了高位。于是第三步是字选择，因为缓存行是一个包含了$2^b$字节的块，我们整体读出来是没用的，所以我们要读到指定的字需要一个offset，这时候就可以借助于缓存行中的偏移位<code>b</code>了。对于下面的代码，如果x和y都被映射到一个高速缓存组中，就会造成thrash。<br>CSAPP中指出，即使一个局部空间性看上去很好的程序也可能造成缓存抖动(thrash)。<br><figure class="highlight matlab"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span>(int <span class="built_in">i</span> = <span class="number">0</span>; <span class="built_in">i</span> &lt; <span class="number">8</span>; <span class="built_in">i</span>++)&#123;</span><br><span class="line">    s += x[i] * y[i];</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
@@ -729,11 +729,11 @@ pthread_cond_wait(&amp;cond, &amp;mutex);
           
             <a href="/tags/C/" rel="tag"># C++</a>
           
-            <a href="/tags/多线程/" rel="tag"># 多线程</a>
+            <a href="/tags/Linux/" rel="tag"># Linux</a>
           
             <a href="/tags/并行计算/" rel="tag"># 并行计算</a>
           
-            <a href="/tags/Linux/" rel="tag"># Linux</a>
+            <a href="/tags/多线程/" rel="tag"># 多线程</a>
           
         </div>
       
@@ -837,7 +837,7 @@ pthread_cond_wait(&amp;cond, &amp;mutex);
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">119</span>
+                <span class="site-state-item-count">120</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -850,7 +850,7 @@ pthread_cond_wait(&amp;cond, &amp;mutex);
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">133</span>
+                <span class="site-state-item-count">134</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
