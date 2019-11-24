@@ -1,0 +1,1233 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="Scala,Spark,SparkSQL," />
+
+
+
+
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="Spark是非常常用的分布式计算框架。相比更早期的Mapreduce，Spark更为灵活。Spark的执行粒度分为Application、Job、Stage和Task四个层次。">
+<meta name="keywords" content="Scala,Spark,SparkSQL">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Spark和SparkSQL">
+<meta property="og:url" content="http://www.calvinneo.com/2019/08/06/spark-sql/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="Spark是非常常用的分布式计算框架。相比更早期的Mapreduce，Spark更为灵活。Spark的执行粒度分为Application、Job、Stage和Task四个层次。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2019-11-24T16:08:46.842Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Spark和SparkSQL">
+<meta name="twitter:description" content="Spark是非常常用的分布式计算框架。相比更早期的Mapreduce，Spark更为灵活。Spark的执行粒度分为Application、Job、Stage和Task四个层次。">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2019/08/06/spark-sql/"/>
+
+
+
+
+
+  <title>Spark和SparkSQL | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2019/08/06/spark-sql/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                Spark和SparkSQL
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2019-08-06T16:42:32+08:00">
+                2019-08-06
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>Spark是非常常用的分布式计算框架。相比更早期的Mapreduce，Spark更为灵活。Spark的执行粒度分为Application、Job、Stage和Task四个层次。</p>
+<a id="more"></a>
+<h1 id="RDD、Dataframe和Dataset"><a href="#RDD、Dataframe和Dataset" class="headerlink" title="RDD、Dataframe和Dataset"></a>RDD、Dataframe和Dataset</h1><h2 id="RDD"><a href="#RDD" class="headerlink" title="RDD"></a>RDD</h2><p>RDD(Resilient Distributed Dataset)，即弹性数据集是Spark中的基础结构。RDD是distributive的、immutable的，可以存在在内存中，也可以被缓存。<br>对RDD具有转换操作和行动操作两种截然不同的操作。</p>
+<ol>
+<li><p>转换(Transform)操作始终在RDD的Context里面，但行动(Action)操作会去掉RDD的Context<br> 例如<code>take</code>是行动操作，返回的是一个数组而不是RDD了，在Scala中可以看到</p>
+ <figure class="highlight zephir"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">scala&gt; <span class="keyword">var</span> rdd1 = sc.makeRDD(Seq(<span class="number">10</span>, <span class="number">4</span>, <span class="number">2</span>, <span class="number">12</span>, <span class="number">3</span>))</span><br><span class="line">rdd1: org.apache.spark.rdd.RDD[<span class="keyword">Int</span>] = ParallelCollectionRDD[<span class="number">40</span>] at makeRDD at :<span class="number">21</span></span><br><span class="line"> </span><br><span class="line">scala&gt; rdd1.take(<span class="number">1</span>)</span><br><span class="line">res0: <span class="keyword">Array</span>[<span class="keyword">Int</span>] = <span class="keyword">Array</span>(<span class="number">10</span>)                                                    </span><br><span class="line"> </span><br><span class="line">scala&gt; rdd1.take(<span class="number">2</span>)</span><br><span class="line">res1: <span class="keyword">Array</span>[<span class="keyword">Int</span>] = <span class="keyword">Array</span>(<span class="number">10</span>, <span class="number">4</span>)</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>转换操作是Lazy Evaluate的，直到遇到一个Action操作。<br> Spark会根据每一个Action操作将一个Application分成多个Job。</p>
+</li>
+</ol>
+<h2 id="DataFrame"><a href="#DataFrame" class="headerlink" title="DataFrame"></a>DataFrame</h2><p>我们可以将RDD看为一个分布式的容器<code>M[T]</code>，我们对<code>T</code>是未知的。而事实上我们处理数据集往往就是个来自HBase或者其他数据仓库大宽表。如果使用RDD会导致很多的拆箱和装箱的操作。并且由于<code>T</code>是一个黑盒，Spark也很难对RDD的计算进行优化。为此，Spark推出了SparkSQL来解决这个问题。而SparkSQL的一个核心机制就是DataFrame。</p>
+<p>RDD可以通过<a href="https://github.com/apache/spark/blob/master/sql/core/src/main/scala/org/apache/spark/sql/SQLImplicits.scala" target="_blank" rel="noopener">下面代码中的一个隐式转换</a> 得到一个<a href="https://github.com/apache/spark/blob/master/sql/core/src/main/scala/org/apache/spark/sql/DatasetHolder.scala" target="_blank" rel="noopener">DatasetHolder</a>，接着借助于<code>DatasetHolder</code>中提供的<code>toDS</code>和<code>toDF</code>来实现到<code>DataFrame</code>和<code>Dataset</code>的转换。<br><figure class="highlight markdown"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">implicit def rddToDatasetHolder[<span class="string">T : Encoder</span>](<span class="link">rdd: RDD[T]</span>): DatasetHolder[T] = &#123;</span><br><span class="line"><span class="code">    DatasetHolder(_sqlContext.createDataset(rdd))</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>容易看到在上面文件里面还定义了一系列隐式转换所需要的Encoder，例如对于大多数的case class都需要调用newProductArrayEncoder。有关这部分的进一步说明，可以查看<a href="https://github.com/summerDG/spark-code-analysis/blob/master/analysis/sql/spark_sql_parser.md" target="_blank" rel="noopener">文章</a><br>而从<code>DataFrame</code>转到<code>RDD</code>的可以通过<code>.rdd</code>来轻松得到。不过这个操作是Action么？在爆栈网上有<a href="https://stackoverflow.com/questions/44708629/is-dataset-rdd-an-action-or-transformation" target="_blank" rel="noopener">相关讨论1，认为不是Action但有开销</a>；和<a href="https://stackoverflow.com/questions/55885145/whats-the-overhead-of-converting-an-rdd-to-a-dataframe-and-back-again" target="_blank" rel="noopener">相关讨论2，认为是无开销的</a></p>
+<h1 id="Spark的执行"><a href="#Spark的执行" class="headerlink" title="Spark的执行"></a>Spark的执行</h1><p>Spark的Transform操作可以分为宽依赖窄依赖操作两种。窄依赖操作表示父RDD的每个分区只被子RDD的一个分区所使用，例如union、map、filter等的操作；而宽依赖恰恰相反。宽依赖常常导致shuffle操作，因为需要将父RDD复制若干份给不同节点用来生成子RDD。当DAG的执行中出现宽依赖操作时，Spark会将其前后划分为不同的Stage。</p>
+<p>而在Stage之下，就是若干个Task了。这些Task也就是Spark的并行单元，通常来说，按照当前Stage的最后一个RDD的分区数来计算，每一个分区都会启动一个Task来进行计算。我们可以通过<code>rdd.partitions.size</code>来获取一个RDD有多少个分区。</p>
+<h1 id="SparkSQL"><a href="#SparkSQL" class="headerlink" title="SparkSQL"></a>SparkSQL</h1><h2 id="SparkSQL的解析流程"><a href="#SparkSQL的解析流程" class="headerlink" title="SparkSQL的解析流程"></a>SparkSQL的解析流程</h2><p>SparkSQL由4个项目组成，分别为Spark Core、Spark Catalyst、Spark Hive和Spark Hive ThriftServer。</p>
+<p>首先会对SQL进行Parse，想成一个Unresolved LogicalPlan。这里Unresolved的意思是诸如变量名和表名这些东西是不确定的，需要在Analyzer的阶段借助于Catalog来决议。Catalog就是描述了SQLContext里面的诸如表之类的对象。<br>通过<a href="https://github.com/apache/spark/tree/master/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/analysis" target="_blank" rel="noopener">Analyzer</a>，将Unresolved LogicalPlan决议为Logical Plan。<br><a href="https://github.com/apache/spark/blob/master/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/plans/logical/LogicalPlan.scala" target="_blank" rel="noopener">Logical Plan</a>继承了<code>QueryPlan[LogicalPlan]</code>，是一棵AST。SparkSQL的执行目标就是树根的值，在计算过程中，父节点的计算依赖于子节点的计算结果。<code>LogicalPlan</code>又拥有三个子类<code>BinaryNode</code>/<code>UnaryNode</code>和<code>LeafNode</code>，然后有产生了<a href="https://github.com/apache/spark/blob/master/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/plans/logical/LogicalPlan.scala" target="_blank" rel="noopener">OrderPreservingUnaryNode</a>等子类。这些Node被<a href="https://github.com/apache/spark/blob/master/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/plans/logical/basicLogicalOperators.scala" target="_blank" rel="noopener">另一些子类</a>所继承，这些basicLogicalOperators<a href="https://blog.csdn.net/oopsoom/article/details/38274621" target="_blank" rel="noopener">描述了包括Project/Filter/Sample/Union/Join/Limit等操作</a>。<br>通过Optimizer，对Logical Plan进行优化。Catalyst主要做的是RBO，但诸如华为等公司和机构也有提出过CBO的方案。<br>优化后的Optimized Logical Plan会生成为Physical Plan。</p>
+<h2 id="Row"><a href="#Row" class="headerlink" title="Row"></a>Row</h2><p><a href="https://github.com/apache/spark/blob/master/sql/catalyst/src/main/scala/org/apache/spark/sql/Row.scala" target="_blank" rel="noopener">Row</a>是SparkSQL的基石。它其实更多地是作为一个基类来实现，我们经常使用是它的一个子类<code>GenericRowWithSchema</code>。在<code>GenericRowWithSchema</code>中重新实现了<code>filedIndex</code>这个函数，允许我们使用<code>row.getAs[String](&quot;colName&quot;)</code>这样的方法。如果经常使用SparkSQL的API会发现我们不能从一个<code>DataFrame</code>通过map到一个<code>Row</code>的方式得到另一个<code>DataFrame</code>，反而可以从一个<code>Seq</code>得到，其原因就是因为<code>DataFrame</code>有schema而<code>Row</code>没有。我们通过下面的实验来检查从一个<code>Seq</code>到DataFrame的转换<br><figure class="highlight stylus"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">import org<span class="selector-class">.apache</span><span class="selector-class">.spark</span><span class="selector-class">.sql</span><span class="selector-class">.types</span>.&#123;DoubleType, LongType, StringType, StructField, StructType&#125;</span><br><span class="line">import org<span class="selector-class">.apache</span><span class="selector-class">.spark</span><span class="selector-class">.sql</span><span class="selector-class">.functions</span>.&#123;concat, lit, udf&#125;</span><br><span class="line">import org<span class="selector-class">.apache</span><span class="selector-class">.spark</span><span class="selector-class">.sql</span>.&#123;Row&#125;</span><br><span class="line">import org<span class="selector-class">.apache</span><span class="selector-class">.spark</span><span class="selector-class">.sql</span><span class="selector-class">.catalyst</span><span class="selector-class">.expressions</span>.&#123;GenericRow, GenericRowWithSchema&#125;</span><br><span class="line">case class Person(name: String, age: Long, money: Long)</span><br><span class="line">import spark<span class="selector-class">.implicits</span>._</span><br><span class="line"></span><br><span class="line">val ds = Seq(Person(<span class="string">"Calvin"</span>, <span class="number">22</span>, <span class="number">1</span>)).toDS</span><br><span class="line">val ds2 = Seq(Person(<span class="string">"Neo"</span>, <span class="number">23</span>, <span class="number">1</span>)).toDS</span><br><span class="line">val dfj = ds.union(ds2)</span><br><span class="line">val dsj_fail = dfj<span class="selector-class">.toDS</span> <span class="comment">// 注意DataFrame没有toDS方法，toDS是由RDD转DS用的</span></span><br><span class="line">val dsj = dfj<span class="selector-class">.as</span>[Person]</span><br><span class="line"></span><br><span class="line">val ds3 = Seq((<span class="string">"Calvin"</span>, <span class="number">22</span>, <span class="number">1</span>)).toDS</span><br><span class="line">val ds4 = Seq((<span class="string">"Neo"</span>, <span class="number">23</span>, <span class="number">1</span>)).toDS</span><br><span class="line">val dfj2 = ds3.union(ds4)</span><br></pre></td></tr></table></figure></p>
+<p>有关<code>Row</code>和<code>GenericRowWithSchema</code>之间的转换，我们可以进行下面的实验<br><figure class="highlight stylus"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 复用之前的头部</span></span><br><span class="line">val df = Seq(Person(<span class="string">"Calvin"</span>, <span class="number">22</span>, <span class="number">100</span>), Person(<span class="string">"Neo"</span>, <span class="number">33</span>, <span class="number">300</span>)).toDF</span><br><span class="line"></span><br><span class="line"><span class="comment">// df的schema</span></span><br><span class="line">scala&gt; df.schema</span><br><span class="line">res2: org<span class="selector-class">.apache</span><span class="selector-class">.spark</span><span class="selector-class">.sql</span><span class="selector-class">.types</span><span class="selector-class">.StructType</span> = StructType(StructField(name,StringType,true), StructField(age,LongType,false), StructField(money,LongType,false))</span><br><span class="line"></span><br><span class="line"><span class="comment">// 第1行的schema</span></span><br><span class="line">scala&gt; df.take(<span class="number">1</span>)(<span class="number">0</span>).schema</span><br><span class="line">res3: org<span class="selector-class">.apache</span><span class="selector-class">.spark</span><span class="selector-class">.sql</span><span class="selector-class">.types</span><span class="selector-class">.StructType</span> = StructType(StructField(name,StringType,true), StructField(age,LongType,false), StructField(money,LongType,false))</span><br><span class="line"></span><br><span class="line"><span class="comment">// 查看type，发现是GenericRowWithSchema而不是Row</span></span><br><span class="line">scala&gt; df.take(<span class="number">1</span>)(<span class="number">0</span>)<span class="selector-class">.getClass</span><span class="selector-class">.getSimpleName</span></span><br><span class="line">res5: String = GenericRowWithSchema</span><br><span class="line"></span><br><span class="line"><span class="comment">// 增加一列</span></span><br><span class="line">scala&gt; val r = Row.unapplySeq(df.take(<span class="number">1</span>)(<span class="number">0</span>))<span class="selector-class">.get</span><span class="selector-class">.toArray</span> ++ Seq(<span class="string">"SZ"</span>)</span><br><span class="line">r: Array[Any] = Array(Calvin, <span class="number">22</span>, <span class="number">100</span>, SZ)</span><br><span class="line"></span><br><span class="line"><span class="comment">// 对应增加一列schema</span></span><br><span class="line">scala&gt; val nsch = df.take(<span class="number">1</span>)(<span class="number">0</span>)<span class="selector-class">.schema</span><span class="selector-class">.add</span>(StructField(<span class="string">"addr"</span>,StringType,true))</span><br><span class="line">nsch: org<span class="selector-class">.apache</span><span class="selector-class">.spark</span><span class="selector-class">.sql</span><span class="selector-class">.types</span><span class="selector-class">.StructType</span> = StructType(StructField(name,StringType,true), StructField(age,LongType,false), StructField(money,LongType,false), StructField(addr,StringType,true))</span><br><span class="line"></span><br><span class="line"><span class="comment">// 创建一个新SchemaRow</span></span><br><span class="line">scala&gt; val row_sch = new GenericRowWithSchema(r, nsch)</span><br><span class="line">row_sch: org<span class="selector-class">.apache</span><span class="selector-class">.spark</span><span class="selector-class">.sql</span><span class="selector-class">.catalyst</span><span class="selector-class">.expressions</span><span class="selector-class">.GenericRowWithSchema</span> = [Calvin,<span class="number">22</span>,<span class="number">100</span>,SZ]</span><br></pre></td></tr></table></figure></p>
+<p>只有<code>GenericRowWithSchema</code>有，因此我们可以创建一个<a href="https://stackoverflow.com/questions/33934615/how-to-introduce-the-schema-in-a-row-in-spark" target="_blank" rel="noopener">GenericRowWithSchema</a>，其实现在<code>org.apache.spark.sql.catalyst.expressions.{GenericRow, GenericRowWithSchema}</code>。</p>
+<h2 id="列"><a href="#列" class="headerlink" title="列"></a>列</h2><p>从上文中可以看到，<code>DataFrame</code>中的数据依旧是按照行组织的，通过外挂了一个schema，我们能够有效地识别列。在这种情况下对行的改动是容易的，但是如何对列进行改动呢？一般有两种办法</p>
+<h3 id="借助于withColumn"><a href="#借助于withColumn" class="headerlink" title="借助于withColumn"></a>借助于withColumn</h3><figure class="highlight gams"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">val df = Seq(Person(<span class="string">"Calvin"</span>, <span class="number">22</span>, <span class="number">100</span>), Person(<span class="string">"Neo"</span>, <span class="number">33</span>, <span class="number">300</span>)).toDF</span><br><span class="line">df.withColumn(<span class="string">"name2"</span>, concat(<span class="symbol">$</span><span class="string">"name"</span>, <span class="symbol">$</span><span class="string">"age"</span>.cast(StringType))).show()</span><br><span class="line">df.withColumn(<span class="string">"name2"</span>, <span class="symbol">$</span><span class="string">"age"</span>+<span class="symbol">$</span><span class="string">"money"</span>).show()</span><br></pre></td></tr></table></figure>
+<p>当然，在<code>$</code>表达式之外，我们还可以使用udf，甚至<a href="https://stackoverflow.com/questions/53191271/how-to-do-conditional-withcolumn-in-a-spark-dataframe" target="_blank" rel="noopener">带条件地进行withColumn</a><br><figure class="highlight coffeescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">val addMoneyUDF = udf(<span class="function"><span class="params">(age: Long, money: Long)</span> =&gt;</span> age + money)</span><br><span class="line">df.withColumn(<span class="string">"name2"</span>, addMoneyUDF($<span class="string">"age"</span>, $<span class="string">"money"</span>))</span><br></pre></td></tr></table></figure></p>
+<p>特别需要注意的是<code>withColumn</code>是存在性能开销的。如果我们在代码里频繁（例如使用一个for循环）withColumn，那么就可能出现一个Job结束，而下一个Job迟迟不开始的情况。如果我们将日志等级设置为TRACE，可以看到代码中也存在了很多batch resolution的情况。这是因为较深层次的依赖会导致SparkSQL不能分清到底需要缓存哪些数据以用来恢复（因此只能全部缓存），另外<a href="(https://medium.com/@manuzhang/the-hidden-cost-of-spark-withcolumn-8ffea517c015">文章</a>)中还表示会造成大量的analysis开销。</p>
+<h2 id="groupBy和groupByKey"><a href="#groupBy和groupByKey" class="headerlink" title="groupBy和groupByKey"></a>groupBy和groupByKey</h2><p>不同于RDD的相关方法，DataFrame系列的<code>groupBy</code>和<code>groupByKey</code>会返回两个<a href="https://www.imooc.com/article/258924?block_id=tuijian_wz" target="_blank" rel="noopener">不同的类型</a>，<code>RelationalGroupedDataset</code>和<code>KeyValueGroupedDataset</code>。一般来说，虽然<code>groupByKey</code>更为灵活，能够生成自定义的key用来group，但<code>KeyValueGroupedDataset</code>只提供相对较少的操作，所以最好还是使用<code>groupby</code>。另外，在group操作之后就没有诸如union的操作，我们需要再显式map回<code>DataFrame</code>。</p>
+<h1 id="Spark的部署"><a href="#Spark的部署" class="headerlink" title="Spark的部署"></a>Spark的部署</h1><p>一般来说，Spark的主要分布式部署方式有<a href="https://www.jianshu.com/p/65a3476757a5" target="_blank" rel="noopener">On Yarn和On Mesos和Standalone</a>。<br>最常用的其实是单机模式也就是<code>spark-submit --master local</code>，这里local也是默认选项了。在程序执行过程中，只会生成一个SparkSubmit进程，不会产生Master和Worker节点，也不依赖Hadoop。当然，Windows里面可能需要winutils这个工具的，但也是直接下载，而不需要装Hadoop。<br>下面一种是Spark自带Cluster Manager的Standalone Client模式，也是我们最常用的集群测试模式，需要启动Master和Slave节点，但仍然不依赖Hadoop。<br><figure class="highlight jboss-cli"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="string">./bin/spark-submit</span> <span class="params">--master</span> spark:<span class="string">//localhost</span><span class="function">:7077</span>  <span class="params">--class</span> org.apache.spark.examples.SparkPi <span class="string">./examples/jars/spark-examples_2.11-2.4.4.jar</span> 100</span><br></pre></td></tr></table></figure></p>
+<p>下面一种是Spark自带Cluster Manager的Standalone Cluster模式，一字之差，还是有不同的，用下面的方式启动<br><figure class="highlight jboss-cli"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="string">./bin/spark-submit</span> <span class="params">--master</span> spark:<span class="string">//wl1</span><span class="function">:6066</span> <span class="params">--deploy-mode</span> cluster <span class="comment"># 默认cluster</span></span><br></pre></td></tr></table></figure></p>
+<p>上面两种的配置一般修改Spark的spark-defaults.conf和spark-env.sh也就可以了，不涉及hadoop</p>
+<p>下面一种就是Spark跑在yarn上面，这个还依赖hadoop集群。此时Spark不需要自己提供Master和Worker了<br><figure class="highlight crmsh"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">./bin/spark-submit --<span class="keyword">master</span> <span class="title">yarn</span></span><br></pre></td></tr></table></figure></p>
+<h1 id="Spark性能调优"><a href="#Spark性能调优" class="headerlink" title="Spark性能调优"></a>Spark性能调优</h1><p>一般来说，Spark可能出现瓶颈的地方有内存和网络。内存方面的问题主要是在内存不足的情况下导致向硬盘的溢写。网络问题的主要场景是诸如shuffle类的操作涉及在多个节点上传输，会带来很大的网络传输负担。</p>
+<h2 id="有关Persist"><a href="#有关Persist" class="headerlink" title="有关Persist"></a>有关Persist</h2><p>根据<a href="https://spark.apache.org/docs/latest/programming-guide.html#which-storage-level-to-choose" target="_blank" rel="noopener">RDD Programming Guide</a>，虽然Spark会自动做persist，但是对于肯定需要复用的数据，显式persist并没有坏处。这里需要注意的是我们要尽量提高RDD的复用程度。<br>Spark提供了如下的持久化级别，其中选项为<code>useDisk</code>、<code>useMemory</code>、<code>useOffHeap</code>、<code>deserialized</code>、<code>replication</code>，分别表示是否采用磁盘、内存、堆外内存、反序列化以及持久化维护的副本数。其中反序列化为false时，会对对象进行序列化存储，能够节省一定空间，但同时会消耗计算资源。<br><figure class="highlight scala"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">object</span> <span class="title">StorageLevel</span> <span class="keyword">extends</span> <span class="title">scala</span>.<span class="title">AnyRef</span> <span class="keyword">with</span> <span class="title">scala</span>.<span class="title">Serializable</span> </span>&#123;</span><br><span class="line">  <span class="keyword">val</span> <span class="type">NONE</span> = <span class="keyword">new</span> <span class="type">StorageLevel</span>(<span class="literal">false</span>, <span class="literal">false</span>, <span class="literal">false</span>, <span class="literal">false</span>)</span><br><span class="line">  <span class="keyword">val</span> <span class="type">DISK_ONLY</span> = <span class="keyword">new</span> <span class="type">StorageLevel</span>(<span class="literal">true</span>, <span class="literal">false</span>, <span class="literal">false</span>, <span class="literal">false</span>)</span><br><span class="line">  <span class="keyword">val</span> <span class="type">DISK_ONLY_2</span> = <span class="keyword">new</span> <span class="type">StorageLevel</span>(<span class="literal">true</span>, <span class="literal">false</span>, <span class="literal">false</span>, <span class="literal">false</span>, <span class="number">2</span>)</span><br><span class="line">  <span class="keyword">val</span> <span class="type">MEMORY_ONLY</span> = <span class="keyword">new</span> <span class="type">StorageLevel</span>(<span class="literal">false</span>, <span class="literal">true</span>, <span class="literal">false</span>, <span class="literal">true</span>) <span class="comment">// 默认存储类别</span></span><br><span class="line">  <span class="keyword">val</span> <span class="type">MEMORY_ONLY_2</span> = <span class="keyword">new</span> <span class="type">StorageLevel</span>(<span class="literal">false</span>, <span class="literal">true</span>, <span class="literal">false</span>, <span class="literal">true</span>, <span class="number">2</span>)</span><br><span class="line">  <span class="keyword">val</span> <span class="type">MEMORY_ONLY_SER</span> = <span class="keyword">new</span> <span class="type">StorageLevel</span>(<span class="literal">false</span>, <span class="literal">true</span>, <span class="literal">false</span>, <span class="literal">false</span>)</span><br><span class="line">  <span class="keyword">val</span> <span class="type">MEMORY_ONLY_SER_2</span> = <span class="keyword">new</span> <span class="type">StorageLevel</span>(<span class="literal">false</span>, <span class="literal">true</span>, <span class="literal">false</span>, <span class="literal">false</span>, <span class="number">2</span>)</span><br><span class="line">  <span class="keyword">val</span> <span class="type">MEMORY_AND_DISK</span> = <span class="keyword">new</span> <span class="type">StorageLevel</span>(<span class="literal">true</span>, <span class="literal">true</span>, <span class="literal">false</span>, <span class="literal">true</span>)</span><br><span class="line">  <span class="keyword">val</span> <span class="type">MEMORY_AND_DISK_2</span> = <span class="keyword">new</span> <span class="type">StorageLevel</span>(<span class="literal">true</span>, <span class="literal">true</span>, <span class="literal">false</span>, <span class="literal">true</span>, <span class="number">2</span>)</span><br><span class="line">  <span class="keyword">val</span> <span class="type">MEMORY_AND_DISK_SER</span> = <span class="keyword">new</span> <span class="type">StorageLevel</span>(<span class="literal">true</span>, <span class="literal">true</span>, <span class="literal">false</span>, <span class="literal">false</span>)</span><br><span class="line">  <span class="keyword">val</span> <span class="type">MEMORY_AND_DISK_SER_2</span> = <span class="keyword">new</span> <span class="type">StorageLevel</span>(<span class="literal">true</span>, <span class="literal">true</span>, <span class="literal">false</span>, <span class="literal">false</span>, <span class="number">2</span>)</span><br><span class="line">  <span class="keyword">val</span> <span class="type">OFF_HEAP</span> = <span class="keyword">new</span> <span class="type">StorageLevel</span>(<span class="literal">true</span>, <span class="literal">true</span>, <span class="literal">true</span>, <span class="literal">false</span>, <span class="number">1</span>)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>一般来说，如果内存中能够全部放下对象，选择默认的<code>MEMORY_ONLY</code>级别能够最大程度利用CPU，否则就需要考虑使用序列化的<code>MEMORY_ONLY_SER</code>存储。当内存再不够时，就需要考虑将其持久化到磁盘上，但这会带来较高的时间代价。</p>
+<h2 id="Shuffle类操作处理"><a href="#Shuffle类操作处理" class="headerlink" title="Shuffle类操作处理"></a>Shuffle类操作处理</h2><p>Shuffle类操作常常发生在宽依赖的RDD之间，这类算子需要将多个节点上的数据拉取到同一节点上进行计算，其中存在大量磁盘IO、序列化和网络传输开销。特别地，当Spark中的某个节点故障之后，常常需要重算RDD中的某几个分区。对于窄依赖而言，父RDD的一个分区只对应一个子RDD分区，因此丢失子RDD的分区，重算整个父RDD分区是必要的。而对于宽依赖而言，父RDD会被多个子RDD使用，而可能当前丢失的子RDD只使用了父RDD中的某几个分区的数据，而我们仍然要重新计算整个父RDD，这造成了计算资源的浪费。</p>
+<p>当使用如<code>groupByKey</code>等算子时，如果选择的<code>key</code>上的数据是倾斜(skew)的，会导致部分节点上的负载增大。</p>
+<p>为了避免由于Shuffle操作导致的性能问题，常用的解决方案是使用map-side-combine的算子。这个思路就是先将聚合操作下推到每个节点本地，再将每个节点上的聚合结果拉到同一节点上进行聚合，这样能够显著减少通信量。这种方法的常见实践就是采用如下所示的一些替代性算子:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">原算子</th>
+<th style="text-align:center">替代算子</th>
+<th style="text-align:center">备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">groupByKey</td>
+<td style="text-align:center">reduceByKey/aggregateByKey</td>
+<td style="text-align:center"></td>
+</tr>
+<tr>
+<td style="text-align:center">reduceByKey</td>
+<td style="text-align:center">aggregateByKey</td>
+<td style="text-align:center"></td>
+</tr>
+<tr>
+<td style="text-align:center">foreach</td>
+<td style="text-align:center">foreachPartitions</td>
+<td style="text-align:center"></td>
+</tr>
+<tr>
+<td style="text-align:center">filter</td>
+<td style="text-align:center">filter+coalesce</td>
+<td style="text-align:center"></td>
+</tr>
+<tr>
+<td style="text-align:center">repartition+sort</td>
+<td style="text-align:center">repartitionAndSortWithinPartitions</td>
+<td style="text-align:center"></td>
+</tr>
+<tr>
+<td style="text-align:center">repartition</td>
+<td style="text-align:center">coalesce</td>
+<td style="text-align:center">如果目标分区数量小于当前分区数量</td>
+</tr>
+</tbody>
+</table>
+<p>在Dataset中并没有reduceByKey，原因可能<a href="https://stackoverflow.com/questions/38383207/rolling-your-own-reducebykey-in-spark-dataset" target="_blank" rel="noopener">与Catalyst Optimizer的优化</a>有关。</p>
+<h2 id="HistoryServer"><a href="#HistoryServer" class="headerlink" title="HistoryServer"></a>HistoryServer</h2><p>Spark提供了History Server以保存<a href="https://github.com/LucaCanali/Miscellaneous/blob/master/Spark_Notes/Spark_EventLog.md" target="_blank" rel="noopener">Event Log</a>，以便追踪历史任务的性能。History Server部署在18080，可以使用WebUI，也可以使用18080的<code>/api/vi/application</code>的api来请求json版本。<br>这种方式需要在运行前手动<code>export SPARK_MASTER_HOST=localhost</code>或者<code>sh ./sbin/start-master.sh -h localhost &amp;&amp; ./sbin/start-slave.sh spark://localhost:7077</code>可以通过<code>-h</code>指定localhost。不然可能Slave会连不上localhost，因为他会访问你的电脑名字，例如<code>CALVINNEO-MB0:7077</code>而不是localhost。<br>在<code>spark-defaults.conf</code>中，有关Event Log的配置项有两种，一个是在HDFS上，一个是在硬盘上。<br><figure class="highlight jboss-cli"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 硬盘</span></span><br><span class="line">spark.eventLog.enabled           <span class="literal">true</span></span><br><span class="line">spark.eventLog.dir               hdfs:<span class="string">//localhost</span><span class="function">:9000</span>/user/spark/appHist</span><br><span class="line"><span class="comment"># HDFS</span></span><br><span class="line">spark.<span class="keyword">history</span>.fs.logDirectory      <span class="string">.../spark-2.4.4-bin-hadoop2.7/conf/history/spark-events</span></span><br></pre></td></tr></table></figure></p>
+<p>这个在磁盘上，供给History Server用，但是实际上和HDFS的内容是一样的。</p>
+<h1 id="Spark常见错误"><a href="#Spark常见错误" class="headerlink" title="Spark常见错误"></a>Spark常见错误</h1><h2 id="变量在节点之间共享"><a href="#变量在节点之间共享" class="headerlink" title="变量在节点之间共享"></a>变量在节点之间共享</h2><p>当我们需要在节点间共享变量，例如将某个字符串从Driver发送到Executor上时，需要这个变量能够被序列化。特别地，有一个经典的Bug就是<code>Map#mapValues</code>不能被序列化，这个解决方案是在<code>mapValues</code>之后再<code>map(identity)</code>一下。<br>特别需要注意的是因为RDD是分布式存储的，所以不能够直接当做变量处理，例如下面的代码是不能够使用的。对于这种情况，要么是将其中一个小RDD广播，要不就是将两个RDD去做个JOIN。在SparkSQL中，JOIN操作会被视情况优化为广播。<br><figure class="highlight golo"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">rdd1.<span class="keyword">map</span>&#123;</span><br><span class="line">    rdd2.<span class="keyword">filter</span>(...)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<h2 id="scala-collection-mutable-WrappedArray-ofRef-cannot-be-cast-to-Integer"><a href="#scala-collection-mutable-WrappedArray-ofRef-cannot-be-cast-to-Integer" class="headerlink" title="scala.collection.mutable.WrappedArray$ofRef cannot be cast to Integer"></a>scala.collection.mutable.WrappedArray$ofRef cannot be cast to Integer</h2><p>根据<a href="https://stackoverflow.com/questions/40199507/scala-collection-mutable-wrappedarrayofref-cannot-be-cast-to-integer" target="_blank" rel="noopener">SoF</a>，这个错误就是把<code>Array</code>改成<code>Seq</code>就好了。</p>
+<h2 id="Extracting-Seq-String-String-String-from-spark-DataFrame"><a href="#Extracting-Seq-String-String-String-from-spark-DataFrame" class="headerlink" title="Extracting Seq[(String,String,String)] from spark DataFrame"></a>Extracting <code>Seq[(String,String,String)]</code> from spark DataFrame</h2><p>根据<a href="https://stackoverflow.com/questions/37553059/extracting-seqstring-string-string-from-spark-dataframe" target="_blank" rel="noopener">SoF</a></p>
+<h1 id="Spark的其他组件的简介"><a href="#Spark的其他组件的简介" class="headerlink" title="Spark的其他组件的简介"></a>Spark的其他组件的简介</h1><h2 id="GraphX"><a href="#GraphX" class="headerlink" title="GraphX"></a>GraphX</h2><p>GraphX是基于Spark实现的一个图计算框架，能够对图进行建模。GraphX内置了一些实用的方法，如PageRank、SCC等，同时也提供了Pregel算法的API，我们可以利用Pregel来实现自己的一些图算法。目前GraphX似乎还没有实用的Python API，比较方便的是借助Scala。</p>
+<h2 id="ML和MlLib"><a href="#ML和MlLib" class="headerlink" title="ML和MlLib"></a>ML和MlLib</h2><h2 id="Streaming"><a href="#Streaming" class="headerlink" title="Streaming"></a>Streaming</h2><h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
+<li><a href="https://zhuanlan.zhihu.com/p/67068559" target="_blank" rel="noopener">https://zhuanlan.zhihu.com/p/67068559</a></li>
+<li><a href="http://www.jasongj.com/spark/rbo/" target="_blank" rel="noopener">http://www.jasongj.com/spark/rbo/</a></li>
+</ol>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/Scala/" rel="tag"># Scala</a>
+          
+            <a href="/tags/Spark/" rel="tag"># Spark</a>
+          
+            <a href="/tags/SparkSQL/" rel="tag"># SparkSQL</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2019/08/06/scala-lang/" rel="next" title="使用Scala语言进行编程">
+                <i class="fa fa-chevron-left"></i> 使用Scala语言进行编程
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2019/11/23/multiprocessing-implement/" rel="prev" title="multiprocessing模块实现">
+                multiprocessing模块实现 <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">124</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">139</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#RDD、Dataframe和Dataset"><span class="nav-number">1.</span> <span class="nav-text">RDD、Dataframe和Dataset</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#RDD"><span class="nav-number">1.1.</span> <span class="nav-text">RDD</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#DataFrame"><span class="nav-number">1.2.</span> <span class="nav-text">DataFrame</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Spark的执行"><span class="nav-number">2.</span> <span class="nav-text">Spark的执行</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#SparkSQL"><span class="nav-number">3.</span> <span class="nav-text">SparkSQL</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#SparkSQL的解析流程"><span class="nav-number">3.1.</span> <span class="nav-text">SparkSQL的解析流程</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Row"><span class="nav-number">3.2.</span> <span class="nav-text">Row</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#列"><span class="nav-number">3.3.</span> <span class="nav-text">列</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#借助于withColumn"><span class="nav-number">3.3.1.</span> <span class="nav-text">借助于withColumn</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#groupBy和groupByKey"><span class="nav-number">3.4.</span> <span class="nav-text">groupBy和groupByKey</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Spark的部署"><span class="nav-number">4.</span> <span class="nav-text">Spark的部署</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Spark性能调优"><span class="nav-number">5.</span> <span class="nav-text">Spark性能调优</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#有关Persist"><span class="nav-number">5.1.</span> <span class="nav-text">有关Persist</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Shuffle类操作处理"><span class="nav-number">5.2.</span> <span class="nav-text">Shuffle类操作处理</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#HistoryServer"><span class="nav-number">5.3.</span> <span class="nav-text">HistoryServer</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Spark常见错误"><span class="nav-number">6.</span> <span class="nav-text">Spark常见错误</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#变量在节点之间共享"><span class="nav-number">6.1.</span> <span class="nav-text">变量在节点之间共享</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#scala-collection-mutable-WrappedArray-ofRef-cannot-be-cast-to-Integer"><span class="nav-number">6.2.</span> <span class="nav-text">scala.collection.mutable.WrappedArray$ofRef cannot be cast to Integer</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Extracting-Seq-String-String-String-from-spark-DataFrame"><span class="nav-number">6.3.</span> <span class="nav-text">Extracting Seq[(String,String,String)] from spark DataFrame</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Spark的其他组件的简介"><span class="nav-number">7.</span> <span class="nav-text">Spark的其他组件的简介</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#GraphX"><span class="nav-number">7.1.</span> <span class="nav-text">GraphX</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#ML和MlLib"><span class="nav-number">7.2.</span> <span class="nav-text">ML和MlLib</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Streaming"><span class="nav-number">7.3.</span> <span class="nav-text">Streaming</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">8.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2019</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2019/08/06/spark-sql/';
+          this.page.identifier = '2019/08/06/spark-sql/';
+          this.page.title = 'Spark和SparkSQL';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
