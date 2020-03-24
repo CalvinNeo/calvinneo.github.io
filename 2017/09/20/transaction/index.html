@@ -98,7 +98,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="本文从分布式一致性和分布式共识协议一文中分离。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2019-11-24T16:05:45.984Z">
+<meta property="og:updated_time" content="2020-02-13T08:22:13.668Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="数据库系统中的事务">
 <meta name="twitter:description" content="本文从分布式一致性和分布式共识协议一文中分离。">
@@ -386,7 +386,8 @@
 </ol>
 <h2 id="BASE"><a href="#BASE" class="headerlink" title="BASE"></a>BASE</h2><p>BASE理论，即Basically Available、Soft State和Eventually Consistent，是相对于ACID准则的另一种事务控制模型，<a href="https://www.epubit.com/selfpublish/article/737;jsessionid=83634E0880EC6456C20EEA2AC8FCA282" target="_blank" rel="noopener">常被用在一些非RDBMS的事务控制的NoSQL中</a>。</p>
 <p>在分布式系统的上下文下，BASE可以看做是对CAP理论做出的一种权衡，通常被以最终一致性的形式实现，参考下文。</p>
-<h1 id="故障恢复"><a href="#故障恢复" class="headerlink" title="故障恢复"></a>故障恢复</h1><h2 id="WAL"><a href="#WAL" class="headerlink" title="WAL"></a>WAL</h2><p>在关系数据库中常使用预写式日志Write ahead log(WAL)算法，WAL要求在数据实际写入之前先写日志，这样能够保证在故障发生后能通过日志进行恢复。<br>事务有只有两种完成方式，提交即全做事务中的操作，和回滚即全不做事务中的操作。在事务的中间过程中可能对数据块的值进行修改，但最终这些修改必须要通过提交和回滚来实现持久化。<br>AI（后像，After Image），指的是每次更新时数据块的新值。对于一个已提交的事务，当故障发生时应当REDO它的后像。注意一旦事务提交，就不能UNDO它的前像，会破坏完整性约束；但是事务提交前任意的删改都可以通过UNDO来撤销。事务提交和往数据库写值（执行事务）是两个不同概念。<br>BI（前像，Before Image），指的是每次更新时数据块的旧值。对于一个未提交的事务或提交进行到一半，当故障发生时应当UNDO它的前像。<br>UNDO和REDO操作具有幂等性，即对前像UNDO或对后像REDO任意多次，结果都是相同的。</p>
+<h1 id="故障恢复"><a href="#故障恢复" class="headerlink" title="故障恢复"></a>故障恢复</h1><h2 id="WAL"><a href="#WAL" class="headerlink" title="WAL"></a>WAL</h2><p>在关系数据库中常使用预写式日志Write ahead log(WAL)算法，WAL要求在数据实际写入之前先写日志，这样能够保证在故障发生后能通过日志进行恢复。相比于将数据实际插入数据库，WAL由于是顺序读写，所以相对来说要快很多。<br>事务有只有两种完成方式，提交即全做事务中的操作，和回滚即全不做事务中的操作。在事务的中间过程中可能对数据块的值进行修改，但最终这些修改必须要通过提交和回滚来实现持久化。<br>AI（后像，After Image），指的是每次更新时数据块的新值。对于一个已提交的事务，当故障发生时应当REDO它的后像。注意一旦事务提交，就不能UNDO它的前像，会破坏完整性约束；但是事务提交前任意的删改都可以通过UNDO来撤销。事务提交和往数据库写值（执行事务）是两个不同概念。<br>BI（前像，Before Image），指的是每次更新时数据块的旧值。对于一个未提交的事务或提交进行到一半，当故障发生时应当UNDO它的前像。<br>UNDO和REDO操作具有幂等性，即对前像UNDO或对后像REDO任意多次，结果都是相同的。</p>
+<p>那么REDO操作和UNDO操作是不是缺一不可的呢？<a href="https://www.jianshu.com/p/57c510f4ec28" target="_blank" rel="noopener">通过undo和redo</a>的配合，能够提供更好的ACID特性。</p>
 <h2 id="Shadow-paging"><a href="#Shadow-paging" class="headerlink" title="Shadow paging"></a>Shadow paging</h2><h2 id="事务更新的两条规则"><a href="#事务更新的两条规则" class="headerlink" title="事务更新的两条规则"></a>事务更新的两条规则</h2><h3 id="提交规则"><a href="#提交规则" class="headerlink" title="提交规则"></a>提交规则</h3><p>后像必须在提交前写入非易失存储器（数据库或运行记录）中。当后像只写入日志而没写入数据库中也可以提交事务，因为出现故障之后可以REDO后像实现恢复。</p>
 <h3 id="先记后写规则"><a href="#先记后写规则" class="headerlink" title="先记后写规则"></a>先记后写规则</h3><p>数据库中有先记后写原则，如果在事务提交前将后像写入数据库，则必须首先把前像记入日志。这样做的好处是在事务提交完成前如果出现故障，可以通过日志文件中的该前像进行UNDO，此时即使数据库没有被修改，也只是进行一次多余的UNDO操作。</p>
 <h1 id="事务的隔离等级"><a href="#事务的隔离等级" class="headerlink" title="事务的隔离等级"></a>事务的隔离等级</h1><p>在了解并发事务控制前，首先需要了解事务的隔离等级。<br>事务具有ACID的要求，隔离性I要求数据库能够支持<strong>并发事务</strong>。隔离性I的要求主要对应了四种隔离级别，分别是Read uncommitted、Read committed(Sql Server、Oracle等的默认隔离级别)、Repeatable read(MySQL的默认隔离级别)、Serializable，分别可以解决脏读、不可重复读(Nonrepeatable Read)、幻读(Phantom)几类问题。</p>
@@ -414,12 +415,14 @@
 </li>
 </ol>
 <p>MySQL可以通过<code>SET TRANSACTION ISOLATION LEVEL</code>设置隔离级别。</p>
-<h1 id="死锁"><a href="#死锁" class="headerlink" title="死锁"></a>死锁</h1><p>下面两个事务的执行就容易进入死锁。<br><figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">START</span> <span class="keyword">TRANSACTION</span>;</span><br><span class="line"><span class="keyword">UPDATE</span> StockPrice <span class="keyword">SET</span> <span class="keyword">close</span> = <span class="number">45</span> <span class="keyword">WHERE</span> stock_id = <span class="number">4</span>;</span><br><span class="line"><span class="keyword">UPDATE</span> StockPrice <span class="keyword">SET</span> <span class="keyword">close</span> = <span class="number">19</span> <span class="keyword">WHERE</span> stock_id = <span class="number">3</span>;</span><br><span class="line"><span class="keyword">COMMIT</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">START</span> <span class="keyword">TRANSACTION</span>;</span><br><span class="line"><span class="keyword">UPDATE</span> StockPrice <span class="keyword">SET</span> <span class="keyword">close</span> = <span class="number">22</span> <span class="keyword">WHERE</span> stock_id = <span class="number">3</span>;</span><br><span class="line"><span class="keyword">UPDATE</span> StockPrice <span class="keyword">SET</span> <span class="keyword">close</span> = <span class="number">44</span> <span class="keyword">WHERE</span> stock_id = <span class="number">4</span>;</span><br><span class="line"><span class="keyword">COMMIT</span>;</span><br></pre></td></tr></table></figure></p>
-<p>数据库实现了死锁检测和死锁超时机制。以InnoDB为例，死锁发生时会选择将持有最少行级X锁的事务进行回滚。</p>
-<h1 id="并发事务控制"><a href="#并发事务控制" class="headerlink" title="并发事务控制"></a>并发事务控制</h1><p>为了保证<a href="http://catkang.github.io/2018/09/19/concurrency-control.html" target="_blank" rel="noopener">并发执行的事务在某一隔离级别上的正确执行的机制</a>，我们需要并发事务控制。并发控制可以根据乐观程度分为基于Lock（如2PL）、Timestamp（如Basic T/O）和Validation（OCC系列算法）。</p>
-<h2 id="2PL"><a href="#2PL" class="headerlink" title="2PL"></a>2PL</h2><p>我们知道死锁有四个条件：互斥、占有且申请、不可抢占和循环等待。而为了解决死锁问题，一个方案就是一次性获得所有的锁，这样实际上破坏了占有且申请的条件。不过这样一次性锁协议牺牲了并发性。为此我们引入了2PL，2PL将加解锁过程分为两个阶段，在第一阶段只能加锁或者操作数据，不能解锁；在第二阶段只能解锁或者操作数据，不能加锁。相比于1PL并发度提高了，但是存在死锁问题了。</p>
+<h1 id="并发事务控制"><a href="#并发事务控制" class="headerlink" title="并发事务控制"></a>并发事务控制</h1><h2 id="死锁"><a href="#死锁" class="headerlink" title="死锁"></a>死锁</h2><p>为了保证<a href="http://catkang.github.io/2018/09/19/concurrency-control.html" target="_blank" rel="noopener">并发执行的事务在某一隔离级别上的正确执行的机制</a>，我们需要并发事务控制。并发控制可以根据乐观程度分为基于Lock（如2PL）、Timestamp（如Basic T/O）和Validation（OCC系列算法）。</p>
+<h2 id="2PL"><a href="#2PL" class="headerlink" title="2PL"></a>2PL</h2><p>我们知道死锁有四个条件：互斥、占有且申请、不可抢占和循环等待。而为了解决死锁问题，一个方案就是一次性获得所有的锁，这样实际上破坏了占有且申请的条件。如何避免死锁？我在<a href="/2017/12/28/Concurrency-Programming-Compare/">文章中</a>进行了较为详尽的讨论。避免死锁的一个可行的办法就是一次性请求所有锁（1PL），但这个对数据库来说很困难，因为我们很难知道我们具体要那些资源，并且这样一次性锁协议牺牲了并发性。<br>为此我们引入了2PL，2PL将加解锁过程分为两个阶段，在第一阶段只能加锁或者操作数据，不能解锁；在第二阶段只能解锁或者操作数据，不能加锁。<br>需要注意的是，2PL不能避免死锁，如下所示。两个事务按照2PL加锁，假定1请求到了4，2请求到了3，那么1和2就会陷入死锁。<br><figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">START</span> <span class="keyword">TRANSACTION</span>;</span><br><span class="line"><span class="keyword">UPDATE</span> StockPrice <span class="keyword">SET</span> <span class="keyword">close</span> = <span class="number">45</span> <span class="keyword">WHERE</span> stock_id = <span class="number">4</span>;</span><br><span class="line"><span class="keyword">UPDATE</span> StockPrice <span class="keyword">SET</span> <span class="keyword">close</span> = <span class="number">19</span> <span class="keyword">WHERE</span> stock_id = <span class="number">3</span>;</span><br><span class="line"><span class="keyword">COMMIT</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">START</span> <span class="keyword">TRANSACTION</span>;</span><br><span class="line"><span class="keyword">UPDATE</span> StockPrice <span class="keyword">SET</span> <span class="keyword">close</span> = <span class="number">22</span> <span class="keyword">WHERE</span> stock_id = <span class="number">3</span>;</span><br><span class="line"><span class="keyword">UPDATE</span> StockPrice <span class="keyword">SET</span> <span class="keyword">close</span> = <span class="number">44</span> <span class="keyword">WHERE</span> stock_id = <span class="number">4</span>;</span><br><span class="line"><span class="keyword">COMMIT</span>;</span><br></pre></td></tr></table></figure></p>
+<p>数据库实现了死锁检测和死锁超时机制。以InnoDB为例，如果启动死锁检测(innodb_lock_wait_timeout)，那么会在死锁发生时会选择将持有最少行级X锁的事务进行回滚。当然也可以选择等待(innodb_lock_wait_timeout)超时。</p>
 <h3 id="意向锁"><a href="#意向锁" class="headerlink" title="意向锁"></a>意向锁</h3><p>意向锁的产生是为了提高执行效率，它要求如果我们对一个下层节点加锁，那么我们会对上层节点加意向锁。我们考虑一个数据表中有一些行正在被锁定，而我们现在试图加一个表级锁，这显然是要被阻塞的，但阻塞前我们需要遍历数据表的每一行才知道我们表中有些行被锁定了。为此意向锁要求在锁定行时对数据表也维护一个状态，表示当前数据表中有些行时被锁定的，因此你意向是获得表锁，那么请原地阻塞，别往下找了，现在是不可能的。<br>以意向共享锁IS为例，如果我们想对一行加S锁，那么我们先要对表加IS锁，表示我们对表中的某一行有加共享锁的意向。此外，如果把上下层节点组合起来看，能组合成四种锁的类型即SIS、SIX、XIS、XIX。以共享意向排他锁SIX为例，对数据表加S锁，说明要读取整个表，对数据表加IX锁，表示要更新数据表中的一些行。除了SIX，其他的锁并没有提高强度，可以退化为一个表级锁或者行级锁。以SIS为例，我们要读取整个表，对表加S锁，然后要读取其中一行，对表加IS锁，实际上可以简化为一个对表加S锁的操作。</p>
 <h2 id="T-O"><a href="#T-O" class="headerlink" title="T/O"></a>T/O</h2><h2 id="OCC"><a href="#OCC" class="headerlink" title="OCC"></a>OCC</h2><h2 id="MVCC"><a href="#MVCC" class="headerlink" title="MVCC"></a>MVCC</h2><p>多版本并发控制(Multi-Version Concurrency Control, MVCC)是相对于单版本的概念， 有不同方式的实现，如基于锁的MV2PL，基于时间戳的MVTO，基于乐观并发控制(Optimistic Concurrency Control, OCC)的MVOCC。MVCC是为了提高数据库的读性能产生的一种思路，是一种<a href="https://www.zhihu.com/question/27876575" target="_blank" rel="noopener">解决读写冲突的无锁并发控制方式</a>。</p>
+<h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
+<li><a href="https://houbb.github.io/2018/09/01/sql-2pl" target="_blank" rel="noopener">https://houbb.github.io/2018/09/01/sql-2pl</a></li>
+</ol>
 
       
     </div>
@@ -485,8 +488,8 @@
         <div class="post-nav">
           <div class="post-nav-next post-nav-item">
             
-              <a href="/2017/09/20/distributed-system-consistency-and-consensus/" rel="next" title="分布式一致性和分布式共识协议">
-                <i class="fa fa-chevron-left"></i> 分布式一致性和分布式共识协议
+              <a href="/2017/08/20/黄山游记/" rel="next" title="黄山游记">
+                <i class="fa fa-chevron-left"></i> 黄山游记
               </a>
             
           </div>
@@ -495,8 +498,8 @@
 
           <div class="post-nav-prev post-nav-item">
             
-              <a href="/2017/09/23/HDU2089不要62/" rel="prev" title="HDU 2089 不要62 数位DP">
-                HDU 2089 不要62 数位DP <i class="fa fa-chevron-right"></i>
+              <a href="/2017/09/20/distributed-system-consistency-and-consensus/" rel="prev" title="分布式一致性和分布式共识协议">
+                分布式一致性和分布式共识协议 <i class="fa fa-chevron-right"></i>
               </a>
             
           </div>
@@ -576,7 +579,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">125</span>
+                <span class="site-state-item-count">129</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -589,7 +592,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">141</span>
+                <span class="site-state-item-count">142</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -675,7 +678,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#两种事务控制模型"><span class="nav-number">1.</span> <span class="nav-text">两种事务控制模型</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#ACID"><span class="nav-number">1.1.</span> <span class="nav-text">ACID</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#BASE"><span class="nav-number">1.2.</span> <span class="nav-text">BASE</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#故障恢复"><span class="nav-number">2.</span> <span class="nav-text">故障恢复</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#WAL"><span class="nav-number">2.1.</span> <span class="nav-text">WAL</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Shadow-paging"><span class="nav-number">2.2.</span> <span class="nav-text">Shadow paging</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#事务更新的两条规则"><span class="nav-number">2.3.</span> <span class="nav-text">事务更新的两条规则</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#提交规则"><span class="nav-number">2.3.1.</span> <span class="nav-text">提交规则</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#先记后写规则"><span class="nav-number">2.3.2.</span> <span class="nav-text">先记后写规则</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#事务的隔离等级"><span class="nav-number">3.</span> <span class="nav-text">事务的隔离等级</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#死锁"><span class="nav-number">4.</span> <span class="nav-text">死锁</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#并发事务控制"><span class="nav-number">5.</span> <span class="nav-text">并发事务控制</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#2PL"><span class="nav-number">5.1.</span> <span class="nav-text">2PL</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#意向锁"><span class="nav-number">5.1.1.</span> <span class="nav-text">意向锁</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#T-O"><span class="nav-number">5.2.</span> <span class="nav-text">T/O</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#OCC"><span class="nav-number">5.3.</span> <span class="nav-text">OCC</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#MVCC"><span class="nav-number">5.4.</span> <span class="nav-text">MVCC</span></a></li></ol></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#两种事务控制模型"><span class="nav-number">1.</span> <span class="nav-text">两种事务控制模型</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#ACID"><span class="nav-number">1.1.</span> <span class="nav-text">ACID</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#BASE"><span class="nav-number">1.2.</span> <span class="nav-text">BASE</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#故障恢复"><span class="nav-number">2.</span> <span class="nav-text">故障恢复</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#WAL"><span class="nav-number">2.1.</span> <span class="nav-text">WAL</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Shadow-paging"><span class="nav-number">2.2.</span> <span class="nav-text">Shadow paging</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#事务更新的两条规则"><span class="nav-number">2.3.</span> <span class="nav-text">事务更新的两条规则</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#提交规则"><span class="nav-number">2.3.1.</span> <span class="nav-text">提交规则</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#先记后写规则"><span class="nav-number">2.3.2.</span> <span class="nav-text">先记后写规则</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#事务的隔离等级"><span class="nav-number">3.</span> <span class="nav-text">事务的隔离等级</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#并发事务控制"><span class="nav-number">4.</span> <span class="nav-text">并发事务控制</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#死锁"><span class="nav-number">4.1.</span> <span class="nav-text">死锁</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2PL"><span class="nav-number">4.2.</span> <span class="nav-text">2PL</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#意向锁"><span class="nav-number">4.2.1.</span> <span class="nav-text">意向锁</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#T-O"><span class="nav-number">4.3.</span> <span class="nav-text">T/O</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#OCC"><span class="nav-number">4.4.</span> <span class="nav-text">OCC</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#MVCC"><span class="nav-number">4.5.</span> <span class="nav-text">MVCC</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">5.</span> <span class="nav-text">Reference</span></a></li></ol></div>
             
 
           </div>
