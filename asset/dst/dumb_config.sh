@@ -11,8 +11,12 @@ tar -xvzf steamcmd_linux.tar.gz
 mkdir server_dst
 printf "login anonymous \n force_install_dir /home/dst/server_dst \n app_update 343050 validate \n quit \n" | ./steamcmd.sh
 su - dst
-printf "./dontstarve_dedicated_server_nullrenderer -console -cluster MyDediServer -shard Master" | ~/server_dst/bin/start.sh
-printf "./dontstarve_dedicated_server_nullrenderer -console -cluster MyDediServer -shard Caves" | ~/server_dst/bin/start2.sh
-printf "#!/bin/sh \n name_folder=\"/home/dst/server_dst/bin\" \n start_overworld=\"sh start.sh\" \n cd ${name_folder} \n screen -dmS dst_server1 ${start_overworld}" | ~/server_dst/bin/restart.sh
-printf "#!/bin/sh \n name_folder=\"/home/dst/server_dst/bin\" \n start_cave=\"sh start2.sh\" \n cd ${name_folder} \n screen -dmS dst_server2 ${start_cave}" | ~/server_dst/bin/restart2.sh
+sudo touch /home/dst/server_dst/bin/start.sh && sudo chmod 777 /home/dst/server_dst/bin/start.sh
+sudo touch /home/dst/server_dst/bin/start2.sh && sudo chmod 777 /home/dst/server_dst/bin/start2.sh
+sudo touch /home/dst/server_dst/bin/restart.sh && sudo chmod 777 /home/dst/server_dst/bin/restart.sh
+sudo touch /home/dst/server_dst/bin/restart2.sh && sudo chmod 777 /home/dst/server_dst/bin/restart2.sh
+sudo printf "./dontstarve_dedicated_server_nullrenderer -console -cluster MyDediServer -shard Master" | /home/dst/server_dst/bin/start.sh
+sudo printf "./dontstarve_dedicated_server_nullrenderer -console -cluster MyDediServer -shard Caves" | /home/dst/server_dst/bin/start2.sh
+sudo printf "#!/bin/sh \n name_folder=\"/home/dst/server_dst/bin\" \n start_overworld=\"sh start.sh\" \n cd ${name_folder} \n screen -dmS dst_server1 ${start_overworld}" | /home/dst/server_dst/bin/restart.sh
+sudo printf "#!/bin/sh \n name_folder=\"/home/dst/server_dst/bin\" \n start_cave=\"sh start2.sh\" \n cd ${name_folder} \n screen -dmS dst_server2 ${start_cave}" | /home/dst/server_dst/bin/restart2.sh
 exit
