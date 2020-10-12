@@ -1,0 +1,1224 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="Linux,ELF," />
+
+
+
+
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="本篇将主要结合CSAPP介绍ELF文件的格式，常用的分析工具，以及Linux程序装载的流程。">
+<meta name="keywords" content="Linux,ELF">
+<meta property="og:type" content="article">
+<meta property="og:title" content="ELF格式复习整理">
+<meta property="og:url" content="http://www.calvinneo.com/2020/09/17/elf-format/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="本篇将主要结合CSAPP介绍ELF文件的格式，常用的分析工具，以及Linux程序装载的流程。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:image" content="http://www.calvinneo.com/img/elf/seg_sec.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/elf/seg_sec2.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/cpp_res/linux_image.jpg">
+<meta property="og:image" content="http://www.calvinneo.com/img/elf/code.png">
+<meta property="og:updated_time" content="2020-09-22T14:57:58.845Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="ELF格式复习整理">
+<meta name="twitter:description" content="本篇将主要结合CSAPP介绍ELF文件的格式，常用的分析工具，以及Linux程序装载的流程。">
+<meta name="twitter:image" content="http://www.calvinneo.com/img/elf/seg_sec.png">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2020/09/17/elf-format/"/>
+
+
+
+
+
+  <title>ELF格式复习整理 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2020/09/17/elf-format/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                ELF格式复习整理
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2020-09-17T01:20:13+08:00">
+                2020-09-17
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>本篇将主要结合CSAPP介绍ELF文件的格式，常用的分析工具，以及Linux程序装载的流程。</p>
+<a id="more"></a>
+<h1 id="一个Demo"><a href="#一个Demo" class="headerlink" title="一个Demo"></a>一个Demo</h1><p>main.c<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">swap</span><span class="params">()</span></span>;</span><br><span class="line"><span class="keyword">int</span> buf[<span class="number">2</span>] = &#123;<span class="number">1</span>, <span class="number">2</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span>&#123;</span><br><span class="line">    swap();</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>swap.c<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">extern</span> <span class="keyword">int</span> buf[];</span><br><span class="line"><span class="keyword">int</span> * bufp0 = &amp;buf[<span class="number">0</span>];</span><br><span class="line"><span class="keyword">int</span> * bufp1;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">swap</span><span class="params">()</span></span>&#123;</span><br><span class="line">    <span class="keyword">int</span> t;</span><br><span class="line">    bufp1 = &amp;buf[<span class="number">1</span>];</span><br><span class="line">    t = *bufp0;</span><br><span class="line">    *bufp0 = *bufp1;</span><br><span class="line">    *bufp1 = t;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>构建项目，注意为了吻合CSAPP的Demo，需要指定32位模式<br><figure class="highlight stylus"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">gcc -m32 -g -o <span class="selector-tag">p</span> main<span class="selector-class">.c</span> swap.c</span><br><span class="line">gcc -m32 -g -c -o main<span class="selector-class">.o</span> main.c</span><br><span class="line">gcc -m32 -g -c -o swap<span class="selector-class">.o</span> swap.c</span><br></pre></td></tr></table></figure></p>
+<h1 id="ELF结构"><a href="#ELF结构" class="headerlink" title="ELF结构"></a>ELF结构</h1><p>段头部表，program header table，在内存中；节头部表，section header table，在二进制文件中</p>
+<p><img src="/img/elf/seg_sec.png" alt=""></p>
+<p><img src="/img/elf/seg_sec2.png" alt=""></p>
+<p>查看段头部表，发现有两个LOAD段，分别对应了下面的02和03两个段（从0开始数），一般来说只有这两个段会被加载到内存。第一个段包含了<code>.text</code>、<code>.rodata</code>等，这些段是只读的，所以<code>Flags</code>有R，并且代码段<code>.text</code>是可执行的，所以<code>Flags</code>还有E。<br><figure class="highlight stylus"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line">$ readelf -l p</span><br><span class="line">Program Headers:</span><br><span class="line">  Type           Offset   VirtAddr   PhysAddr   FileSiz MemSiz  Flg Align</span><br><span class="line">  PHDR           <span class="number">0</span>x000034 <span class="number">0</span>x08048034 <span class="number">0</span>x08048034 <span class="number">0</span>x00120 <span class="number">0</span>x00120 R E <span class="number">0</span>x4</span><br><span class="line">  INTERP         <span class="number">0</span>x000154 <span class="number">0</span>x08048154 <span class="number">0</span>x08048154 <span class="number">0</span>x00013 <span class="number">0</span>x00013 R   <span class="number">0</span>x1</span><br><span class="line">      [Requesting program interpreter: /lib/ld-linux<span class="selector-class">.so</span>.<span class="number">2</span>]</span><br><span class="line">  LOAD           <span class="number">0</span>x000000 <span class="number">0</span>x08048000 <span class="number">0</span>x08048000 <span class="number">0</span>x005b4 <span class="number">0</span>x005b4 R E <span class="number">0</span>x1000</span><br><span class="line">  LOAD           <span class="number">0</span>x000f08 <span class="number">0</span>x08049f08 <span class="number">0</span>x08049f08 <span class="number">0</span>x0011c <span class="number">0</span>x00124 RW  <span class="number">0</span>x1000</span><br><span class="line">...</span><br><span class="line"></span><br><span class="line"> Section to Segment mapping:</span><br><span class="line">  Segment Sections...</span><br><span class="line">   <span class="number">00</span>     </span><br><span class="line">   <span class="number">01</span>     <span class="selector-class">.interp</span> </span><br><span class="line">   <span class="number">02</span>     <span class="selector-class">.interp</span> <span class="selector-class">.note</span><span class="selector-class">.ABI-tag</span> <span class="selector-class">.note</span><span class="selector-class">.gnu</span><span class="selector-class">.build-id</span> <span class="selector-class">.gnu</span><span class="selector-class">.hash</span> <span class="selector-class">.dynsym</span> <span class="selector-class">.dynstr</span> <span class="selector-class">.gnu</span><span class="selector-class">.version</span> <span class="selector-class">.gnu</span><span class="selector-class">.version_r</span> <span class="selector-class">.rel</span><span class="selector-class">.dyn</span> <span class="selector-class">.rel</span><span class="selector-class">.plt</span> <span class="selector-class">.init</span> <span class="selector-class">.plt</span> <span class="selector-class">.plt</span><span class="selector-class">.got</span> <span class="selector-class">.text</span> <span class="selector-class">.fini</span> <span class="selector-class">.rodata</span> <span class="selector-class">.eh_frame_hdr</span> <span class="selector-class">.eh_frame</span> </span><br><span class="line">   <span class="number">03</span>     <span class="selector-class">.init_array</span> <span class="selector-class">.fini_array</span> <span class="selector-class">.jcr</span> <span class="selector-class">.dynamic</span> <span class="selector-class">.got</span> <span class="selector-class">.got</span><span class="selector-class">.plt</span> <span class="selector-class">.data</span> <span class="selector-class">.bss</span> </span><br><span class="line">...</span><br></pre></td></tr></table></figure></p>
+<p><code>symtab</code>是一个符号表，符号表并不一定需要<code>-g</code>选项才会生成。包含引用的函数和全局变量的信息。<br><code>line</code>是C中的行号和机器地址的对照表。</p>
+<p>当程序真正被加载到Linux内存中时，呈现下面的布局。可以看到，栈是从高往低增长的，ESP是栈顶；堆是由低往高增长的，由brk限制。<br><img src="/img/cpp_res/linux_image.jpg" alt=""></p>
+<h1 id="符号表"><a href="#符号表" class="headerlink" title="符号表"></a>符号表</h1><p>查看main.o的符号表，发现其中的<code>swap</code>符号对应是<code>UND</code>的，表示是在本模块中引用了，但是未定义（其实在swap.o中定义了）的符号。<br><figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">$ readelf -s main.o</span><br><span class="line"></span><br><span class="line">   Num:    Value  Size<span class="built_in"> Type </span>   Bind   Vis      Ndx Name</span><br><span class="line">    <span class="built_in">..</span>.</span><br><span class="line">    13: 00000000     8 OBJECT  GLOBAL<span class="built_in"> DEFAULT </span>   3 buf</span><br><span class="line">    14: 00000000    36 FUNC    GLOBAL<span class="built_in"> DEFAULT </span>   1 main</span><br><span class="line">    15: 00000000     0 NOTYPE  GLOBAL<span class="built_in"> DEFAULT </span> UND swap</span><br></pre></td></tr></table></figure></p>
+<p>而buf对应了<code>Ndx</code>为3，我们查看Section表，3表示<code>.data</code>段。<br><figure class="highlight tap"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">$ readelf -S main.o</span><br><span class="line"></span><br><span class="line">Section Headers:</span><br><span class="line">  [Nr] Name              Type            Addr     Off    Size   ES Flg Lk Inf Al</span><br><span class="line">  [ 0]                   NULL           <span class="number"> 00000000 </span>000000<span class="number"> 000000 </span>00     <span class="number"> 0 </span> <span class="number"> 0 </span> 0</span><br><span class="line">  [ 1] .text             PROGBITS       <span class="number"> 00000000 </span>000034<span class="number"> 000024 </span>00  AX <span class="number"> 0 </span> <span class="number"> 0 </span> 1</span><br><span class="line">  [ 2] .rel.text         REL            <span class="number"> 00000000 </span>0003a0<span class="number"> 000008 </span>08   I<span class="number"> 18 </span> <span class="number"> 1 </span> 4</span><br><span class="line">  [ 3] .data             PROGBITS       <span class="number"> 00000000 </span>000058<span class="number"> 000008 </span>00  WA <span class="number"> 0 </span> <span class="number"> 0 </span> 4</span><br><span class="line">  [ 4] .bss              NOBITS         <span class="number"> 00000000 </span>000060<span class="number"> 000000 </span>00  WA <span class="number"> 0 </span> <span class="number"> 0 </span> 1</span><br></pre></td></tr></table></figure></p>
+<p>下面我们再看看swap.o的符号表，这里出现了一个<code>COM</code>，表示是未初始化的符号。我觉得这个应该可以直接对应到bss，也就是4号段，但是这边给出的是COMMON。<br><figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Num:    Value  Size<span class="built_in"> Type </span>   Bind   Vis      Ndx Name</span><br><span class="line"> 13: 00000000     4 OBJECT  GLOBAL<span class="built_in"> DEFAULT </span>   3 bufp0</span><br><span class="line"> 14: 00000000     0 NOTYPE  GLOBAL<span class="built_in"> DEFAULT </span> UND buf</span><br><span class="line"> 15: 00000004     4 OBJECT  GLOBAL<span class="built_in"> DEFAULT </span> COM bufp1</span><br><span class="line"> 16: 00000000    54 FUNC    GLOBAL<span class="built_in"> DEFAULT </span>   1 swap</span><br></pre></td></tr></table></figure></p>
+<h1 id="重定向"><a href="#重定向" class="headerlink" title="重定向"></a>重定向</h1><h2 id="目标"><a href="#目标" class="headerlink" title="目标"></a>目标</h2><p>观察最终结果./p的汇编<br>下面介绍一下<code>call</code>指令，它通过<code>e8</code>来识别，具有一个操作数<code>0a 01 00 00</code>。它的行为是将下一条地址<code>0x80482f6</code>压栈，然后跳转到被调用的函数<code>swap</code>的第一条命令<code>0x8048400</code>处。这个地址是怎么算出来的呢？我们注意到<code>0x80482f6+0x010a=0x8048400</code>，所以<code>call</code>命令的参数是相对于<code>EIP</code>寄存器的偏移。我们现在有问题1：为什么是以下一条指令的EIP<code>0x80482f6</code>而不是当前的<code>0x80482f1</code>为基准计算呢？<br><figure class="highlight llvm"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line">Disassembly of <span class="keyword">section</span> .text:</span><br><span class="line"></span><br><span class="line"><span class="number">080482e0</span> &lt;main&gt;:</span><br><span class="line"> <span class="number">80482e0</span>:	<span class="number">8</span>d <span class="number">4</span><span class="keyword">c</span> <span class="number">24</span> <span class="number">04</span>          	lea    <span class="number">0x4</span>(<span class="symbol">%esp</span>),<span class="symbol">%ecx</span></span><br><span class="line"> <span class="number">80482e4</span>:	<span class="number">83</span> e<span class="number">4</span> f<span class="number">0</span>             	<span class="keyword">and</span>    $<span class="number">0xfffffff0</span>,<span class="symbol">%esp</span></span><br><span class="line"> <span class="number">80482e7</span>:	ff <span class="number">71</span> fc             	pushl  <span class="number">-0</span><span class="keyword">x</span><span class="number">4</span>(<span class="symbol">%ecx</span>)</span><br><span class="line"> <span class="number">80482</span>ea:	<span class="number">55</span>                   	push   <span class="symbol">%ebp</span></span><br><span class="line"> <span class="number">80482</span>eb:	<span class="number">89</span> e<span class="number">5</span>                	mov    <span class="symbol">%esp</span>,<span class="symbol">%ebp</span></span><br><span class="line"> <span class="number">80482</span>ed:	<span class="number">51</span>                   	push   <span class="symbol">%ecx</span></span><br><span class="line"> <span class="number">80482</span>ee:	<span class="number">83</span> ec <span class="number">04</span>             	<span class="keyword">sub</span>    $<span class="number">0x4</span>,<span class="symbol">%esp</span></span><br><span class="line"> <span class="number">80482</span>f<span class="number">1</span>:	e<span class="number">8</span> <span class="number">0</span>a <span class="number">01</span> <span class="number">00</span> <span class="number">00</span>       	<span class="keyword">call</span>   <span class="number">8048400</span> &lt;swap&gt;</span><br><span class="line"> <span class="number">80482</span>f<span class="number">6</span>:	<span class="number">83</span> <span class="keyword">c</span><span class="number">4</span> <span class="number">04</span>             	<span class="keyword">add</span>    $<span class="number">0x4</span>,<span class="symbol">%esp</span></span><br><span class="line"> <span class="number">80482</span>f<span class="number">9</span>:	<span class="number">31</span> <span class="keyword">c</span><span class="number">0</span>                	<span class="keyword">xor</span>    <span class="symbol">%eax</span>,<span class="symbol">%eax</span></span><br><span class="line"> <span class="number">80482</span>fb:	<span class="number">59</span>                   	pop    <span class="symbol">%ecx</span></span><br><span class="line"> <span class="number">80482</span>fc:	<span class="number">5</span>d                   	pop    <span class="symbol">%ebp</span></span><br><span class="line"> <span class="number">80482</span>fd:	<span class="number">8</span>d <span class="number">61</span> fc             	lea    <span class="number">-0</span><span class="keyword">x</span><span class="number">4</span>(<span class="symbol">%ecx</span>),<span class="symbol">%esp</span></span><br><span class="line"> <span class="number">8048300</span>:	<span class="keyword">c</span><span class="number">3</span>                   	<span class="keyword">ret</span></span><br></pre></td></tr></table></figure></p>
+<p>观察main.o的汇编。这里<code>call</code>的偏移是<code>0xfffffffc(-4)</code>，经过计算就是<code>16-4=12</code>，对应的是<code>fc ff ff ff</code>的开头。我们现在有问题2：这个跳转非常奇怪，为什么相对位移是-4呢？<br><figure class="highlight llvm"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line">$ objdump -d main.o</span><br><span class="line"></span><br><span class="line">main.o:     file format elf<span class="number">32</span>-<span class="keyword">i386</span></span><br><span class="line">Disassembly of <span class="keyword">section</span> .text:</span><br><span class="line"></span><br><span class="line"><span class="number">00000000</span> &lt;main&gt;:</span><br><span class="line">   <span class="number">0</span>:	<span class="number">8</span>d <span class="number">4</span><span class="keyword">c</span> <span class="number">24</span> <span class="number">04</span>          	lea    <span class="number">0x4</span>(<span class="symbol">%esp</span>),<span class="symbol">%ecx</span></span><br><span class="line">   <span class="number">4</span>:	<span class="number">83</span> e<span class="number">4</span> f<span class="number">0</span>             	<span class="keyword">and</span>    $<span class="number">0xfffffff0</span>,<span class="symbol">%esp</span></span><br><span class="line">   <span class="number">7</span>:	ff <span class="number">71</span> fc             	pushl  <span class="number">-0</span><span class="keyword">x</span><span class="number">4</span>(<span class="symbol">%ecx</span>)</span><br><span class="line">   a:	<span class="number">55</span>                   	push   <span class="symbol">%ebp</span></span><br><span class="line">   b:	<span class="number">89</span> e<span class="number">5</span>                	mov    <span class="symbol">%esp</span>,<span class="symbol">%ebp</span></span><br><span class="line">   d:	<span class="number">51</span>                   	push   <span class="symbol">%ecx</span></span><br><span class="line">   e:	<span class="number">83</span> ec <span class="number">04</span>             	<span class="keyword">sub</span>    $<span class="number">0x4</span>,<span class="symbol">%esp</span></span><br><span class="line">  <span class="number">11</span>:	e<span class="number">8</span> fc ff ff ff       	<span class="keyword">call</span>   <span class="number">12</span> &lt;main+<span class="number">0x12</span>&gt;</span><br><span class="line">  <span class="number">16</span>:	b<span class="number">8</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span> <span class="number">00</span>       	mov    $<span class="number">0x0</span>,<span class="symbol">%eax</span></span><br><span class="line">  <span class="number">1</span>b:	<span class="number">83</span> <span class="keyword">c</span><span class="number">4</span> <span class="number">04</span>             	<span class="keyword">add</span>    $<span class="number">0x4</span>,<span class="symbol">%esp</span></span><br><span class="line">  <span class="number">1</span>e:	<span class="number">59</span>                   	pop    <span class="symbol">%ecx</span></span><br><span class="line">  <span class="number">1</span>f:	<span class="number">5</span>d                   	pop    <span class="symbol">%ebp</span></span><br><span class="line">  <span class="number">20</span>:	<span class="number">8</span>d <span class="number">61</span> fc             	lea    <span class="number">-0</span><span class="keyword">x</span><span class="number">4</span>(<span class="symbol">%ecx</span>),<span class="symbol">%esp</span></span><br><span class="line">  <span class="number">23</span>:	<span class="keyword">c</span><span class="number">3</span>                   	<span class="keyword">ret</span></span><br></pre></td></tr></table></figure></p>
+<p>可以看到，从不可执行的main.o到可执行的./p，发生了两个显著的变化。</p>
+<ol>
+<li><p>左边的地址对应了main.o的代码实际被加载的地址，我们知道32位程序默认会被加载到<code>0x8048000</code>处。<br> 观察main.o里面的Section表，发现代码段的地址仍然为空</p>
+ <figure class="highlight tap"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">$ readelf -S main.o</span><br><span class="line">Section Headers:</span><br><span class="line">  [Nr] Name              Type            Addr     Off    Size   ES Flg Lk Inf Al</span><br><span class="line">  [ 0]                   NULL           <span class="number"> 00000000 </span>000000<span class="number"> 000000 </span>00     <span class="number"> 0 </span> <span class="number"> 0 </span> 0</span><br><span class="line">  [ 1] .text             PROGBITS       <span class="number"> 00000000 </span>000034<span class="number"> 000024 </span>00  AX <span class="number"> 0 </span> <span class="number"> 0 </span> 1</span><br><span class="line">  [ 2] .rel.text         REL            <span class="number"> 00000000 </span>0003a0<span class="number"> 000008 </span>08   I<span class="number"> 18 </span> <span class="number"> 1 </span> 4</span><br></pre></td></tr></table></figure>
+<p> 而p里面的Section表，地址以及确定了</p>
+ <figure class="highlight stylus"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">$ readelf -S p</span><br><span class="line">Section Headers:</span><br><span class="line">  [<span class="number">14</span>] <span class="selector-class">.text</span>             PROGBITS        <span class="number">080482</span>e0 <span class="number">0002</span>e0 <span class="number">0001</span>a2 <span class="number">00</span>  AX  <span class="number">0</span>   <span class="number">0</span> <span class="number">16</span></span><br></pre></td></tr></table></figure>
+</li>
+<li><p>右边call的地址，从<code>0xfffffffc(-4)</code>变为了<code>0x8048400</code>，这个对应了<code>swap</code>的实际装载地址<br> 从objdump中可以看到，<code>0x8048400</code>处确实是会swap的代码</p>
+ <figure class="highlight llvm"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">$ objdump -d p</span><br><span class="line"><span class="number">08048400</span> &lt;swap&gt;:</span><br><span class="line"> <span class="number">8048400</span>:	a<span class="number">1</span> <span class="number">20</span> a<span class="number">0</span> <span class="number">04</span> <span class="number">08</span>       	mov    <span class="number">0x804a020</span>,<span class="symbol">%eax</span></span><br><span class="line"> <span class="number">8048405</span>:	<span class="number">8</span>b <span class="number">0</span>d <span class="number">1</span><span class="keyword">c</span> a<span class="number">0</span> <span class="number">04</span> <span class="number">08</span>    	mov    <span class="number">0x804a01c</span>,<span class="symbol">%ecx</span></span><br><span class="line"> <span class="number">804840</span>b:	<span class="keyword">c</span><span class="number">7</span> <span class="number">05</span> <span class="number">28</span> a<span class="number">0</span> <span class="number">04</span> <span class="number">08</span> <span class="number">1</span><span class="keyword">c</span> 	movl   $<span class="number">0x804a01c</span>,<span class="number">0x804a028</span></span><br><span class="line"> <span class="number">8048412</span>:	a<span class="number">0</span> <span class="number">04</span> <span class="number">08</span> </span><br><span class="line"> <span class="number">8048415</span>:	<span class="number">8</span>b <span class="number">10</span>                	mov    (<span class="symbol">%eax</span>),<span class="symbol">%edx</span></span><br><span class="line"> <span class="number">8048417</span>:	<span class="number">89</span> <span class="number">08</span>                	mov    <span class="symbol">%ecx</span>,(<span class="symbol">%eax</span>)</span><br><span class="line"> <span class="number">8048419</span>:	<span class="number">89</span> <span class="number">15</span> <span class="number">1</span><span class="keyword">c</span> a<span class="number">0</span> <span class="number">04</span> <span class="number">08</span>    	mov    <span class="symbol">%edx</span>,<span class="number">0x804a01c</span></span><br><span class="line"> <span class="number">804841</span>f:	<span class="keyword">c</span><span class="number">3</span>                   	<span class="keyword">ret</span></span><br></pre></td></tr></table></figure>
+</li>
+</ol>
+<h2 id="计算过程"><a href="#计算过程" class="headerlink" title="计算过程"></a>计算过程</h2><p>下面我们来看看，目标的1和2是如何得到的。</p>
+<h3 id="代码"><a href="#代码" class="headerlink" title="代码"></a>代码</h3><p>主要的一个过程是<code>*refaddr=*refptr</code>，为此我们需要计算下面两个指标</p>
+<ol>
+<li><code>refaddr</code><br> <code>refaddr</code>表示需要修改的call的参数的地址。即我们应该算得<code>0x80482f2</code></li>
+<li><code>*refptr</code><br> <code>*refptr</code>表示call参数的最新值。</li>
+</ol>
+<p><img src="/img/elf/code.png" alt=""></p>
+<h3 id="符号表-1"><a href="#符号表-1" class="headerlink" title="符号表"></a>符号表</h3><p>我们查看重定位条目表，它提供了三个信息</p>
+<ol>
+<li>需要修改的重定位地址<code>refaddr</code>相对于main的偏移量是12</li>
+<li><code>R_386_PC32</code>表示重定位一个32位的<strong>相对</strong>地址的引用。特别地，还有一种<code>R_386_32</code>表示绝对地址</li>
+<li>把重定位地址<code>refaddr</code>处的值改成程序swap处的地址</li>
+</ol>
+<figure class="highlight stylus"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">$ readelf -r main.o</span><br><span class="line"></span><br><span class="line">Relocation <span class="selector-tag">section</span> <span class="string">'.rel.text'</span> at offset <span class="number">0</span>x3a0 contains <span class="number">1</span> entries:</span><br><span class="line"> Offset     Info    Type            Sym<span class="selector-class">.Value</span>  Sym. Name</span><br><span class="line"><span class="number">00000012</span>  <span class="number">00000</span>f02 R_386_PC32        <span class="number">00000000</span>   swap</span><br></pre></td></tr></table></figure>
+<h3 id="具体计算"><a href="#具体计算" class="headerlink" title="具体计算"></a>具体计算</h3><p>首先计算<code>refaddr</code>，它等于<code>ADDR(s) + r.offset</code>，从前面的objdump的结果可以看到<code>0x080482e0 + 0x12</code>为<code>0x80482f2</code>，与实际结果吻合。<br>下面计算<code>*refptr</code>，我们用绝对地址减去基址的值得到。绝对地址可以从objdump看到，是<code>0x8048400</code>，而<code>call</code>命令的地址是<code>0x80482f1</code>，所以<code>*refptr</code>的值是<code>0x10f</code>。不对啊，之前看到实际的命令的参数是<code>0x10a</code>啊？没错，我们还需要减去原来<code>*refptr</code>的值也就是<code>0xfffffffc=-4</code>。这可以理解为我们的基址是<code>0x80482f2+4=0x80482f6</code>，正好是下一条指令的开头。<a href="/2017/12/28/Concurrency-Programming-Compare/">这里的原因很简单，因为EIP(即PC)始终是指向下一条待执行的指令</a>，所以计算偏移的时候，我们需要以此时实际EIP指向的位置来加上call指定的偏移。而<code>0xfffffffc=-4</code>这个值正好帮助EIP跳过自己占用的四个字节。</p>
+<h1 id="动态链接和PIC"><a href="#动态链接和PIC" class="headerlink" title="动态链接和PIC"></a>动态链接和PIC</h1><p>我们考虑动态链接的场景，程序依赖的外部程序并没有在静态链接期链接到可执行文件中，而需要在运行期<strong>动态</strong>加载。负责这个过程的动态加载器由<code>INTERP</code>段指定，Linux上的默认值为<code>/lib/ld-linux.so.2</code>。<br><figure class="highlight crystal"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">$ readelf -l p</span><br><span class="line"></span><br><span class="line">Program <span class="symbol">Headers:</span></span><br><span class="line">  Type           Offset   VirtAddr   PhysAddr   FileSiz MemSiz  Flg Align</span><br><span class="line">...</span><br><span class="line">  INTERP         <span class="number">0x000154</span> <span class="number">0x08048154</span> <span class="number">0x08048154</span> <span class="number">0x00013</span> <span class="number">0x00013</span> R   <span class="number">0x1</span></span><br><span class="line">      [Requesting program <span class="symbol">interpreter:</span> /<span class="class"><span class="keyword">lib</span>/<span class="title">ld</span>-<span class="title">linux</span>.<span class="title">so</span>.2]</span></span><br><span class="line"></span><br><span class="line">$ objdump -s -j <span class="string">".interp"</span> p</span><br><span class="line"></span><br><span class="line"><span class="symbol">p:</span>     file format elf32-i386</span><br><span class="line"></span><br><span class="line">Contents <span class="keyword">of</span> section .<span class="symbol">interp:</span></span><br><span class="line"> <span class="number">8048154</span> <span class="number">2</span>f6c6962 <span class="number">2</span>f6c642d <span class="number">6</span>c696e75 <span class="number">782e736</span>f  /<span class="class"><span class="keyword">lib</span>/<span class="title">ld</span>-<span class="title">linux</span>.<span class="title">so</span></span></span><br><span class="line"> <span class="number">8048164</span> <span class="number">2e3200</span>                               .<span class="number">2</span>.</span><br></pre></td></tr></table></figure></p>
+<p>这个时候，动态链接器有两个选择：</p>
+<ol>
+<li>直接模仿静态链接器一样修改代码，不过这个是不现实的，我们从前文知道，<code>.text</code>段是只读的。</li>
+<li>借助于GOT表</li>
+</ol>
+<p>我们添加下面两个选项，以得到一个位置无关的swap.so。</p>
+<ol>
+<li><code>-fPIC</code>创建位置无关代码</li>
+<li><code>-shared</code>创建共享库<figure class="highlight stylus"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">gcc -fPIC -m32 -g -c -o swap_no_shared<span class="selector-class">.so</span> swap.c</span><br><span class="line">gcc -shared -m32 -g -c -o swap_no_pic<span class="selector-class">.so</span> swap.c</span><br><span class="line">gcc -shared -fPIC -m32 -g -c -o swap<span class="selector-class">.so</span> swap.c</span><br><span class="line">gcc -fPIC -m32 -g -o p_pic main<span class="selector-class">.c</span> swap.c</span><br><span class="line">gcc -m32 -g -o no_pic main<span class="selector-class">.c</span> swap.c</span><br><span class="line"></span><br><span class="line">gcc -fPIC -m32 -g -S -o main_pic<span class="selector-class">.s</span> main<span class="selector-class">.c</span> </span><br><span class="line">gcc -fPIC -m32 -g -c -o main_pic<span class="selector-class">.o</span> main.c</span><br><span class="line">gcc -fPIC -m32 -g -o p_pic main<span class="selector-class">.c</span> swap.c</span><br></pre></td></tr></table></figure>
+</li>
+</ol>
+<h2 id="PIC"><a href="#PIC" class="headerlink" title="PIC"></a>PIC</h2><p>PIC的意思是位置无关代码，在之前看到的<code>call</code>命令肯定是位置无关的，因为它的参数是相对EIP的偏移，那么有什么代码是位置相关的呢？这包含两部分：</p>
+<ol>
+<li>调用外部过程</li>
+<li>引用全局变量</li>
+</ol>
+<figure class="highlight mel"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line">$ cat main_pic.s</span><br><span class="line">main:</span><br><span class="line">	leal	<span class="number">4</span>(%esp), %ecx</span><br><span class="line">	andl	$-<span class="number">16</span>, %esp</span><br><span class="line">	pushl	<span class="number">-4</span>(%ecx)</span><br><span class="line">	pushl	%ebp</span><br><span class="line">	movl	%esp, %ebp</span><br><span class="line">	pushl	%ebx</span><br><span class="line">	pushl	%ecx</span><br><span class="line">	call	__x86.get_pc_thunk.ax ; call   <span class="number">10</span> &lt;main+<span class="number">0x10</span>&gt; ; call   <span class="number">8048407</span> &lt;__x86.get_pc_thunk.ax&gt;</span><br><span class="line">	addl	$_GLOBAL_OFFSET_TABLE_, %eax ; add    $0x1,%eax ; add    $0x1c11,%eax</span><br><span class="line">	movl	%eax, %ebx</span><br><span class="line">	call	swap@PLT ; call   <span class="number">1</span>c &lt;main+<span class="number">0x1c</span>&gt; ; call   <span class="number">804840</span>b &lt;swap&gt;</span><br><span class="line">	movl	$0, %eax</span><br><span class="line">	popl	%ecx</span><br><span class="line">	popl	%ebx</span><br><span class="line">	popl	%ebp</span><br><span class="line">	leal	<span class="number">-4</span>(%ecx), %esp</span><br><span class="line">	ret</span><br><span class="line">__x86.get_pc_thunk.ax:</span><br><span class="line">	movl	(%esp), %eax</span><br><span class="line">	ret</span><br></pre></td></tr></table></figure>
+<p>下面编译一个最简单的程序<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span>&#123;</span><br><span class="line">	<span class="built_in">puts</span>(<span class="string">"Hello, world!"</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>编译，这里C库默认是动态链接的，如果要静态链接需要指定<code>-static</code>。此外，<a href="https://blog.csdn.net/cclethe/article/details/83387685" target="_blank" rel="noopener">某些版本会自动开启PIE，这样readelf会显示是DYN而不是EXEC</a>，objdump无法得到绝对地址，这样就无法调试了，所以要指定<code>-no-pie</code><br><figure class="highlight mipsasm"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">apt <span class="keyword">install </span>gcc-<span class="keyword">multilib</span></span><br><span class="line"><span class="keyword">gcc </span>-no-pie -fPIC -m32 -g -o pic pic.c</span><br><span class="line">gcc -m32 -static -g -o <span class="keyword">nopic </span>pic.c</span><br></pre></td></tr></table></figure></p>
+<p>反编译动态链接的结果，发现实际调用的是<code>puts@plt</code>这个函数<br><figure class="highlight perl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line">(gdb) disass main</span><br><span class="line">Dump of assembler code <span class="keyword">for</span> function main:</span><br><span class="line">   <span class="number">0x0804840b</span> &lt;+<span class="number">0</span>&gt;:	lea    <span class="number">0x4</span>(%esp),%ecx</span><br><span class="line">   <span class="number">0x0804840f</span> &lt;+<span class="number">4</span>&gt;:	<span class="keyword">and</span>    $0xfffffff<span class="number">0</span>,%esp</span><br><span class="line">   <span class="number">0x08048412</span> &lt;+<span class="number">7</span>&gt;:	pushl  -<span class="number">0x4</span>(%ecx)</span><br><span class="line">   <span class="number">0x08048415</span> &lt;+<span class="number">10</span>&gt;:	<span class="keyword">push</span>   %ebp</span><br><span class="line">   <span class="number">0x08048416</span> &lt;+<span class="number">11</span>&gt;:	mov    %esp,%ebp</span><br><span class="line">   <span class="number">0x08048418</span> &lt;+<span class="number">13</span>&gt;:	<span class="keyword">push</span>   %ebx</span><br><span class="line">   <span class="number">0x08048419</span> &lt;+<span class="number">14</span>&gt;:	<span class="keyword">push</span>   %ecx</span><br><span class="line">   <span class="number">0x0804841a</span> &lt;+<span class="number">15</span>&gt;:	call   <span class="number">0x8048447</span> &lt;__x86.get_pc_thunk.ax&gt;</span><br><span class="line">   <span class="number">0x0804841f</span> &lt;+<span class="number">20</span>&gt;:	add    $0x1be1,%eax ; $_GLOBAL_OFFSET_TABLE_, %eax</span><br><span class="line">   <span class="number">0x08048424</span> &lt;+<span class="number">25</span>&gt;:	<span class="function"><span class="keyword">sub</span>    $0<span class="title">xc</span>,%<span class="title">esp</span></span></span><br><span class="line"><span class="function">   0<span class="title">x08048427</span> &lt;+28&gt;:	<span class="title">lea</span>    -0<span class="title">x1b30</span>(%<span class="title">eax</span>),%<span class="title">edx</span> </span>; leal	.LC<span class="number">0</span>@GOTOFF(%eax), %edx</span><br><span class="line">   <span class="number">0x0804842d</span> &lt;+<span class="number">34</span>&gt;:	<span class="keyword">push</span>   %edx</span><br><span class="line">   <span class="number">0x0804842e</span> &lt;+<span class="number">35</span>&gt;:	mov    %eax,%ebx</span><br><span class="line">   <span class="number">0x08048430</span> &lt;+<span class="number">37</span>&gt;:	call   <span class="number">0x80482e0</span> &lt;puts@plt&gt;</span><br><span class="line">   <span class="number">0x08048435</span> &lt;+<span class="number">42</span>&gt;:	add    $0x1<span class="number">0</span>,%esp</span><br><span class="line">   <span class="number">0x08048438</span> &lt;+<span class="number">45</span>&gt;:	mov    $0<span class="keyword">x</span><span class="number">0</span>,%eax</span><br><span class="line">   <span class="number">0x0804843d</span> &lt;+<span class="number">50</span>&gt;:	lea    -<span class="number">0x8</span>(%ebp),%esp</span><br><span class="line">   <span class="number">0x08048440</span> &lt;+<span class="number">53</span>&gt;:	<span class="keyword">pop</span>    %ecx</span><br><span class="line">   <span class="number">0x08048441</span> &lt;+<span class="number">54</span>&gt;:	<span class="keyword">pop</span>    %ebx</span><br><span class="line">   <span class="number">0x08048442</span> &lt;+<span class="number">55</span>&gt;:	<span class="keyword">pop</span>    %ebp</span><br><span class="line">   <span class="number">0x08048443</span> &lt;+<span class="number">56</span>&gt;:	lea    -<span class="number">0x4</span>(%ecx),%esp</span><br><span class="line">   <span class="number">0x08048446</span> &lt;+<span class="number">59</span>&gt;:	ret    </span><br><span class="line">End of assembler dump.</span><br><span class="line"></span><br><span class="line">disass <span class="number">0x8048447</span></span><br><span class="line">Dump of assembler code <span class="keyword">for</span> function __x86.get_pc_thunk.ax:</span><br><span class="line">   <span class="number">0x08048447</span> &lt;+<span class="number">0</span>&gt;:	mov    (%esp),%eax</span><br><span class="line">   <span class="number">0x0804844a</span> &lt;+<span class="number">3</span>&gt;:	ret</span><br></pre></td></tr></table></figure></p>
+<p>看看<code>puts@plt</code>的实现，看起来是两个jmp和一个push，这个很奇怪。<br><figure class="highlight delphi"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">(gdb) disass puts</span><br><span class="line">Dump <span class="keyword">of</span> <span class="keyword">assembler</span> code <span class="keyword">for</span> <span class="function"><span class="keyword">function</span> <span class="title">puts</span>@<span class="title">plt</span>:</span></span><br><span class="line">   <span class="number">0</span>x080482e0 &lt;+<span class="number">0</span>&gt;:	jmp    *<span class="number">0</span>x804a00c</span><br><span class="line">   <span class="number">0</span>x080482e6 &lt;+<span class="number">6</span>&gt;:	push   $<span class="number">0</span>x0</span><br><span class="line">   <span class="number">0</span>x080482eb &lt;+<span class="number">11</span>&gt;:	jmp    <span class="number">0</span>x80482d0</span><br><span class="line"><span class="keyword">End</span> <span class="keyword">of</span> <span class="keyword">assembler</span> dump.</span><br></pre></td></tr></table></figure></p>
+<p>这些地址都是啥呢？检查Section表，发现第一个jmp落在<code>.got.plt</code>段上，而第二个jmp落在<code>.plt</code>段上。<br><figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">(gdb) <span class="builtin-name">info</span> symbol 0x804a00c</span><br><span class="line">_GLOBAL_OFFSET_TABLE_ + 12 <span class="keyword">in</span> section .got.plt</span><br><span class="line">(gdb) <span class="builtin-name">info</span> symbo 0x80482d0</span><br><span class="line"><span class="literal">No</span> symbol matches 0x80482d0.</span><br></pre></td></tr></table></figure></p>
+<p>这<code>.plt</code>所在的段是可读可执行不可写的，可以认为是一段代码。而<code>.got.plt</code>所在的段是可写的，也就是在运行时会被更新。<br><figure class="highlight tap"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">$ readelf -S pic</span><br><span class="line">There are<span class="number"> 36 </span>section headers, starting at offset 0x1a94:</span><br><span class="line"></span><br><span class="line">Section Headers:</span><br><span class="line">  [Nr] Name              Type            Addr     Off    Size   ES Flg Lk Inf Al</span><br><span class="line">  [ 9] .rel.dyn          REL            <span class="number"> 08048290 </span>000290<span class="number"> 000008 </span>08   A <span class="number"> 5 </span> <span class="number"> 0 </span> 4</span><br><span class="line">  [10] .rel.plt          REL            <span class="number"> 08048298 </span>000298<span class="number"> 000010 </span>08  AI <span class="number"> 5 </span><span class="number"> 24 </span> 4</span><br><span class="line">  [12] .plt              PROGBITS        080482d0 0002d0<span class="number"> 000030 </span>04  AX <span class="number"> 0 </span> <span class="number"> 0 </span>16</span><br><span class="line">  [13] .plt.got          PROGBITS       <span class="number"> 08048300 </span>000300<span class="number"> 000008 </span>00  AX <span class="number"> 0 </span> <span class="number"> 0 </span> 8</span><br><span class="line">  [14] .text             PROGBITS       <span class="number"> 08048310 </span>000310 0001a2<span class="number"> 00 </span> AX <span class="number"> 0 </span> <span class="number"> 0 </span>16</span><br><span class="line">  [23] .got              PROGBITS        08049ffc 000ffc<span class="number"> 000004 </span>04  WA <span class="number"> 0 </span> <span class="number"> 0 </span> 4</span><br><span class="line">  [24] .got.plt          PROGBITS        0804a000<span class="number"> 001000 </span>000014<span class="number"> 04 </span> WA <span class="number"> 0 </span> <span class="number"> 0 </span> 4</span><br></pre></td></tr></table></figure></p>
+<h3 id="第一个jmp"><a href="#第一个jmp" class="headerlink" title="第一个jmp"></a>第一个jmp</h3><p>查看第一个jmp的代码，发现没有啥意义，其实这个只是一个地址查询表，我们打印出来是一个要跳转的地址<code>0x8049f14</code><br><figure class="highlight delphi"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">(gdb) disass <span class="number">0</span>x804a00c</span><br><span class="line">Dump <span class="keyword">of</span> <span class="keyword">assembler</span> code <span class="keyword">for</span> <span class="function"><span class="keyword">function</span> _<span class="title">GLOBAL_OFFSET_TABLE_</span>:</span></span><br><span class="line">   <span class="number">0</span>x0804a000:	adc    $<span class="number">0</span>x9f,%al</span><br><span class="line"><span class="keyword">End</span> <span class="keyword">of</span> <span class="keyword">assembler</span> dump.</span><br><span class="line"></span><br><span class="line">(gdb) print /x *<span class="number">0</span>x804a00c</span><br><span class="line">$<span class="number">1</span> = <span class="number">0</span>x80482e6</span><br></pre></td></tr></table></figure></p>
+<p>而这个地址恰好对应了<code>puts@plt</code>的下一行代码<br><figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">(gdb) <span class="builtin-name">info</span> symbol 0x80482e6</span><br><span class="line">puts@plt + 6 <span class="keyword">in</span> section .plt</span><br></pre></td></tr></table></figure></p>
+<h3 id="第二个jmp"><a href="#第二个jmp" class="headerlink" title="第二个jmp"></a>第二个jmp</h3><p>接着，我们入栈了一个<code>0x0</code>，接着jmp到<code>0x80482d0</code>，这个似乎不好直接disass，于是我们采用下面的办法。<br><figure class="highlight fortran"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">(gdb) disass x80482d0</span><br><span class="line">No <span class="function"><span class="keyword">function</span></span> <span class="keyword">contains</span> specified address.</span><br></pre></td></tr></table></figure></p>
+<p>发现这边没有函数信息，于是强行disass一波，现在有了。看起来，我们入栈了一个<code>0x804a004</code>之后，又jmp到了<code>*0x804a008</code>这个位置。<br><figure class="highlight x86asm"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">(gdb) disass <span class="number">0x80482d0</span>,<span class="number">0x080482f0</span></span><br><span class="line">Dump of assembler code from <span class="number">0x80482d0</span> to <span class="number">0x80482f0</span>:</span><br><span class="line">   <span class="number">0x080482d0</span>:	pushl  <span class="number">0x804a004</span></span><br><span class="line">   <span class="number">0x080482d6</span>:	<span class="keyword">jmp</span>    *<span class="number">0x804a008</span></span><br><span class="line">   <span class="number">0x080482dc</span>:	<span class="keyword">add</span>    %al,(%eax)</span><br><span class="line">   <span class="number">0x080482de</span>:	<span class="keyword">add</span>    %al,(%eax)</span><br><span class="line">   <span class="number">0x080482e0</span> &lt;puts@plt+<span class="number">0</span>&gt;:	<span class="keyword">jmp</span>    *<span class="number">0x804a00c</span></span><br><span class="line">   <span class="number">0x080482e6</span> &lt;puts@plt+<span class="number">6</span>&gt;:	<span class="keyword">push</span>   <span class="number">$0</span>x0</span><br><span class="line">   <span class="number">0x080482eb</span> &lt;puts@plt+<span class="number">11</span>&gt;:	<span class="keyword">jmp</span>    <span class="number">0x80482d0</span></span><br><span class="line">End of assembler dump.</span><br><span class="line"></span><br><span class="line">(gdb) print /x *<span class="number">0x804a008</span></span><br><span class="line"><span class="number">$3</span> = <span class="number">0x0</span></span><br></pre></td></tr></table></figure></p>
+<p>我们发现<code>*0x804a008</code>居然是0。很奇怪，难道是没有运行的缘故？于是我们打断点，并执行<br><figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">(gdb) </span><br><span class="line">b <span class="number">*0</span>x080482e0</span><br><span class="line">b <span class="number">*0</span>x080482e6</span><br><span class="line">b <span class="number">*0</span>x080482eb</span><br><span class="line">run</span><br><span class="line"><span class="built_in">..</span>.</span><br><span class="line">s</span><br><span class="line">Cannot <span class="builtin-name">find</span> bounds of current function</span><br><span class="line"><span class="builtin-name">print</span> /x <span class="number">*0</span>x804a008</span><br><span class="line"><span class="variable">$1</span> = 0xf7fee000</span><br></pre></td></tr></table></figure></p>
+<p>发现执行完之后，这里竟然有值了！但依然没有函数名，对这种情况，我们可以安装一个debug版本的glibc来解决<br><figure class="highlight avrasm"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">ldd</span> ./pie <span class="meta"># 确定版本</span></span><br><span class="line">apt install libc6-dbg:i386</span><br></pre></td></tr></table></figure></p>
+<p>这样在gdb里面就可以add symbol上面<br><figure class="highlight crystal"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">add-symbol-file /usr/<span class="class"><span class="keyword">lib</span>/<span class="title">debug</span>/<span class="title">lib</span>/<span class="title">x86_64</span>-<span class="title">linux</span>-<span class="title">gnu</span>/<span class="title">ld</span>-2.27.<span class="title">so</span> 0<span class="title">xf7fd6ab0</span></span></span><br></pre></td></tr></table></figure></p>
+<p>这个值实际上是<code>_dl_runtime_resolve</code>的函数。这个函数主要内容就是入栈5个参数，然后调用<code>_dl_fixup</code>，最后再弹出栈。<br><figure class="highlight x86asm"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">(gdb) disass <span class="number">0xf7fee000</span></span><br><span class="line">Dump of assembler code for function _dl_runtime_resolve:</span><br><span class="line">   <span class="number">0xf7fee000</span> &lt;+<span class="number">0</span>&gt;:	<span class="keyword">push</span>   %eax</span><br><span class="line">   <span class="number">0xf7fee001</span> &lt;+<span class="number">1</span>&gt;:	<span class="keyword">push</span>   %ecx</span><br><span class="line">   <span class="number">0xf7fee002</span> &lt;+<span class="number">2</span>&gt;:	<span class="keyword">push</span>   %edx</span><br><span class="line">   <span class="number">0xf7fee003</span> &lt;+<span class="number">3</span>&gt;:	<span class="keyword">mov</span>    <span class="number">0x10</span>(%esp),%edx</span><br><span class="line">   <span class="number">0xf7fee007</span> &lt;+<span class="number">7</span>&gt;:	<span class="keyword">mov</span>    <span class="number">0xc</span>(%esp),%eax</span><br><span class="line">   <span class="number">0xf7fee00b</span> &lt;+<span class="number">11</span>&gt;:	<span class="keyword">call</span>   <span class="number">0xf7fe77e0</span> &lt;_dl_fixup&gt;</span><br><span class="line">   <span class="number">0xf7fee010</span> &lt;+<span class="number">16</span>&gt;:	<span class="keyword">pop</span>    %edx</span><br><span class="line">   <span class="number">0xf7fee011</span> &lt;+<span class="number">17</span>&gt;:	<span class="keyword">mov</span>    (%esp),%ecx</span><br><span class="line">   <span class="number">0xf7fee014</span> &lt;+<span class="number">20</span>&gt;:	<span class="keyword">mov</span>    %eax,(%esp)</span><br><span class="line">   <span class="number">0xf7fee017</span> &lt;+<span class="number">23</span>&gt;:	<span class="keyword">mov</span>    <span class="number">0x4</span>(%esp),%eax</span><br></pre></td></tr></table></figure></p>
+<p><a href="https://docs.oracle.com/cd/E19455-01/806-3773/6jct9o0ar/index.html" target="_blank" rel="noopener">ret的操作数指定了在弹出返回地址后，需要释放的字节/字数量。通常，这些字节/字被是作为调用的输入</a><br><figure class="highlight delphi"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">   <span class="number">0</span>xf7fee01b &lt;+<span class="number">27</span>&gt;:	ret    $<span class="number">0</span>xc</span><br><span class="line"><span class="keyword">End</span> <span class="keyword">of</span> <span class="keyword">assembler</span> dump.</span><br></pre></td></tr></table></figure></p>
+<p>我们还可以从重定向表中，可能找到<code>0x0804a00c</code>这偏移对应的表项。<br><figure class="highlight stylus"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">$ readelf -r pic</span><br><span class="line"></span><br><span class="line">Relocation <span class="selector-tag">section</span> <span class="string">'.rel.dyn'</span> at offset <span class="number">0</span>x290 contains <span class="number">1</span> entries:</span><br><span class="line"> Offset     Info    Type            Sym<span class="selector-class">.Value</span>  Sym. Name</span><br><span class="line"><span class="number">08049</span>ffc  <span class="number">00000206</span> R_386_GLOB_DAT    <span class="number">00000000</span>   __gmon_start__</span><br><span class="line"></span><br><span class="line">Relocation <span class="selector-tag">section</span> <span class="string">'.rel.plt'</span> at offset <span class="number">0</span>x298 contains <span class="number">2</span> entries:</span><br><span class="line"> Offset     Info    Type            Sym<span class="selector-class">.Value</span>  Sym. Name</span><br><span class="line"><span class="number">0804</span>a00c  <span class="number">00000107</span> R_386_JUMP_SLOT   <span class="number">00000000</span>   puts@GLIBC_2.<span class="number">0</span></span><br><span class="line"><span class="number">0804</span>a010  <span class="number">00000307</span> R_386_JUMP_SLOT   <span class="number">00000000</span>   __libc_start_main@GLIBC_2.<span class="number">0</span></span><br></pre></td></tr></table></figure></p>
+<h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
+<li><a href="http://flint.cs.yale.edu/cs422/doc/ELF_Format.pdf" target="_blank" rel="noopener">http://flint.cs.yale.edu/cs422/doc/ELF_Format.pdf</a></li>
+</ol>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/Linux/" rel="tag"># Linux</a>
+          
+            <a href="/tags/ELF/" rel="tag"># ELF</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2020/05/15/spark-ml-lib/" rel="next" title="Spark ML库简析">
+                <i class="fa fa-chevron-left"></i> Spark ML库简析
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">135</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">145</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#一个Demo"><span class="nav-number">1.</span> <span class="nav-text">一个Demo</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#ELF结构"><span class="nav-number">2.</span> <span class="nav-text">ELF结构</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#符号表"><span class="nav-number">3.</span> <span class="nav-text">符号表</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#重定向"><span class="nav-number">4.</span> <span class="nav-text">重定向</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#目标"><span class="nav-number">4.1.</span> <span class="nav-text">目标</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#计算过程"><span class="nav-number">4.2.</span> <span class="nav-text">计算过程</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#代码"><span class="nav-number">4.2.1.</span> <span class="nav-text">代码</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#符号表-1"><span class="nav-number">4.2.2.</span> <span class="nav-text">符号表</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#具体计算"><span class="nav-number">4.2.3.</span> <span class="nav-text">具体计算</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#动态链接和PIC"><span class="nav-number">5.</span> <span class="nav-text">动态链接和PIC</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#PIC"><span class="nav-number">5.1.</span> <span class="nav-text">PIC</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#第一个jmp"><span class="nav-number">5.1.1.</span> <span class="nav-text">第一个jmp</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#第二个jmp"><span class="nav-number">5.1.2.</span> <span class="nav-text">第二个jmp</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">6.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2020/09/17/elf-format/';
+          this.page.identifier = '2020/09/17/elf-format/';
+          this.page.title = 'ELF格式复习整理';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
