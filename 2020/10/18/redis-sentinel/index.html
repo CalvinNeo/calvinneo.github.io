@@ -1,0 +1,1174 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="Redis," />
+
+
+
+
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="Sentinel(哨兵)监控Redis集群中Master状态，是Redis 的高可用性解决方案。它监视一系列Master-Slave集群（和其他Sentinel）。当某个Master下线时，自动将该Master下的某个Slave升级为Master。">
+<meta name="keywords" content="Redis">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Redis Sentinel实现原理分析">
+<meta property="og:url" content="http://www.calvinneo.com/2020/10/18/redis-sentinel/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="Sentinel(哨兵)监控Redis集群中Master状态，是Redis 的高可用性解决方案。它监视一系列Master-Slave集群（和其他Sentinel）。当某个Master下线时，自动将该Master下的某个Slave升级为Master。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2020-10-18T16:21:03.145Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Redis Sentinel实现原理分析">
+<meta name="twitter:description" content="Sentinel(哨兵)监控Redis集群中Master状态，是Redis 的高可用性解决方案。它监视一系列Master-Slave集群（和其他Sentinel）。当某个Master下线时，自动将该Master下的某个Slave升级为Master。">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2020/10/18/redis-sentinel/"/>
+
+
+
+
+
+  <title>Redis Sentinel实现原理分析 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2020/10/18/redis-sentinel/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                Redis Sentinel实现原理分析
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2020-10-18T01:20:13+08:00">
+                2020-10-18
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>Sentinel(哨兵)监控Redis集群中<strong>Master状态</strong>，是Redis 的高可用性解决方案。它监视一系列Master-Slave集群（和其他Sentinel）。当某个Master下线时，自动将该Master下的某个Slave升级为Master。</p>
+<a id="more"></a>
+<h1 id="总览"><a href="#总览" class="headerlink" title="总览"></a>总览</h1><h2 id="入口"><a href="#入口" class="headerlink" title="入口"></a>入口</h2><p>Redis的时钟中断处理例程<code>serverCron</code>被<code>server.hz</code>为时间间隔触发。在这个函数中会<strong>异步处理</strong>很多逻辑，例如：</p>
+<ol>
+<li>【databasesCron】主动expire key，当然也有在look up的时候lazy expire的，这个lazy逻辑我们介绍过</li>
+<li>Software watchdog：watchdogScheduleSignal</li>
+<li>更新一些统计，例如cronUpdateMemoryStats</li>
+<li>【databasesCron】调用dictRehashMilliseconds</li>
+<li>触发BGSAVE / AOF</li>
+<li>【clientsCron】客户端超时</li>
+<li>【replicationCron】Replication相关</li>
+</ol>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// server.h</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> run_with_period(_ms_) <span class="meta-keyword">if</span> ((_ms_ &lt;= 1000/server.hz) || !(server.cronloops%((_ms_)/(1000/server.hz))))</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">serverCron</span><span class="params">(struct aeEventLoop *eventLoop, <span class="keyword">long</span> <span class="keyword">long</span> id, <span class="keyword">void</span> *clientData)</span> </span>&#123;</span><br><span class="line"><span class="keyword">int</span> j;</span><br><span class="line">...</span><br><span class="line"><span class="keyword">if</span> (server.sentinel_mode) sentinelTimer();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>sentinelTimer</code>是Sentinel的主例程<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">sentinelTimer</span><span class="params">(<span class="keyword">void</span>)</span> </span>&#123;</span><br><span class="line">    sentinelCheckTiltCondition();</span><br><span class="line">    sentinelHandleDictOfRedisInstances(sentinel.masters);</span><br><span class="line">    sentinelRunPendingScripts();</span><br><span class="line">    sentinelCollectTerminatedScripts();</span><br><span class="line">    sentinelKillTimedoutScripts();</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* We continuously change the frequency of the Redis "timer interrupt"</span></span><br><span class="line"><span class="comment">     * in order to desynchronize every Sentinel from every other.</span></span><br><span class="line"><span class="comment">     * This non-determinism avoids that Sentinels started at the same time</span></span><br><span class="line"><span class="comment">     * exactly continue to stay synchronized asking to be voted at the</span></span><br><span class="line"><span class="comment">     * same time again and again (resulting in nobody likely winning the</span></span><br><span class="line"><span class="comment">     * election because of split brain voting). */</span></span><br><span class="line">    server.hz = CONFIG_DEFAULT_HZ + rand() % CONFIG_DEFAULT_HZ;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<h2 id="用法"><a href="#用法" class="headerlink" title="用法"></a>用法</h2><p>表示监控一个叫mymaster的服务器，其IP:Port为127.0.0.1:6379，并且这个Master要Failover至少需要2个。但注意这里的2<a href="http://redisdoc.com/topic/sentinel.html" target="_blank" rel="noopener">并不是下确界</a>，除了这个约束，还需要有满足majority的限制条件。<br><figure class="highlight smali"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sentinel<span class="built_in"> monitor </span>mymaster 127.0.0.1 6379 2</span><br></pre></td></tr></table></figure></p>
+<p><code>down-after-milliseconds</code>表示经过这一段时间，如果服务器没有对Sentinel的PING进行回复，或者返回一个错误，那么就会被标记为SDOWN。<br><figure class="highlight livecodeserver"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sentinel down-<span class="keyword">after</span>-<span class="built_in">milliseconds</span> mymaster <span class="number">60000</span></span><br></pre></td></tr></table></figure></p>
+<p><code>failover-timeout</code>表示故障恢复的超时时间。<br><figure class="highlight applescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sentinel failover-<span class="keyword">timeout</span> mymaster <span class="number">180000</span></span><br></pre></td></tr></table></figure></p>
+<p><code>parallel-syncs</code>表示在执行故障转移时，最多可以有多少Slave同时对新Master进行同步，数字越小，完成故障转移所需的时间就越长。<br><figure class="highlight lsl"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sentinel parallel-syncs mymaster <span class="number">1</span></span><br></pre></td></tr></table></figure></p>
+<h2 id="常用结构"><a href="#常用结构" class="headerlink" title="常用结构"></a>常用结构</h2><p>每个被监视的Redis实例都会创建一个<code>sentinelRedisInstance</code>结构，它具有<code>flag</code>分别标注了实例的状态。<br>可以看到<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SRI_MASTER  (1&lt;&lt;0)</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SRI_SLAVE   (1&lt;&lt;1)</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SRI_SENTINEL (1&lt;&lt;2)</span></span><br></pre></td></tr></table></figure></p>
+<p>SDOWN表示主观下线，即被一个Sentinel认为下线。ODOWN是客观下线，表示被Sentinel集群认为下线。<br><figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SRI_S_DOWN (1&lt;&lt;3)   <span class="comment">/* Subjectively down (no quorum). */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SRI_O_DOWN (1&lt;&lt;4)   <span class="comment">/* Objectively down (confirmed by others). */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SRI_MASTER_DOWN (1&lt;&lt;5) <span class="comment">/* A Sentinel with this flag set thinks that</span></span></span><br><span class="line"><span class="meta"><span class="comment">                                   its master is down. */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SRI_FAILOVER_IN_PROGRESS (1&lt;&lt;6) <span class="comment">/* Failover is in progress for</span></span></span><br><span class="line"><span class="meta"><span class="comment">                                           this master. */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SRI_PROMOTED (1&lt;&lt;7)            <span class="comment">/* Slave selected for promotion. */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SRI_RECONF_SENT (1<span class="meta-string">&lt;&lt;8)     /* SLAVEOF &lt;newmaster&gt; sent. */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SRI_RECONF_INPROG (1&lt;&lt;9)   <span class="comment">/* Slave synchronization in progress. */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SRI_RECONF_DONE (1&lt;&lt;10)     <span class="comment">/* Slave synchronized with new master. */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SRI_FORCE_FAILOVER (1&lt;&lt;11)  <span class="comment">/* Force failover with master up. */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SRI_SCRIPT_KILL_SENT (1&lt;&lt;12) <span class="comment">/* SCRIPT KILL already sent on -BUSY */</span></span></span><br></pre></td></tr></table></figure></p>
+<h2 id="建立和初始化"><a href="#建立和初始化" class="headerlink" title="建立和初始化"></a>建立和初始化</h2><h1 id="例程详解"><a href="#例程详解" class="headerlink" title="例程详解"></a>例程详解</h1><h2 id="sentinelCheckTiltCondition"><a href="#sentinelCheckTiltCondition" class="headerlink" title="sentinelCheckTiltCondition"></a>sentinelCheckTiltCondition</h2><p>判定是否要进入TILT模式。当程序发现两次<code>sentinelTimer</code>之间的时间差为负值或者大于<code>SENTINEL_TILT_TRIGGER = 2000</code>时，就会进入 TILT 模式。这通常意味着：</p>
+<ol>
+<li>Sentinel进程被阻塞：需要载入的数据（？）大、机器IO繁重、进程被信号停止</li>
+<li>系统时钟出现了问题<br>对于这种情况，会设置tilt=1，此时这个sentinel就会罚站<code>SENTINEL_TILT_PERIOD</code>这么长时间。</li>
+</ol>
+<h2 id="sentinelHandleDictOfRedisInstances"><a href="#sentinelHandleDictOfRedisInstances" class="headerlink" title="sentinelHandleDictOfRedisInstances"></a>sentinelHandleDictOfRedisInstances</h2><p>这个其实是Sentinel的主要逻辑。它会遍历监视的所有节点（包括Master、Slave和其他Sentinel），首先执行<code>sentinelHandleRedisInstance</code>。如果发现这个节点是<code>SRI_MASTER</code>，则对它的所有Slave和Sentinel也调用这个函数。注意这个节点并不是一个DFS或者递归，事实上他最多就两层，主要就是对于每个Master，找到它所有的Slave和监视它的所有Sentinel。<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">sentinelHandleDictOfRedisInstances</span><span class="params">(dict *instances)</span> </span>&#123;</span><br><span class="line">    dictIterator *di;</span><br><span class="line">    dictEntry *de;</span><br><span class="line">    sentinelRedisInstance *switch_to_promoted = <span class="literal">NULL</span>;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* There are a number of things we need to perform against every master. */</span></span><br><span class="line">    di = dictGetIterator(instances);</span><br><span class="line">    <span class="keyword">while</span>((de = dictNext(di)) != <span class="literal">NULL</span>) &#123;</span><br><span class="line">        sentinelRedisInstance *ri = dictGetVal(de);</span><br><span class="line"></span><br><span class="line">        sentinelHandleRedisInstance(ri);</span><br><span class="line">        <span class="keyword">if</span> (ri-&gt;flags &amp; SRI_MASTER) &#123;</span><br><span class="line">            sentinelHandleDictOfRedisInstances(ri-&gt;slaves);</span><br><span class="line">            sentinelHandleDictOfRedisInstances(ri-&gt;sentinels);</span><br><span class="line">            <span class="keyword">if</span> (ri-&gt;failover_state == SENTINEL_FAILOVER_STATE_UPDATE_CONFIG) &#123;</span><br><span class="line">                switch_to_promoted = ri;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (switch_to_promoted)</span><br><span class="line">        sentinelFailoverSwitchToPromotedSlave(switch_to_promoted);</span><br><span class="line">    dictReleaseIterator(di);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<h2 id="sentinelHandleRedisInstance"><a href="#sentinelHandleRedisInstance" class="headerlink" title="sentinelHandleRedisInstance"></a>sentinelHandleRedisInstance</h2><h3 id="监控部分"><a href="#监控部分" class="headerlink" title="监控部分"></a>监控部分</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* Perform scheduled operations for the specified Redis instance. */</span></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">sentinelHandleRedisInstance</span><span class="params">(sentinelRedisInstance *ri)</span> </span>&#123;</span><br><span class="line">    <span class="comment">/* ========== MONITORING HALF ============ */</span></span><br><span class="line">    <span class="comment">/* Every kind of instance */</span></span><br><span class="line">    sentinelReconnectInstance(ri);</span><br><span class="line">    sentinelSendPeriodicCommands(ri);</span><br></pre></td></tr></table></figure>
+<h4 id="sentinelReconnectInstance"><a href="#sentinelReconnectInstance" class="headerlink" title="sentinelReconnectInstance"></a>sentinelReconnectInstance</h4><p>在<code>sentinelReconnectInstance</code>函数中，检查如果对<code>sentinelRedisInstance *ri</code>尚未建立有网络连接，则调用<code>redisAsyncConnect</code>等函数建立网络连接。有关网络连接库将在稍后介绍。</p>
+<h4 id="sentinelSendPeriodicCommands"><a href="#sentinelSendPeriodicCommands" class="headerlink" title="sentinelSendPeriodicCommands"></a>sentinelSendPeriodicCommands</h4><p><code>sentinelSendPeriodicCommands</code>负责向<code>sentinelRedisInstance *ri</code>发送命令。<br>这里的<code>link</code>是一个<code>instanceLink</code>对象。这个对象的作用是为了节约hiredis连接建立的数量，如果有5个Sentinel监视100个Master，那么会创建5个连接而不是500个连接。这一段有点令人费解，因为就算是这5个Sentinel共享链接，那也要它们两两互联的<code>5*4</code>共同对外的<code>100</code>个连接啊？<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* Send periodic PING, INFO, and PUBLISH to the Hello channel to</span></span><br><span class="line"><span class="comment"> * the specified master or slave instance. */</span></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">sentinelSendPeriodicCommands</span><span class="params">(sentinelRedisInstance *ri)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">mstime_t</span> now = mstime();</span><br><span class="line">    <span class="keyword">mstime_t</span> info_period, ping_period;</span><br><span class="line">    <span class="keyword">int</span> retval;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* Return ASAP if we have already a PING or INFO already pending, or</span></span><br><span class="line"><span class="comment">     * in the case the instance is not properly connected. */</span></span><br><span class="line">    <span class="keyword">if</span> (ri-&gt;link-&gt;disconnected) <span class="keyword">return</span>;</span><br></pre></td></tr></table></figure></p>
+<p>因为INFO/PING/PUBLISH都不是极端重要的指令，所以我们对<code>pending_commands</code>设定了一个上限<code>SENTINEL_MAX_PENDING_COMMANDS</code>。当然还有一个兜底的情况就是当命令太多了，连接就会断掉触发重连。<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// SENTINEL_MAX_PENDING_COMMANDS = 100</span></span><br><span class="line">    <span class="keyword">if</span> (ri-&gt;link-&gt;pending_commands &gt;=</span><br><span class="line">        SENTINEL_MAX_PENDING_COMMANDS * ri-&gt;link-&gt;refcount) <span class="keyword">return</span>;</span><br></pre></td></tr></table></figure></p>
+<p>如果<code>ri</code>是一个Slave节点，并且它对应的Master节点出于ODOWN，或者FAILOVER状态，或者，那么我们应该加快发送INFO的频率到1000ms一次，否则就是<code>SENTINEL_INFO_PERIOD = 10000ms</code>，此时Slaves中会有被其他Sentinel或者sysadmin提升为Master的情况。此外，当<code>master_link_down_time</code>不等于0（应该是Slave从Master断开了，导致Replication过程中断），也要更频繁的INFO，从而有一个更加清楚的断连时间记录。<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ((ri-&gt;flags &amp; SRI_SLAVE) &amp;&amp;</span><br><span class="line">    ((ri-&gt;master-&gt;flags &amp; (SRI_O_DOWN|SRI_FAILOVER_IN_PROGRESS)) ||</span><br><span class="line">     (ri-&gt;master_link_down_time != <span class="number">0</span>)))</span><br><span class="line">&#123;</span><br><span class="line">    info_period = <span class="number">1000</span>;</span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    info_period = SENTINEL_INFO_PERIOD;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line">    <span class="comment">/* We ping instances every time the last received pong is older than</span></span><br><span class="line"><span class="comment">     * the configured 'down-after-milliseconds' time, but every second</span></span><br><span class="line"><span class="comment">     * anyway if 'down-after-milliseconds' is greater than 1 second. */</span></span><br><span class="line">    ping_period = ri-&gt;down_after_period;</span><br><span class="line">    <span class="keyword">if</span> (ping_period &gt; SENTINEL_PING_PERIOD) ping_period = SENTINEL_PING_PERIOD;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* Send INFO to masters and slaves, not sentinels. */</span></span><br><span class="line">    <span class="keyword">if</span> ((ri-&gt;flags &amp; SRI_SENTINEL) == <span class="number">0</span> &amp;&amp;</span><br><span class="line">        (ri-&gt;info_refresh == <span class="number">0</span> ||</span><br><span class="line">        (now - ri-&gt;info_refresh) &gt; info_period))</span><br><span class="line">    &#123;</span><br><span class="line">        retval = redisAsyncCommand(ri-&gt;link-&gt;cc,</span><br><span class="line">            sentinelInfoReplyCallback, ri, <span class="string">"%s"</span>,</span><br><span class="line">            sentinelInstanceMapCommand(ri,<span class="string">"INFO"</span>));</span><br><span class="line">        <span class="keyword">if</span> (retval == C_OK) ri-&gt;link-&gt;pending_commands++;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* Send PING to all the three kinds of instances. */</span></span><br><span class="line">    <span class="keyword">if</span> ((now - ri-&gt;link-&gt;last_pong_time) &gt; ping_period &amp;&amp;</span><br><span class="line">               (now - ri-&gt;link-&gt;last_ping_time) &gt; ping_period/<span class="number">2</span>) &#123;</span><br><span class="line">        sentinelSendPing(ri);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* PUBLISH hello messages to all the three kinds of instances. */</span></span><br><span class="line">    <span class="keyword">if</span> ((now - ri-&gt;last_pub_time) &gt; SENTINEL_PUBLISH_PERIOD) &#123;</span><br><span class="line">        sentinelSendHello(ri);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="处理部分"><a href="#处理部分" class="headerlink" title="处理部分"></a>处理部分</h3><p>首先是对tilt的处理。<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* ============== ACTING HALF ============= */</span></span><br><span class="line"><span class="keyword">if</span> (sentinel.tilt) &#123;</span><br><span class="line">    <span class="keyword">if</span> (mstime()-sentinel.tilt_start_time &lt; SENTINEL_TILT_PERIOD) <span class="keyword">return</span>;</span><br><span class="line">    sentinel.tilt = <span class="number">0</span>;</span><br><span class="line">    sentinelEvent(LL_WARNING,<span class="string">"-tilt"</span>,<span class="literal">NULL</span>,<span class="string">"#tilt mode exited"</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>下面检查是否是SDOWN状态<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* Every kind of instance */</span></span><br><span class="line">sentinelCheckSubjectivelyDown(ri);</span><br></pre></td></tr></table></figure></p>
+<p>如果是Master的话，需要查看是否进入的ODOWN状态。<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">    <span class="comment">/* Masters and slaves */</span></span><br><span class="line">    <span class="keyword">if</span> (ri-&gt;flags &amp; (SRI_MASTER|SRI_SLAVE)) &#123;</span><br><span class="line">        <span class="comment">/* Nothing so far. */</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* Only masters */</span></span><br><span class="line">    <span class="keyword">if</span> (ri-&gt;flags &amp; SRI_MASTER) &#123;</span><br><span class="line">        sentinelCheckObjectivelyDown(ri);</span><br><span class="line">        <span class="keyword">if</span> (sentinelStartFailoverIfNeeded(ri))</span><br><span class="line">            sentinelAskMasterStateToOtherSentinels(ri,SENTINEL_ASK_FORCED);</span><br><span class="line">        sentinelFailoverStateMachine(ri);</span><br><span class="line">        sentinelAskMasterStateToOtherSentinels(ri,SENTINEL_NO_FLAGS);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<h4 id="sentinelCheckSubjectivelyDown"><a href="#sentinelCheckSubjectivelyDown" class="headerlink" title="sentinelCheckSubjectivelyDown"></a>sentinelCheckSubjectivelyDown</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">sentinelCheckSubjectivelyDown</span><span class="params">(sentinelRedisInstance *ri)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">mstime_t</span> elapsed = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (ri-&gt;link-&gt;act_ping_time)</span><br><span class="line">        elapsed = mstime() - ri-&gt;link-&gt;act_ping_time;</span><br><span class="line">    <span class="keyword">else</span> <span class="keyword">if</span> (ri-&gt;link-&gt;disconnected)</span><br><span class="line">        elapsed = mstime() - ri-&gt;link-&gt;last_avail_time;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* Check if we are in need for a reconnection of one of the</span></span><br><span class="line"><span class="comment">     * links, because we are detecting low activity.</span></span><br><span class="line"><span class="comment">     *</span></span><br><span class="line"><span class="comment">     * 1) Check if the command link seems connected, was connected not less</span></span><br><span class="line"><span class="comment">     *    than SENTINEL_MIN_LINK_RECONNECT_PERIOD, but still we have a</span></span><br><span class="line"><span class="comment">     *    pending ping for more than half the timeout. */</span></span><br><span class="line">    <span class="keyword">if</span> (ri-&gt;link-&gt;cc &amp;&amp;</span><br><span class="line">        (mstime() - ri-&gt;link-&gt;cc_conn_time) &gt;</span><br><span class="line">        SENTINEL_MIN_LINK_RECONNECT_PERIOD &amp;&amp;</span><br><span class="line">        ri-&gt;link-&gt;act_ping_time != <span class="number">0</span> &amp;&amp; <span class="comment">/* There is a pending ping... */</span></span><br><span class="line">        <span class="comment">/* The pending ping is delayed, and we did not receive</span></span><br><span class="line"><span class="comment">         * error replies as well. */</span></span><br><span class="line">        (mstime() - ri-&gt;link-&gt;act_ping_time) &gt; (ri-&gt;down_after_period/<span class="number">2</span>) &amp;&amp;</span><br><span class="line">        (mstime() - ri-&gt;link-&gt;last_pong_time) &gt; (ri-&gt;down_after_period/<span class="number">2</span>))</span><br><span class="line">    &#123;</span><br><span class="line">        instanceLinkCloseConnection(ri-&gt;link,ri-&gt;link-&gt;cc);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* 2) Check if the pubsub link seems connected, was connected not less</span></span><br><span class="line"><span class="comment">     *    than SENTINEL_MIN_LINK_RECONNECT_PERIOD, but still we have no</span></span><br><span class="line"><span class="comment">     *    activity in the Pub/Sub channel for more than</span></span><br><span class="line"><span class="comment">     *    SENTINEL_PUBLISH_PERIOD * 3.</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">if</span> (ri-&gt;link-&gt;pc &amp;&amp;</span><br><span class="line">        (mstime() - ri-&gt;link-&gt;pc_conn_time) &gt;</span><br><span class="line">         SENTINEL_MIN_LINK_RECONNECT_PERIOD &amp;&amp;</span><br><span class="line">        (mstime() - ri-&gt;link-&gt;pc_last_activity) &gt; (SENTINEL_PUBLISH_PERIOD*<span class="number">3</span>))</span><br><span class="line">    &#123;</span><br><span class="line">        instanceLinkCloseConnection(ri-&gt;link,ri-&gt;link-&gt;pc);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* Update the SDOWN flag. We believe the instance is SDOWN if:</span></span><br><span class="line"><span class="comment">     *</span></span><br><span class="line"><span class="comment">     * 1) It is not replying.</span></span><br><span class="line"><span class="comment">     * 2) We believe it is a master, it reports to be a slave for enough time</span></span><br><span class="line"><span class="comment">     *    to meet the down_after_period, plus enough time to get two times</span></span><br><span class="line"><span class="comment">     *    INFO report from the instance. */</span></span><br><span class="line">    <span class="keyword">if</span> (elapsed &gt; ri-&gt;down_after_period ||</span><br><span class="line">        (ri-&gt;flags &amp; SRI_MASTER &amp;&amp;</span><br><span class="line">         ri-&gt;role_reported == SRI_SLAVE &amp;&amp;</span><br><span class="line">         mstime() - ri-&gt;role_reported_time &gt;</span><br><span class="line">          (ri-&gt;down_after_period+SENTINEL_INFO_PERIOD*<span class="number">2</span>)))</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="comment">/* Is subjectively down */</span></span><br><span class="line">        <span class="keyword">if</span> ((ri-&gt;flags &amp; SRI_S_DOWN) == <span class="number">0</span>) &#123;</span><br><span class="line">            sentinelEvent(LL_WARNING,<span class="string">"+sdown"</span>,ri,<span class="string">"%@"</span>);</span><br><span class="line">            ri-&gt;s_down_since_time = mstime();</span><br><span class="line">            ri-&gt;flags |= SRI_S_DOWN;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        <span class="comment">/* Is subjectively up */</span></span><br><span class="line">        <span class="keyword">if</span> (ri-&gt;flags &amp; SRI_S_DOWN) &#123;</span><br><span class="line">            sentinelEvent(LL_WARNING,<span class="string">"-sdown"</span>,ri,<span class="string">"%@"</span>);</span><br><span class="line">            ri-&gt;flags &amp;= ~(SRI_S_DOWN|SRI_SCRIPT_KILL_SENT);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="sentinelCheckObjectivelyDown"><a href="#sentinelCheckObjectivelyDown" class="headerlink" title="sentinelCheckObjectivelyDown"></a>sentinelCheckObjectivelyDown</h4>
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/Redis/" rel="tag"># Redis</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2020/09/17/elf-format/" rel="next" title="ELF格式复习整理">
+                <i class="fa fa-chevron-left"></i> ELF格式复习整理
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">137</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">147</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#总览"><span class="nav-number">1.</span> <span class="nav-text">总览</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#入口"><span class="nav-number">1.1.</span> <span class="nav-text">入口</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#用法"><span class="nav-number">1.2.</span> <span class="nav-text">用法</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#常用结构"><span class="nav-number">1.3.</span> <span class="nav-text">常用结构</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#建立和初始化"><span class="nav-number">1.4.</span> <span class="nav-text">建立和初始化</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#例程详解"><span class="nav-number">2.</span> <span class="nav-text">例程详解</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#sentinelCheckTiltCondition"><span class="nav-number">2.1.</span> <span class="nav-text">sentinelCheckTiltCondition</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#sentinelHandleDictOfRedisInstances"><span class="nav-number">2.2.</span> <span class="nav-text">sentinelHandleDictOfRedisInstances</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#sentinelHandleRedisInstance"><span class="nav-number">2.3.</span> <span class="nav-text">sentinelHandleRedisInstance</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#监控部分"><span class="nav-number">2.3.1.</span> <span class="nav-text">监控部分</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#sentinelReconnectInstance"><span class="nav-number">2.3.1.1.</span> <span class="nav-text">sentinelReconnectInstance</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#sentinelSendPeriodicCommands"><span class="nav-number">2.3.1.2.</span> <span class="nav-text">sentinelSendPeriodicCommands</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#处理部分"><span class="nav-number">2.3.2.</span> <span class="nav-text">处理部分</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#sentinelCheckSubjectivelyDown"><span class="nav-number">2.3.2.1.</span> <span class="nav-text">sentinelCheckSubjectivelyDown</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#sentinelCheckObjectivelyDown"><span class="nav-number">2.3.2.2.</span> <span class="nav-text">sentinelCheckObjectivelyDown</span></a></li></ol></li></ol></li></ol></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2020/10/18/redis-sentinel/';
+          this.page.identifier = '2020/10/18/redis-sentinel/';
+          this.page.title = 'Redis Sentinel实现原理分析';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
