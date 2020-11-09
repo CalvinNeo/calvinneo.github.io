@@ -74,7 +74,7 @@
 <link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="C++,多线程,Linux,并行计算," />
+  <meta name="keywords" content="C++,Linux,并行计算,多线程," />
 
 
 
@@ -91,7 +91,7 @@
 
 
 <meta name="description" content="在本篇中比较了各种并发、并行技术。并发(concurrency)强调的是逻辑上的同时发生，是语义上的模型(semantic model)，在实际上并发程序可能是由一个处理器同时(simultaneously)处理多个任务，因此并发过程中常出现一个线程等待其他资源的情况。此时常伴随着线程的阻塞和调度。并发过程通常可划分为多个级别：Blocking、Obstruction-Free、Lock-Free">
-<meta name="keywords" content="C++,多线程,Linux,并行计算">
+<meta name="keywords" content="C++,Linux,并行计算,多线程">
 <meta property="og:type" content="article">
 <meta property="og:title" content="并发编程重要概念及比较">
 <meta property="og:url" content="http://www.calvinneo.com/2017/12/28/Concurrency-Programming-Compare/index.html">
@@ -108,7 +108,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/concur/mesi.jpg">
 <meta property="og:image" content="http://www.calvinneo.com/img/concur/speed_cmp.jpg">
 <meta property="og:image" content="http://www.calvinneo.com/img/bfbc/dclpjj.png">
-<meta property="og:updated_time" content="2020-06-10T04:54:58.066Z">
+<meta property="og:updated_time" content="2020-11-09T15:27:22.829Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="并发编程重要概念及比较">
 <meta name="twitter:description" content="在本篇中比较了各种并发、并行技术。并发(concurrency)强调的是逻辑上的同时发生，是语义上的模型(semantic model)，在实际上并发程序可能是由一个处理器同时(simultaneously)处理多个任务，因此并发过程中常出现一个线程等待其他资源的情况。此时常伴随着线程的阻塞和调度。并发过程通常可划分为多个级别：Blocking、Obstruction-Free、Lock-Free">
@@ -414,7 +414,7 @@
 <h3 id="测试缓存大小"><a href="#测试缓存大小" class="headerlink" title="测试缓存大小"></a>测试缓存大小</h3><h3 id="缓存一致性和volatile"><a href="#缓存一致性和volatile" class="headerlink" title="缓存一致性和volatile"></a>缓存一致性和volatile</h3><p>既然我们CPU总是能读到内存里面最新的值，那为啥还需要volatile呢？原因有二</p>
 <ol>
 <li>CPU不一定会读缓存，可能直接读寄存器<br> 这时候要注意区分CPU缓存一致性和volatile之间的关系。例如出于优化的角度，编译器可能把一个在内存的值放到到寄存器里面，以避免访问内存，既然不访问内存那和缓存一致也没啥关系了。但这样就会出现问题，如果某个线程修改了这个值对应的内存，那么寄存器是不知道的，所以这时候volatile强制说不要在寄存器里面读啦，直接从内存里面读，这时候缓存就能发挥应该有的作用了。所以<strong>CPU缓存一致性解决的是CPU的Lx缓存和内存之间之间的问题，而不是CPU寄存器和内存之间的问题</strong>。</li>
-<li>有的缓存一致性也不保证是任意时刻的<br> 经过<a href="http://www.infoq.com/cn/articles/cache-coherency-primer/" target="_blank" rel="noopener">简单的了解</a>，CPU缓存行的写操作也分为直写(write though)和回写(write back)两种策略。直写就是同时写缓存和内存，因此对于直写来说，确实可以做到任意时刻各缓存中的内容等于内存中内容；但回写就不一定是任意时刻了，因为它并不是立即更新缓存，而是值修改本级缓存，而将对应缓存标记为脏段，只有当所有脏段被会邂逅我们才能达到一致性。具体还可以参看<a href="http://ifeve.com/cpu-cache-flushing-fallacy-cn/" target="_blank" rel="noopener">缓存一致性</a>。</li>
+<li>有的缓存一致性也不保证是任意时刻的<br> 经过<a href="http://www.infoq.com/cn/articles/cache-coherency-primer/" target="_blank" rel="noopener">简单的了解</a>，CPU缓存行的写操作也分为直写(write though)和回写(write back)两种策略。直写就是同时写缓存和内存，因此对于直写来说，确实可以做到任意时刻各缓存中的内容等于内存中内容；但回写就不一定是任意时刻了，因为它并不是立即更新缓存，而是只修改本级缓存，而将对应缓存标记为脏段，只有当所有脏段被回写后我们才能达到一致性。具体还可以参看<a href="http://ifeve.com/cpu-cache-flushing-fallacy-cn/" target="_blank" rel="noopener">缓存一致性</a>。当然，直写和回写实际上是广泛意义上的概念，同样也出现在Linux、Innodb等系统中。</li>
 </ol>
 <h2 id="CPU提供的并发处理机制"><a href="#CPU提供的并发处理机制" class="headerlink" title="CPU提供的并发处理机制"></a>CPU提供的并发处理机制</h2><h3 id="栅栏"><a href="#栅栏" class="headerlink" title="栅栏"></a>栅栏</h3><p>以x86为例，提供了<code>lfence</code>、<code>sfence</code>和<code>mfence</code>。其中<code>mfence</code>可以看做是两者合一，但是<a href="https://stackoverflow.com/questions/19047327/why-gcc-does-not-use-loadwithout-fence-and-storesfence-for-sequential-consist" target="_blank" rel="noopener">有的资料</a>指出<code>lfence</code>+<code>sfence</code>弱于<code>mfence</code>，因为它不能禁止Store-Load的乱序。</p>
 <h3 id="总线锁"><a href="#总线锁" class="headerlink" title="总线锁"></a>总线锁</h3><p><a href="https://www.zhihu.com/question/65372648" target="_blank" rel="noopener">在较为古老的CPU上LOCK指令通常是锁总线的，后面有使用Ringbus+MESI协议的</a>，这个协议我们后面会讲到。</p>
@@ -748,11 +748,11 @@ pthread_cond_wait(&amp;cond, &amp;mutex);
           
             <a href="/tags/C/" rel="tag"># C++</a>
           
-            <a href="/tags/多线程/" rel="tag"># 多线程</a>
-          
             <a href="/tags/Linux/" rel="tag"># Linux</a>
           
             <a href="/tags/并行计算/" rel="tag"># 并行计算</a>
+          
+            <a href="/tags/多线程/" rel="tag"># 多线程</a>
           
         </div>
       
