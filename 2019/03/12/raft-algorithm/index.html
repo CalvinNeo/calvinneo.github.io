@@ -105,7 +105,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/fbs/raft_exam/1.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/fbs/raft_exam/2.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/fbs/raft_exam/3.png">
-<meta property="og:updated_time" content="2020-10-29T04:23:37.600Z">
+<meta property="og:updated_time" content="2020-11-10T04:56:19.675Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Raft共识算法">
 <meta name="twitter:description" content="本文来自我的文章分布式一致性和分布式共识协议太长，因此将其中的Raft部分单独列出来作为一篇文章。 Raft协议的设计者们认为Paxos协议非常难于理解，并且需要作出很多修改才能够应用到工程中，因此设计了偏重于实现的Raft协议，这甚至体现在他们的论文标题《In Search of an Understandable Consensus Algorithm(Extended Version)》上，">
@@ -414,13 +414,13 @@
 <li>如果不同节点上的日志中的两个条目具有相同的index和term，那么这两个日志index前的部分也相同。<br> 这是由<code>AppendEntriesRPC</code>这个RPC中<code>prevLogIndex</code>和<code>prevLogTerm</code>两个字段保证的。当一个<code>AppendEntriesRPC</code>命令到达时，Follower会比较自己是否具有<code>prevLogIndex</code>和<code>prevLogTerm</code>所标记的条目，如果没有（这意味着诸如Leader宕机等情况导致的诸如没有能够全部复制到所有节点的情况）则拒绝这次添加（此时<code>AppendEntriesRPC</code>失败了），并且会削减掉自己已知的不符合Leader日志的部分（可以查看后文有关<code>AppendEntriesRPC</code>的部分）。因此每一次的<code>AppendEntriesRPC</code>都会附带一次check，从而保证了这条性质，有点类似于归纳法(induction)。<br> 根据日志匹配原则，我们在实现时可断言<code>logs.size() == logs.back().index() + 1 == last_log_index() + 1</code>。除非出现了Log compact的情况，这也是我们在实现时应当小心使用<code>log.size()</code>和<code>logs[]</code>的原因。</li>
 </ol>
 </li>
-<li>领导人完全性(Leader Completeness)<br> 这个特性是Raft的一个核心特性。如果某个日志条目在某个term中已经被<strong>提交</strong>，那么这个条目必然出现在所有具有更大的term的Leader中，在这里<strong>已提交</strong>是必须的，我们将在Log replication中进行详细说明。这个规定实际上保证了选出的Leader拥有所有<strong>已经提交</strong>的日志条目，容易看出，我们先前的领导人只附加原则实际上为这个特性提供了条件。<br> Raft的论文提到除了Leader-based的共识算法，其他的共识算法并不保证这个特性，例如Viewstamped Replication算法。</li>
-<li>状态机安全特性(State Machine Safety)<br> 如果一个Leader已经<strong>apply</strong>了位于index的日志条目，那么没有任何服务器可以在这个index上<strong>apply</strong>一个不同的日志条目。<br> 状态机安全特性实际上保证了所有的服务器都会按照<strong>相同的顺序</strong>提交相同的日志给RSM（论文5.4.3节旁注）。事实上根据领导人完全性可以证明状态机安全性，首先一个被apply的日志必须是已提交并与Leader相同的。如果某个较早term上的日志条目被apply的话，日志匹配原则能够保证所有之后term对应的Leader都拥有相同的日志条目，因此他们稍后也会apply相同的日志条目。<br> Raft协议保证一旦条目被提交，那么它是持久化的(durable)（不会被丢失或更改），并且一定会被所有可用的复制状态机执行（论文5.3节）。<br> 需要注意的是，上面四点日志约束实际上保证了在Raft中的日志是连续的，中间不会出现空洞。而在诸如基于zxid的Zookeeper协议中，日志是可以拥有空洞的。这实际上方便了Follower和Leader之间的同步过程，Leader只需要关注Follower上一次的同步位置即可。这也是Raft协议在实现上方便性的来源之一。</li>
+<li>领导人完全性(Leader Completeness)<br> 这个特性是Raft的一个核心特性。如果某个日志条目在某个term中已经被<strong>提交</strong>，那么这个条目必然出现在所有具有更大的term的Leader中，在这里<strong>已提交</strong>是必须的，我们将在Log replication中进行详细说明。这个规定实际上保证了选出的Leader拥有所有<strong>已经提交</strong>的日志条目，容易看出，我们先前的领导人只附加原则实际上为这个特性提供了条件。<br> Raft的论文提到除了Leader-based的共识算法，其他的共识算法并不保证这个特性，例如Viewstamped Replication算法。<br> 根据<a href="https://zhuanlan.zhihu.com/p/26330001" target="_blank" rel="noopener">这篇文章</a>的介绍，我们发现领导人完全性是Raft容易实现的一个重要原因。通过领导人完全性原则，Raft协议不再允许日志空洞，也就是说Leader必须含有全部已提交记录，一个日志落后的节点不可能被选为Leader。而在Paxos协议族中的一些协议是允许具有日志空洞的节点成为Leader，再在后面异步地填自己的日志空洞的。而在Raft中，只有Leader通过<code>AppendEntriesRPC</code>单向向全部Follower复制日志。</li>
+<li>状态机安全特性(State Machine Safety)<br> 如果一个Leader已经<strong>apply</strong>了位于index的日志条目，那么没有任何服务器可以在这个index上<strong>apply</strong>一个不同的日志条目。<br> 状态机安全特性实际上保证了所有的服务器都会按照<strong>相同的顺序</strong>提交相同的日志给RSM（论文5.4.3节旁注）。事实上根据领导人完全性可以证明状态机安全性，首先一个被apply的日志必须是已提交并与Leader相同的。如果某个较早term上的日志条目被apply的话，日志匹配原则能够保证所有之后term对应的Leader都拥有相同的日志条目，因此他们稍后也会apply相同的日志条目。<br> Raft协议保证一旦条目被提交，那么它是持久化的(durable)（不会被丢失或更改），并且一定会被所有可用的复制状态机执行（论文5.3节）。<br> 需要注意的是，上面四点日志约束实际上保证了在Raft中的日志是连续的，中间不会出现空洞。而在诸如基于zxid的Zookeeper协议中，日志是可以拥有空洞的。这实际上方便了Follower和Leader之间的同步过程，Leader只需要关注Follower上一次的同步位置即可。而在选举过程中，我们也只需要比较<strong>最后一个log的index和term</strong>即可，不需要去比较其他的日志条目了。这也是Raft协议在实现上方便性的来源之一。</li>
 </ol>
 <h2 id="RPC"><a href="#RPC" class="headerlink" title="RPC"></a>RPC</h2><p>Raft中定义了两种主要的RPC包，<code>AppendEntriesRPC</code>和<code>RequestVoteRPC</code>。</p>
 <h3 id="AppendEntriesRPC"><a href="#AppendEntriesRPC" class="headerlink" title="AppendEntriesRPC"></a>AppendEntriesRPC</h3><p><code>AppendEntriesRPC</code>具有心跳包和推送日志的作用。此外，通过<code>AppendEntriesRPC</code>我们还可以发现选举产生的新Leader，可以参考先前讨论任期时提到的有趣的问题。这个RPC包含以下部分</p>
 <ol>
-<li><code>term</code><br> 表示<strong>领导人</strong>的当前任期号。为了表示区别，<strong>下面写作<code>rpc_term_id</code></strong>。</li>
+<li><code>term</code><br> 表示<strong>Leader</strong>的当前任期号。为了表示区别，<strong>下面写作<code>rpc_term_id</code></strong>。</li>
 <li><code>leaderId</code><br> 表示当前领导人的id，这样来自客户端的请求能被Follower转发给Leader。</li>
 <li><code>prevLogIndex</code>和<code>prevLogTerm</code><br> 表示新日志条目之前的index和其对应的term，这个是为了保障先前提到的日志匹配原则。Leader在构造这两个字段时实际上是根据自己维护的<code>nextIndex[]</code>和<code>matchIndex[]</code>来计算的。</li>
 <li><code>entries</code><br> <code>entries</code>就是我们要维护的日志条目。</li>
@@ -703,7 +703,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">139</span>
+                <span class="site-state-item-count">142</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -716,7 +716,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">147</span>
+                <span class="site-state-item-count">150</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
