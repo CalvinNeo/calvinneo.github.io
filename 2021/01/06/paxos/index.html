@@ -1,0 +1,1231 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="raft,paxos," />
+
+
+
+
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="介绍Paxos算法">
+<meta name="keywords" content="raft,paxos">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Paxos算法">
+<meta property="og:url" content="http://www.calvinneo.com/2021/01/06/paxos/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="介绍Paxos算法">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2021-01-06T13:35:34.501Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Paxos算法">
+<meta name="twitter:description" content="介绍Paxos算法">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2021/01/06/paxos/"/>
+
+
+
+
+
+  <title>Paxos算法 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2021/01/06/paxos/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                Paxos算法
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2021-01-06T19:20:33+08:00">
+                2021-01-06
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>介绍Paxos算法</p>
+<a id="more"></a>
+<h1 id="Basic-Paxos"><a href="#Basic-Paxos" class="headerlink" title="Basic Paxos"></a>Basic Paxos</h1><p>Paxos允许消息被任意延迟、丢包、重复，但不允许消息被损坏。<br>Basic Paxos弱化了Leader的概念，而使用了Proposer的概念。<br>Basic Paxos只对一个Value决议。这个Value实际上<a href="https://stackoverflow.com/questions/65175880/how-can-i-understand-value-in-bacis-paxos" target="_blank" rel="noopener">类似于Raft里面的一个Log Entry</a>，即<code>x=1</code>或者<code>y=42</code>之类的。根据原版论文<em>The part-time parliament</em>，这里的Value即法令，类似于禁止画画或者允许自由艺术等。<br>注意，一个Value被决定是chosen而不是accepted，即决议的过程是<br><figure class="highlight livescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">propose<span class="function"><span class="params">(issue)</span> -&gt;</span> accept<span class="function"> -&gt;</span> chosen</span><br></pre></td></tr></table></figure></p>
+<h2 id="论证1"><a href="#论证1" class="headerlink" title="论证1"></a>论证1</h2><p>在论证1的部分，我们从原始要求倒推出我们需要维护的不变量P2b</p>
+<h3 id="P1"><a href="#P1" class="headerlink" title="P1"></a>P1</h3><p>我们考虑没有丢包和机器故障，并且我们假设只有一个proposer。对于这样的一个平凡情况，我们可以得到下面的要求：<br>一个acceptor必须接受它收到的第一个proposal。</p>
+<p>显然这个方案存在一个问题，不同的proposer可能提出不同的value，这会导致每个acceptor收到了不同的value，但其中没有一个value是占majority的。<br>这个问题导致我们需要让acceptor去accept多于一个proposal。为了区分这些proposal，就要引入proposal number。<br>一个Value被chosen，当具有这个Value的proposal已经被大部分的acceptor accept了。</p>
+<h3 id="P2"><a href="#P2" class="headerlink" title="P2"></a>P2</h3><p>经过上面的论证，我们允许choose多个proposal，但我们必须保证所有被chosen的proposal都有相同的Value，因此我们提出下面的要求：<br>如果具有Value <code>v</code>的proposal被<strong>chosen</strong>了，那么对于任意更高的number的proposal，如果它被<strong>chosen</strong>，那么它就一定有Value <code>v</code>。</p>
+<h3 id="P2a"><a href="#P2a" class="headerlink" title="P2a"></a>P2a</h3><p>我们就P2进一步推导，因为被chosen的前提是这个proposal要至少被一个acceptor accept，所以我们可以通过满足下面这个更强的条件来满足P2：<br>如果具有Value <code>v</code>的proposal被<strong>chosen</strong>了，那么对于任意更高的number的proposal，如果它被任意的accpetor <strong>accept</strong>，那么它就一定有Value <code>v</code>。</p>
+<h3 id="P2b"><a href="#P2b" class="headerlink" title="P2b"></a>P2b</h3><p>注意，我们仍然需要满足要求P1，这样我们可以保证我们一定能接受一些proposal。<br>考虑下面的情况：</p>
+<ol>
+<li>一个新的proposer提交了一个更高的number的proposal，但是具有不同的Value；</li>
+<li>一个之前从来没有收到过任何proposal的acceptor收到了这个proposal；</li>
+<li>根据要求P1，这个acceptor需要accept这个proposal；</li>
+<li>根据要求P2a，这个acceptor不能accept这个proposal；</li>
+</ol>
+<p>我们发现这里产生了矛盾，因此我们还需要继续强化要求P2a：<br>如果具有Value <code>v</code>的proposal被<strong>chosen</strong>了，那么对于任意更高的number的proposal，在它被任意proposer发出时，就一定有Value <code>v</code>。</p>
+<h2 id="论证2"><a href="#论证2" class="headerlink" title="论证2"></a>论证2</h2><p>论证2紧接着论证1，讲述如何维护P2b性质。</p>
+<h3 id="P2c"><a href="#P2c" class="headerlink" title="P2c"></a>P2c</h3><p>为了方便表示，规定<code>proposal(m,v)</code>表示具有number <code>n</code>和Value <code>v</code>的proposal。下面我们查看P2b是如何保证自己一直成立的。</p>
+<p>我们考虑<code>proposal(m,v)</code>被chosen，那么我们要证明任何number大于<code>m</code>的<code>n</code>的proposal也有Value <code>v</code>。证明如下：<br>如果<code>m</code>被chosen，那么一定有大多数acceptor accept了这个proposal，这些acceptor属于集合<code>C</code>。再结合P2b，可以推出<code>C</code>中所有的acceptor都accept了从<code>m</code>到<code>n-1</code>的proposal，并且这些被accept的proposal都具有Value <code>v</code>。</p>
+<p>对于任意包含大多数acceptor的集合<code>S</code>必须包含<code>C</code>中的至少一个成员，因此我们可以得出我们需要满足下面的要求P2c。</p>
+<p>考虑一个proposer发出了<code>proposal(v,n)</code>，那么存在一个上述<code>S</code>，满足要求P2c：</p>
+<ol>
+<li>要么<code>S</code>中的成员都没有accept过低于<code>n</code>的proposal；</li>
+<li>要么accept的最大的小于<code>n</code>的proposal的Value是<code>v</code>。</li>
+</ol>
+<h2 id="论证3"><a href="#论证3" class="headerlink" title="论证3"></a>论证3</h2><p>为了维护P2c，我们发现一个proposer在发出<code>n</code>这个proposal之前，需要检查最大的小于<code>n</code>的proposal，看它是否<strong>已经</strong>或者<strong>将要</strong>被某些acceptor accept。前者是容易的，但是后者要做一个预测，并不是那么容易。</p>
+<p>为了简化这个预测的流程，我们引入了一个提前的阶段，也就是proposer要求acceptor保证不会再去accept任何低于<code>n</code>的proposal了。</p>
+<p>为此，我们得到下面的算法。</p>
+<h3 id="Proposer-算法-Step1"><a href="#Proposer-算法-Step1" class="headerlink" title="Proposer 算法 Step1"></a>Proposer 算法 Step1</h3><p>proposer选择一个新的number <code>n</code>，发送请求<code>prepare(n)</code>给某个集合中的所有acceptor。此时acceptor应该返回：</p>
+<ol>
+<li>保证不再接受<strong>小于</strong><code>n</code>的proposal；</li>
+<li>目前最大的小于<code>n</code>的accept的proposal。</li>
+</ol>
+<h3 id="Proposer-算法-Step2"><a href="#Proposer-算法-Step2" class="headerlink" title="Proposer 算法 Step2"></a>Proposer 算法 Step2</h3><p>如果这个proposer收到了majority的acceptor的回复，那么就可以发送一个<code>accept(n,v)</code>的请求。其中<code>n</code>是prepare时候的<code>n</code>，<code>v</code>的选择则遵循下面的规则：</p>
+<ol>
+<li>如果没有人对<code>v</code>的值有proposal，那么这个proposer就可以任选<code>v</code>的值。这实际上对应了通常情况。</li>
+<li>否则，就返回最大的小于<code>n</code>的proposal给出的<code>v</code>值。</li>
+</ol>
+<p>文章特别强调，prepare请求和accept请求可以发送给不同的acceptor。</p>
+<h3 id="Acceptor-算法-P1a"><a href="#Acceptor-算法-P1a" class="headerlink" title="Acceptor 算法 P1a"></a>Acceptor 算法 P1a</h3><p>一个acceptor可以安全地忽略任何的请求。</p>
+<p>acceptor可以回应prepare请求。</p>
+<p>acceptor可以回应accept请求，去accept某个proposal，当且仅当它没有保证不接受这个请求，即：<br>当且仅当一个acceptor没有回应<strong>大于</strong><code>n</code>的prepare请求，它可以接受一个<code>n</code>编号的accept请求。可以看出，P1是P1a的特例。</p>
+<p>也就是说，如果回应了<code>n+1</code>的prepare请求，那么：</p>
+<ol>
+<li>可以accept编号是<code>n+1</code>的accept请求；</li>
+<li>不能accept编号是<code>n</code>的accept请求；</li>
+<li>能不能promise编号是<code>n</code>的prepare请求？<br> 文章中指出，没有理由去回应这样的请求。因为根据上一点，连编号为<code>n</code>的accept请求都不会被响应了，更何况prepare请求呢？<br> 同理，如果一个请求已经被accept了，那么我们也不会再去回应对应的prepare请求了。<br> 当然，这些只是优化点而已。</li>
+</ol>
+<h3 id="持久化要求"><a href="#持久化要求" class="headerlink" title="持久化要求"></a>持久化要求</h3><p>为了维护P2c这个不变量，一个acceptor需要持久化：</p>
+<ol>
+<li>自己accept的最大的proposal number；</li>
+<li>自己回复的最大的prepare请求的number。</li>
+</ol>
+<p>此外，一个proposer可以忘记或者放弃自己的proposal，只要它不会具有相同number的另一个请求。</p>
+<h2 id="算法"><a href="#算法" class="headerlink" title="算法"></a>算法</h2><h3 id="Phase-1"><a href="#Phase-1" class="headerlink" title="Phase 1"></a>Phase 1</h3><ol>
+<li>Proposer<br> 选择<code>n</code>，发送<code>prepare(n)</code>到majority个acceptor上。</li>
+<li>Acceptor<br> 对于<code>prepare(n)</code>，如果<code>n</code>高于已经响应过的其他<code>prepare</code>请求，则：<ol>
+<li>promise不会在accept任何<strong>小于</strong><code>n</code>的请求；</li>
+<li>发送最大的小于<code>n</code>的accept的proposal。</li>
+</ol>
+</li>
+</ol>
+<h3 id="Phase-2"><a href="#Phase-2" class="headerlink" title="Phase 2"></a>Phase 2</h3><ol>
+<li>Proposer<br> 如果收到了majority的acceptor对自己<code>prepare(n)</code>的响应，则发送<code>accept(n,v)</code>请求给所有这些acceptor。这里的<code>v</code>的选择参见<em>Proposer 算法 Step2</em>一节。</li>
+<li>Acceptor<br> 除非自己已经回复了<code>prepare(n+1)</code>或者更高的，否则acceptor需要accept请求<code>accept(n,v)</code>。</li>
+</ol>
+<h2 id="Learner"><a href="#Learner" class="headerlink" title="Learner"></a>Learner</h2><p>容易发现，因为没有Leader，所以从单一的acceptor角度，并不能很方便地去发现某个proposal是否已经被chosen了。<br>一个平凡的方法就是每进行一次accept，就告知learner一次，不过这样的方法有很大的通信开销。考虑到learner也不会出现拜占庭错误，所以learner间可以相互通信以得到被accept的值，因此可以让每个acceptor只响应某一些learner。如果考虑到这一些learner可能失败，导致丢失acceptor信息，问题还会更复杂。此时，一个值被chosen了，但是没有learner发现。虽然learner可以再逐个询问acceptor，但只要有一个acceptor宕掉，就可能导致learner无法了解某个proposal是否得到多数同意。在这种情况下，只有当一个新的proposal被chosen的时候，learner才会再次发现。</p>
+<p>对此，可以提出一个问题，对于<code>n&gt;m</code>，如果<code>n</code>被chosen，那么<code>m</code>是不是一定被chosen呢？</p>
+<h1 id="习题"><a href="#习题" class="headerlink" title="习题"></a>习题</h1><h2 id="官方习题"><a href="#官方习题" class="headerlink" title="官方习题"></a>官方习题</h2><p>来自于Raft作者的博客。</p>
+<h3 id="1"><a href="#1" class="headerlink" title="1"></a>1</h3><h3 id="2"><a href="#2" class="headerlink" title="2"></a>2</h3><p>在Basic Paxos中，考虑在一个5节点的集群中，有三个acceptor接受了<code>proposal(5.1, X)</code>，在此之后，是否可能有某些机器去accept另一个value Y呢？</p>
+<p>注意，这里的proposal number由<code>round_number.server_id</code>这样的方式构成。</p>
+<p>我们知道，只要一个acceptor回复了<code>prepare(5.1)</code>，那么他就不可能去<code>accept(3.4,Y)</code>或者<code>prepare(3.4,Y)</code>了。所以如果这个可能发生，那么<code>prepare(3.4)</code>一定要在<code>prepare(5.1)</code>之前。<br>于是，我们尝试下面的顺序：</p>
+<ol>
+<li>P1: <code>prepare(3.4)</code><br> 发送到S1/S2/S3/S4/S5</li>
+<li>S1/S2/S3和S4/S5发生分区</li>
+<li>P2: <code>prepare(5.1)</code><br> 发送到S1/S2/S3<br> 因为5.1更大，所以S1/S2/S3会保证不会再accept小于5.1的请求。因为目前S1/S2/S3没有accept，所以返回的“最大的小于<code>n</code>”的proposal为空。</li>
+<li>P2: <code>accept(5.1,X)</code><br> 发送到S1/S2/S3</li>
+<li>P1: <code>accept(3.4,Y)</code><br> 发送到S4/S5<br> 由于分区，所以S4/S5没有回复<code>prepare(5.1)</code>，更别说<code>accept(5.1,X)</code>了。所以它能够接受请求<code>accept(3.4,Y)</code>。</li>
+</ol>
+<p>不过如果S4/S5从分区中恢复后，会将自己的值改成5.1么？</p>
+<h3 id="3"><a href="#3" class="headerlink" title="3"></a>3</h3><h3 id="4"><a href="#4" class="headerlink" title="4"></a>4</h3><h3 id="5"><a href="#5" class="headerlink" title="5"></a>5</h3><p>考虑proposal number的两个部分被对调了，即现在变成<code>server_id.round_number</code>，那么：</p>
+<ol>
+<li>是否会影响算法的Safety</li>
+<li>是否会影响算法的Liveness</li>
+</ol>
+<h3 id="6"><a href="#6" class="headerlink" title="6"></a>6</h3><p>假定一个proposer打算执行<code>accept(n,v1)</code>，但在某个时间点宕掉了，如果这个proposer重启并且打算执行<code>accept(n,v2)</code>，这个是否安全呢？</p>
+<p>这个在<em>Paxos made simple</em>中就明确指出是不可以的。</p>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/raft/" rel="tag"># raft</a>
+          
+            <a href="/tags/paxos/" rel="tag"># paxos</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2020/12/13/gcc-glibc-compile/" rel="next" title="GCC和GLIBC编译">
+                <i class="fa fa-chevron-left"></i> GCC和GLIBC编译
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2021/01/06/bash/" rel="prev" title="Bash介绍">
+                Bash介绍 <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">144</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">151</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Basic-Paxos"><span class="nav-number">1.</span> <span class="nav-text">Basic Paxos</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#论证1"><span class="nav-number">1.1.</span> <span class="nav-text">论证1</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#P1"><span class="nav-number">1.1.1.</span> <span class="nav-text">P1</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#P2"><span class="nav-number">1.1.2.</span> <span class="nav-text">P2</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#P2a"><span class="nav-number">1.1.3.</span> <span class="nav-text">P2a</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#P2b"><span class="nav-number">1.1.4.</span> <span class="nav-text">P2b</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#论证2"><span class="nav-number">1.2.</span> <span class="nav-text">论证2</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#P2c"><span class="nav-number">1.2.1.</span> <span class="nav-text">P2c</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#论证3"><span class="nav-number">1.3.</span> <span class="nav-text">论证3</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Proposer-算法-Step1"><span class="nav-number">1.3.1.</span> <span class="nav-text">Proposer 算法 Step1</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Proposer-算法-Step2"><span class="nav-number">1.3.2.</span> <span class="nav-text">Proposer 算法 Step2</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Acceptor-算法-P1a"><span class="nav-number">1.3.3.</span> <span class="nav-text">Acceptor 算法 P1a</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#持久化要求"><span class="nav-number">1.3.4.</span> <span class="nav-text">持久化要求</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#算法"><span class="nav-number">1.4.</span> <span class="nav-text">算法</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Phase-1"><span class="nav-number">1.4.1.</span> <span class="nav-text">Phase 1</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Phase-2"><span class="nav-number">1.4.2.</span> <span class="nav-text">Phase 2</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Learner"><span class="nav-number">1.5.</span> <span class="nav-text">Learner</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#习题"><span class="nav-number">2.</span> <span class="nav-text">习题</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#官方习题"><span class="nav-number">2.1.</span> <span class="nav-text">官方习题</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1"><span class="nav-number">2.1.1.</span> <span class="nav-text">1</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2"><span class="nav-number">2.1.2.</span> <span class="nav-text">2</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3"><span class="nav-number">2.1.3.</span> <span class="nav-text">3</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4"><span class="nav-number">2.1.4.</span> <span class="nav-text">4</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#5"><span class="nav-number">2.1.5.</span> <span class="nav-text">5</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#6"><span class="nav-number">2.1.6.</span> <span class="nav-text">6</span></a></li></ol></li></ol></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2021</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2021/01/06/paxos/';
+          this.page.identifier = '2021/01/06/paxos/';
+          this.page.title = 'Paxos算法';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
