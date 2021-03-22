@@ -1,0 +1,1200 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="数据库," />
+
+
+
+
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="本文介绍MySQL InnoDB下索引、查询的实现以及优化。">
+<meta name="keywords" content="数据库">
+<meta property="og:type" content="article">
+<meta property="og:title" content="MySQL查询">
+<meta property="og:url" content="http://www.calvinneo.com/2021/03/15/mysql-query/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="本文介绍MySQL InnoDB下索引、查询的实现以及优化。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2021-03-14T16:20:55.279Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="MySQL查询">
+<meta name="twitter:description" content="本文介绍MySQL InnoDB下索引、查询的实现以及优化。">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2021/03/15/mysql-query/"/>
+
+
+
+
+
+  <title>MySQL查询 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2021/03/15/mysql-query/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                MySQL查询
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2021-03-15T00:01:30+08:00">
+                2021-03-15
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>本文介绍MySQL InnoDB下索引、查询的实现以及优化。</p>
+<a id="more"></a>
+<h1 id="查询"><a href="#查询" class="headerlink" title="查询"></a>查询</h1><h2 id="回表查询和覆盖索引"><a href="#回表查询和覆盖索引" class="headerlink" title="回表查询和覆盖索引"></a>回表查询和覆盖索引</h2><p>什么是回表查询？InnoDB中的主键(Primary Key, PK)使用了聚簇索引，即主键索引的叶子节点存放的是行数据<strong>本身</strong>。因此通过主键进行SELECT是很快的。<br>但是对于其他的索引，它们的叶子节点存放的是主键ID。这个是显然的，不然我每创建一个索引就得重新建立一个表结构了。在这种情况下访问行数据，就得通过主键ID去聚簇索引中再查一次，这个也就是所谓的回表查询。</p>
+<p>看到这里不禁有一个想法，我们能不能把主键的索引做成哈希的，这样的话它的复杂度是<code>O(1)</code>，能减小回表开销，主要有下面的考虑：</p>
+<ol>
+<li>自增主键往往规律可循，能够设计出很好的哈希函数。</li>
+<li>因为自增索引不像银行卡号码或者手机号码那样具有实际的意义，所以B+树提供的一些范围查询的性能未必常用。</li>
+<li>B+树毕竟是<code>O(log n)</code>的复杂度，如果使用哈希索引，能够提高回表查询的效率。</li>
+<li>哈希索引更好做分区。</li>
+</ol>
+<p>那有没有其他办法减少回表查询的开销呢？一个方案是通过覆盖索引(Covering Index)。</p>
+<p>为了介绍覆盖索引，首先介绍联合索引。对于下面的语句生成的索引，可以用来加速<code>c1</code>、<code>c1,c2</code>、<code>c1,c2,c3</code>这三个查询。这个也是好理解的，例如我们在查询字典的时候，可以先查询第一个字母，然后再查询第二个字母；反之，没办法直接查第二个字母和第三个字母，即用不了<code>c2,c3</code>这样的索引。这启示我们，在设计联合索引的时候，应当把最常用或者最宽泛的条件放到最左边。<br><figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">create</span> <span class="keyword">index</span> index_c1_c2_c3 <span class="keyword">on</span> table1(c1,c2,c3);</span><br></pre></td></tr></table></figure></p>
+<p>通过覆盖索引，通过非聚簇索引查询数据也不需要再回表了，这得益于联合索引。例如<code>index_c1_c2_c3</code>就包含了<code>c1</code>、<code>c2</code>、<code>c3</code>这三个字段的值，那么如果我们只需要查询这些值的话，就不需要回表了。</p>
+<h2 id="Extra总结"><a href="#Extra总结" class="headerlink" title="Extra总结"></a>Extra总结</h2><h3 id="Using-temporary"><a href="#Using-temporary" class="headerlink" title="Using temporary"></a>Using temporary</h3><p>需要创建临时表。</p>
+<h3 id="Using-filesort"><a href="#Using-filesort" class="headerlink" title="Using filesort"></a>Using filesort</h3><p>文件排序，通常出现在不能使用索引排序的情况。<br>一个通常的情况是使用查询索引之外的Key去做<code>ORDER BY</code>时。<br>文件排序一般有几种实现方式，令被排序的键是<code>S</code>，主键是<code>ref</code>，需要返回的列是<code>addon1</code>、<code>addon2</code>、<code>addon3</code>，则有</p>
+<ol>
+<li><code>(S,ref)</code>，即original filesort algorithm，回表排序<br> 这种方式占用空间较小，但需要在排序后根据<code>ref</code>回表查询，从而产生很多随机IO。</li>
+<li><code>(S,addon1,addon2,addon3)</code>，即modified filesort algorithm，不回表排序<br> 这种方案不需要回表，但是对排序空间要求高。当然，对于诸如varchar类型的addon字段，是可以压缩(pack)一下的，但是对于搜索排序键是不行的。</li>
+</ol>
+<p>具体选择哪种方案，主要是看<code>S</code>和所有addon字段的长度总和是否超过一定的阈值。</p>
+<h3 id="Using-index"><a href="#Using-index" class="headerlink" title="Using index"></a>Using index</h3><p>使用覆盖索引获取所需要的数据。</p>
+<h3 id="Using-Index-Condition"><a href="#Using-Index-Condition" class="headerlink" title="Using Index Condition"></a>Using Index Condition</h3><p>这个实际上运用了索引下推(Index Condition Pushdown)技术。这个技术是MySQL 5.7之后的一个优化，涉及了服务器层和存储引擎层。<br>首先来先看下没有这个优化的select where过程：</p>
+<ol>
+<li>首先读取下一行的index tuple，然后用index tuple去定位并读取整个行。</li>
+<li>检查所有的WHERE条件，如果该条件属于这张表，就进行检测是否符合条件。<br>在有了这个优化之后，新的过程是：</li>
+<li>首先读取下一行的index tuple，但不需要再去读取整个行。</li>
+<li>检查所有的WHERE条件，如果该条件属于这张表，并且能够根据当前使用的索引就能检测，就直接检测了。如果条件不满足，直接看下一行。</li>
+<li>如果条件满足，用index tuple去定位并读取整个行。</li>
+<li>使用刚才剩下来没有被用到的WHERE条件，检测是否符合条件。</li>
+</ol>
+<h3 id="Using-where"><a href="#Using-where" class="headerlink" title="Using where"></a>Using where</h3><p>表示MySQL需要在收到存储引擎返回的结果后，对这个结果进行后过滤(Post filter)。</p>
+<h2 id="实验"><a href="#实验" class="headerlink" title="实验"></a>实验</h2><p>首先构造样例，在db1中创建表<code>table1_noindex</code>、<code>table1</code>、<code>table2_noindex</code>。对表table1创建联合索引<code>index_c1_c2_c3</code>和索引<code>index_c5</code>。<br><figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">create</span> <span class="keyword">DATABASE</span> db1;</span><br><span class="line"><span class="keyword">use</span> db1;</span><br><span class="line"></span><br><span class="line"><span class="keyword">drop</span> <span class="keyword">table</span> table1_noindex;</span><br><span class="line"><span class="keyword">drop</span> <span class="keyword">table</span> table1;</span><br><span class="line"><span class="keyword">create</span> <span class="keyword">TABLE</span> table1_noindex(</span><br><span class="line">    <span class="keyword">id</span> <span class="built_in">INT</span> AUTO_INCREMENT PRIMARY <span class="keyword">KEY</span>,</span><br><span class="line">    c1 <span class="built_in">INT</span> <span class="keyword">NOT</span> <span class="literal">NULL</span>,</span><br><span class="line">    c2 <span class="built_in">VARCHAR</span>(<span class="number">30</span>) <span class="keyword">NOT</span> <span class="literal">NULL</span>,</span><br><span class="line">    c3 <span class="built_in">DATE</span> <span class="keyword">NOT</span> <span class="literal">NULL</span>,</span><br><span class="line">    c4 <span class="built_in">INT</span> <span class="keyword">NOT</span> <span class="literal">NULL</span>,</span><br><span class="line">    c5 <span class="built_in">INT</span> <span class="keyword">NOT</span> <span class="literal">NULL</span> <span class="keyword">UNIQUE</span></span><br><span class="line">);</span><br><span class="line"></span><br><span class="line"><span class="keyword">create</span> <span class="keyword">TABLE</span> table2_noindex(</span><br><span class="line">    <span class="keyword">id</span> <span class="built_in">INT</span> AUTO_INCREMENT PRIMARY <span class="keyword">KEY</span>,</span><br><span class="line">    c5 <span class="built_in">INT</span> <span class="keyword">NOT</span> <span class="literal">NULL</span> <span class="keyword">UNIQUE</span></span><br><span class="line">);</span><br><span class="line"></span><br><span class="line"><span class="keyword">CREATE</span> <span class="keyword">TABLE</span> table1 <span class="keyword">LIKE</span> table1_noindex;</span><br><span class="line"><span class="keyword">INSERT</span> <span class="keyword">INTO</span> table1 <span class="keyword">SELECT</span> * <span class="keyword">FROM</span> table1_noindex;</span><br><span class="line"></span><br><span class="line"><span class="keyword">create</span> <span class="keyword">index</span> index_c1_c2_c3 <span class="keyword">on</span> table1(c1,c2,c3);</span><br><span class="line"><span class="keyword">create</span> <span class="keyword">index</span> index_c5 <span class="keyword">on</span> table1(c5);</span><br><span class="line"></span><br><span class="line"><span class="keyword">insert</span> <span class="keyword">into</span> table1 <span class="keyword">values</span> (<span class="literal">NULL</span>, <span class="number">3</span>, <span class="string">"a"</span>, <span class="keyword">NOW</span>(), <span class="number">4</span>, <span class="number">5</span>);</span><br><span class="line"><span class="keyword">insert</span> <span class="keyword">into</span> table1_noindex <span class="keyword">values</span> (<span class="literal">NULL</span>, <span class="number">3</span>, <span class="string">"a"</span>, <span class="keyword">NOW</span>(), <span class="number">4</span>, <span class="number">5</span>);</span><br></pre></td></tr></table></figure></p>
+<p>查看索引<br><figure class="highlight"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">mysql&gt; show keys from table1;</span><br></pre></td></tr></table></figure></p>
+<ol>
+<li><p>使用主键或者UNIQUE键</p>
+ <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">mysql&gt; explain select * from table1 where id=1\G;</span><br><span class="line">*************************** 1. row ***************************</span><br><span class="line">           id: 1</span><br><span class="line">  select_type: SIMPLE</span><br><span class="line">        table: table1</span><br><span class="line">   partitions: NULL</span><br><span class="line">         type: const</span><br><span class="line">possible_keys: PRIMARY</span><br><span class="line">          key: PRIMARY</span><br><span class="line">      key_len: 4</span><br><span class="line">          ref: const</span><br><span class="line">         rows: 1</span><br><span class="line">     filtered: 100.00</span><br><span class="line">        Extra: NULL</span><br></pre></td></tr></table></figure>
+<p> 需要注意的是，使用UNIQUE键，同样会是const类型而不是eq_ref</p>
+ <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">mysql&gt; explain select c1,c5 from table1 where c5=5\G;</span><br><span class="line">*************************** 1. row ***************************</span><br><span class="line">           id: 1</span><br><span class="line">  select_type: SIMPLE</span><br><span class="line">        table: table1</span><br><span class="line">   partitions: NULL</span><br><span class="line">         type: const</span><br><span class="line">possible_keys: c5</span><br><span class="line">          key: c5</span><br><span class="line">      key_len: 4</span><br><span class="line">          ref: const</span><br><span class="line">         rows: 1</span><br><span class="line">     filtered: 100.00</span><br><span class="line">        Extra: NULL</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>使用索引<br> Extra中的Using index表示单纯用索引即可获得所有数据，不需要回表查询，这也就是之前提到的覆盖索引。下面我们介绍覆盖索引</p>
+ <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">mysql&gt; explain select c1,c2,c3 from table1 where c1=1 and c2="a"\G;</span><br><span class="line">*************************** 1. row ***************************</span><br><span class="line">           id: 1</span><br><span class="line">  select_type: SIMPLE</span><br><span class="line">        table: table1</span><br><span class="line">   partitions: NULL</span><br><span class="line">         type: ref</span><br><span class="line">possible_keys: index_c1_c2_c3</span><br><span class="line">          key: index_c1_c2_c3</span><br><span class="line">      key_len: 96</span><br><span class="line">          ref: const,const</span><br><span class="line">         rows: 1</span><br><span class="line">     filtered: 100.00</span><br><span class="line">        Extra: Using index</span><br></pre></td></tr></table></figure>
+<p> 但是，如果我们加上c4，就必须要回表了</p>
+ <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">mysql&gt; explain select c1,c4 from table1 where c1=1 and c2="a"\G;</span><br><span class="line">*************************** 1. row ***************************</span><br><span class="line">           id: 1</span><br><span class="line">  select_type: SIMPLE</span><br><span class="line">        table: table1</span><br><span class="line">   partitions: NULL</span><br><span class="line">         type: ref</span><br><span class="line">possible_keys: index_c1_c2_c3</span><br><span class="line">          key: index_c1_c2_c3</span><br><span class="line">      key_len: 96</span><br><span class="line">          ref: const,const</span><br><span class="line">         rows: 1</span><br><span class="line">     filtered: 100.00</span><br><span class="line">        Extra: NULL</span><br></pre></td></tr></table></figure>
+<p> 此外，如果我们对索引列进行计算或者应用函数，也会导致不能使用索引</p>
+ <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">mysql&gt; explain select c1,c2,c3 from table1 where c1*2=2 and c2="a"\G;</span><br><span class="line">*************************** 1. row ***************************</span><br><span class="line">           id: 1</span><br><span class="line">  select_type: SIMPLE</span><br><span class="line">        table: table1</span><br><span class="line">   partitions: NULL</span><br><span class="line">         type: index</span><br><span class="line">possible_keys: index_c1_c2_c3</span><br><span class="line">          key: index_c1_c2_c3</span><br><span class="line">      key_len: 99</span><br><span class="line">          ref: NULL</span><br><span class="line">         rows: 1</span><br><span class="line">     filtered: 100.00</span><br><span class="line">        Extra: Using where; Using index</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>使用索引下推<br> 为了规避掉覆盖索引直接返回，我们这次用了<code>select *</code>。当然，也可以select索引之外的列，比如<code>c4</code>。</p>
+ <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">mysql&gt; explain select * from table1 where c1=1 and c2 like "a*"\G;</span><br><span class="line">*************************** 1. row ***************************</span><br><span class="line">           id: 1</span><br><span class="line">  select_type: SIMPLE</span><br><span class="line">        table: table1</span><br><span class="line">   partitions: NULL</span><br><span class="line">         type: range</span><br><span class="line">possible_keys: index_c1_c2_c3</span><br><span class="line">          key: index_c1_c2_c3</span><br><span class="line">      key_len: 96</span><br><span class="line">          ref: NULL</span><br><span class="line">         rows: 1</span><br><span class="line">     filtered: 100.00</span><br><span class="line">        Extra: Using index condition</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>不使用索引<br> 可以发现，type是个ALL，表示发生了全表扫描。</p>
+ <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">mysql&gt; explain select c1,c2,c3 from table1_noindex where c1=1 and c2="a"\G;</span><br><span class="line">*************************** 1. row ***************************</span><br><span class="line">           id: 1</span><br><span class="line">  select_type: SIMPLE</span><br><span class="line">        table: table1_noindex</span><br><span class="line">   partitions: NULL</span><br><span class="line">         type: ALL</span><br><span class="line">possible_keys: NULL</span><br><span class="line">          key: NULL</span><br><span class="line">      key_len: NULL</span><br><span class="line">          ref: NULL</span><br><span class="line">         rows: 1</span><br><span class="line">     filtered: 100.00</span><br><span class="line">        Extra: Using where</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>破坏了最左匹配原则<br> 这一次，type是index，这表示仍然需要进行全表扫描。但不同的是扫描是按照索引的顺序，也就是说不需要对结果排序了。</p>
+ <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">mysql&gt; explain select c1,c2,c3 from table1 where c3=DATE('2012-12-21 00:00:00')\G;</span><br><span class="line">*************************** 1. row ***************************</span><br><span class="line">           id: 1</span><br><span class="line">  select_type: SIMPLE</span><br><span class="line">        table: table1</span><br><span class="line">   partitions: NULL</span><br><span class="line">         type: index</span><br><span class="line">possible_keys: index_c1_c2_c3</span><br><span class="line">          key: index_c1_c2_c3</span><br><span class="line">      key_len: 99</span><br><span class="line">          ref: NULL</span><br><span class="line">         rows: 1</span><br><span class="line">     filtered: 100.00</span><br><span class="line">        Extra: Using where; Using index</span><br></pre></td></tr></table></figure>
+<p> 当然如果我们执行一下下面的语句，type又会变成ref</p>
+ <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">create</span> <span class="keyword">index</span> index_c3 <span class="keyword">on</span> table1(c3);</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>多表查询</p>
+ <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">mysql&gt; explain select table2_noindex.c5 from table1,table2_noindex where table1.c5=table2_noindex.c5;</span><br><span class="line">+<span class="comment">----+-------------+----------------+------------+--------+---------------+------+---------+---------------+------+----------+-------------+</span></span><br><span class="line">| id | select_type | table          | partitions | type   | possible_keys | key  | key_len | ref           | rows | filtered | Extra       |</span><br><span class="line">+<span class="comment">----+-------------+----------------+------------+--------+---------------+------+---------+---------------+------+----------+-------------+</span></span><br><span class="line">|  1 | SIMPLE      | table1         | NULL       | index  | c5            | c5   | 4       | NULL          |    1 |   100.00 | Using index |</span><br><span class="line">|  1 | SIMPLE      | table2_noindex | NULL       | eq_ref | c5            | c5   | 4       | db1.table1.c5 |    1 |   100.00 | Using index |</span><br><span class="line">+<span class="comment">----+-------------+----------------+------------+--------+---------------+------+---------+---------------+------+----------+-------------+</span></span><br></pre></td></tr></table></figure>
+ <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">mysql&gt; explain select c1,table2_noindex.c5 from table1,table2_noindex where table1.c5=table2_noindex.c5;</span><br><span class="line">+<span class="comment">----+-------------+----------------+------------+--------+---------------+------+---------+---------------+------+----------+-------------+</span></span><br><span class="line">| id | select_type | table          | partitions | type   | possible_keys | key  | key_len | ref           | rows | filtered | Extra       |</span><br><span class="line">+<span class="comment">----+-------------+----------------+------------+--------+---------------+------+---------+---------------+------+----------+-------------+</span></span><br><span class="line">|  1 | SIMPLE      | table1         | NULL       | ALL    | c5            | NULL | NULL    | NULL          |    1 |   100.00 | NULL        |</span><br><span class="line">|  1 | SIMPLE      | table2_noindex | NULL       | eq_ref | c5            | c5   | 4       | db1.table1.c5 |    1 |   100.00 | Using index |</span><br><span class="line">+<span class="comment">----+-------------+----------------+------------+--------+---------------+------+---------+---------------+------+----------+-------------+</span></span><br></pre></td></tr></table></figure>
+</li>
+</ol>
+<h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1>
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/数据库/" rel="tag"># 数据库</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2021/03/14/mysql-lock/" rel="next" title="MySQL锁">
+                <i class="fa fa-chevron-left"></i> MySQL锁
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">148</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">151</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#查询"><span class="nav-number">1.</span> <span class="nav-text">查询</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#回表查询和覆盖索引"><span class="nav-number">1.1.</span> <span class="nav-text">回表查询和覆盖索引</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Extra总结"><span class="nav-number">1.2.</span> <span class="nav-text">Extra总结</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Using-temporary"><span class="nav-number">1.2.1.</span> <span class="nav-text">Using temporary</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Using-filesort"><span class="nav-number">1.2.2.</span> <span class="nav-text">Using filesort</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Using-index"><span class="nav-number">1.2.3.</span> <span class="nav-text">Using index</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Using-Index-Condition"><span class="nav-number">1.2.4.</span> <span class="nav-text">Using Index Condition</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Using-where"><span class="nav-number">1.2.5.</span> <span class="nav-text">Using where</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#实验"><span class="nav-number">1.3.</span> <span class="nav-text">实验</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">2.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2021</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2021/03/15/mysql-query/';
+          this.page.identifier = '2021/03/15/mysql-query/';
+          this.page.title = 'MySQL查询';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
