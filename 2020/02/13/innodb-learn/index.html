@@ -90,25 +90,26 @@
 
 
 
-<meta name="description" content="本文是有关InnoDB实现原理的读书笔记，主要包含：  《MySQL技术内幕(InnoDB存储引擎)第2版》 《MySQL内核：INNODB存储引擎 卷一》">
+<meta name="description" content="本文是有关InnoDB实现原理的读书笔记，主要包含：  《MySQL技术内幕(InnoDB存储引擎)第2版》 《MySQL内核：INNODB存储引擎 卷一》  在本文中，主要介绍下面内容：  MySQL/InnoDB的配置和搭建 MySQL/InnoDB的宏观架构 MySQL/InnoDB的日志，以及事务中涉及到日志相关的部分  在本文中，不会详细介绍：  刷脏页机制 MVCC机制 索引机制和索引">
 <meta name="keywords" content="数据库">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Innodb学习笔记">
 <meta property="og:url" content="http://www.calvinneo.com/2020/02/13/innodb-learn/index.html">
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
-<meta property="og:description" content="本文是有关InnoDB实现原理的读书笔记，主要包含：  《MySQL技术内幕(InnoDB存储引擎)第2版》 《MySQL内核：INNODB存储引擎 卷一》">
+<meta property="og:description" content="本文是有关InnoDB实现原理的读书笔记，主要包含：  《MySQL技术内幕(InnoDB存储引擎)第2版》 《MySQL内核：INNODB存储引擎 卷一》  在本文中，主要介绍下面内容：  MySQL/InnoDB的配置和搭建 MySQL/InnoDB的宏观架构 MySQL/InnoDB的日志，以及事务中涉及到日志相关的部分  在本文中，不会详细介绍：  刷脏页机制 MVCC机制 索引机制和索引">
 <meta property="og:locale" content="zh-Hans">
 <meta property="og:image" content="http://www.calvinneo.com/img/innodb/mysql-arch.png">
-<meta property="og:image" content="http://www.calvinneo.com/img/innodb/t1-t2-t3-commit.png">
-<meta property="og:image" content="http://www.calvinneo.com/img/innodb/innodb-logical-storage.png">
-<meta property="og:image" content="http://www.calvinneo.com/img/innodb/innodb-data-page.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/innodb/innodb-arch.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/innodb/main_thread.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/innodb/innodb-mem.png">
-<meta property="og:updated_time" content="2021-03-14T16:18:51.494Z">
+<meta property="og:image" content="http://www.calvinneo.com/img/innodb/t1-t2-t3-commit.png">
+<meta property="og:image" content="http://img.blog.itpub.net/blog/2019/01/14/e14bfae3e4eeb53e.jpeg?x-oss-process=style/bb">
+<meta property="og:image" content="http://www.calvinneo.com/img/innodb/innodb-logical-storage.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/innodb/innodb-data-page.png">
+<meta property="og:updated_time" content="2021-03-20T08:25:37.264Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Innodb学习笔记">
-<meta name="twitter:description" content="本文是有关InnoDB实现原理的读书笔记，主要包含：  《MySQL技术内幕(InnoDB存储引擎)第2版》 《MySQL内核：INNODB存储引擎 卷一》">
+<meta name="twitter:description" content="本文是有关InnoDB实现原理的读书笔记，主要包含：  《MySQL技术内幕(InnoDB存储引擎)第2版》 《MySQL内核：INNODB存储引擎 卷一》  在本文中，主要介绍下面内容：  MySQL/InnoDB的配置和搭建 MySQL/InnoDB的宏观架构 MySQL/InnoDB的日志，以及事务中涉及到日志相关的部分  在本文中，不会详细介绍：  刷脏页机制 MVCC机制 索引机制和索引">
 <meta name="twitter:image" content="http://www.calvinneo.com/img/innodb/mysql-arch.png">
 
 
@@ -387,13 +388,31 @@
 <li>《MySQL技术内幕(InnoDB存储引擎)第2版》</li>
 <li>《MySQL内核：INNODB存储引擎 卷一》</li>
 </ol>
+<p>在本文中，主要介绍下面内容：</p>
+<ol>
+<li>MySQL/InnoDB的配置和搭建</li>
+<li>MySQL/InnoDB的宏观架构</li>
+<li>MySQL/InnoDB的日志，以及事务中涉及到日志相关的部分</li>
+</ol>
+<p>在本文中，不会详细介绍：</p>
+<ol>
+<li>刷脏页机制</li>
+<li>MVCC机制</li>
+<li>索引机制和索引页的维护</li>
+<li>MySQL服务器</li>
+</ol>
 <a id="more"></a>
-<h1 id="配置"><a href="#配置" class="headerlink" title="配置"></a>配置</h1><p>首先需要执行下面两行，以便创建服务<br><figure class="highlight brainfuck"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">mysqld</span> <span class="literal">-</span><span class="literal">-</span><span class="comment">initialize</span> <span class="literal">-</span><span class="literal">-</span><span class="comment">user=mysql</span> <span class="literal">-</span><span class="literal">-</span><span class="comment">console</span></span><br><span class="line"><span class="comment">mysqld</span> <span class="literal">-</span><span class="comment">install</span></span><br></pre></td></tr></table></figure></p>
+<h1 id="配置"><a href="#配置" class="headerlink" title="配置"></a>配置</h1><p>InnoDB的源码可以在<a href="https://github.com/mysql/mysql-server" target="_blank" rel="noopener">MySQL</a>项目中获取，具体是在storage/innobase下面。</p>
+<p>首先需要执行下面两行，以便创建服务<br><figure class="highlight brainfuck"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">mysqld</span> <span class="literal">-</span><span class="literal">-</span><span class="comment">initialize</span> <span class="literal">-</span><span class="literal">-</span><span class="comment">user=mysql</span> <span class="literal">-</span><span class="literal">-</span><span class="comment">console</span></span><br><span class="line"><span class="comment">mysqld</span> <span class="literal">-</span><span class="comment">install</span></span><br></pre></td></tr></table></figure></p>
 <p>然后<code>net start mysql</code>，如果出现下面的错误，表示mysql没有初始化，例如data文件夹就没有被正式创建，要使用<code>mysqld  --initialize-insecure</code>来初始化<br><figure class="highlight erlang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">MySQL 服务正在启动 .</span><br><span class="line">MySQL 服务无法启动。</span><br><span class="line"></span><br><span class="line">服务没有报告任何错误。</span><br></pre></td></tr></table></figure></p>
-<h1 id="MySQL体系结构与存储引擎"><a href="#MySQL体系结构与存储引擎" class="headerlink" title="MySQL体系结构与存储引擎"></a>MySQL体系结构与存储引擎</h1><p>MySQL的架构如下图所示<br><img src="/img/innodb/mysql-arch.png" alt=""></p>
+<h1 id="MySQL体系结构与存储引擎"><a href="#MySQL体系结构与存储引擎" class="headerlink" title="MySQL体系结构与存储引擎"></a>MySQL体系结构与存储引擎</h1><h2 id="MySQL主要架构"><a href="#MySQL主要架构" class="headerlink" title="MySQL主要架构"></a>MySQL主要架构</h2><p>MySQL的架构如下图所示<br><img src="/img/innodb/mysql-arch.png" alt=""></p>
 <p>可以通过<code>SHOW ENGINES</code>命令来查看当前MySQL支持的存储引擎。也可以查找<code>information_schema</code>架构下的<code>ENGINE</code>表来实现。</p>
 <p>InnoDB的表存储于ibd文件中，通过MVCC实现高并发性，并实现了SQL标准规定的四种隔离级别，默认级别是RR。</p>
 <p>MyISAM不支持事务和表锁，但支持全文索引，主要面向OLAP。MyISAM在MYD中存储表数据，在MYI中存储表索引。</p>
+<h2 id="InnoDB主要架构"><a href="#InnoDB主要架构" class="headerlink" title="InnoDB主要架构"></a>InnoDB主要架构</h2><p>InnoDB的主要架构如下所示。<br><img src="/img/innodb/innodb-arch.png" alt=""></p>
+<p>其中主线程中主要根据数据库状态运行主循环(loop)、后台循环(backgroup loop)、刷新循环(flush loop)和暂停循环(suspend loop)四个循环。</p>
+<p><img src="/img/innodb/main_thread.png" alt=""></p>
+<p>若干IO Thread主要分为四类：read、write、insert buffer和log IO，在当前版本下，可以通过<code>innodb_read_io_threads</code>等参数进行设置。<br>Purge Thread用来回收已经使用并分配的UNDO页，当设置<code>innodb_purge_threads</code>大于0时，该线程会启动，从而减轻主线程负担。<br>Page Cleaner Thread用来刷新脏页，它也是为了减轻主线程负担。</p>
 <h1 id="Log"><a href="#Log" class="headerlink" title="Log"></a>Log</h1><p>为了便于理解，先要介绍一些前置知识，这些知识在第3、4章等章节中。<br>MySQL中有binlog、slowlog、error log、查询日志等日志形式。具体到存储引擎层，InnoDB又有redo log和undo log。</p>
 <h2 id="Slow-log"><a href="#Slow-log" class="headerlink" title="Slow log"></a>Slow log</h2><p>通过<code>show variables like &#39;log_error&#39;\G</code>可以获得error log的存储位置，error log可以定位一些严重的错误，例如MySQL无法启动等问题。slowlog可以定位下面的一些问题:</p>
 <ol>
@@ -410,13 +429,24 @@
 <p>slowlog的相关信息可以在<code>mysql</code>数据库的<code>slow_log</code>表下面看到，可以通过<code>mysqldumpslow</code>进行展示。</p>
 <h2 id="查询日志"><a href="#查询日志" class="headerlink" title="查询日志"></a>查询日志</h2><p>查询日志存储了所有对MySQL的请求信息。</p>
 <h2 id="binlog"><a href="#binlog" class="headerlink" title="binlog"></a>binlog</h2><p>binlog在MySQL 5.1之后的版本引入，记录了MySQL对数据库进行更改的所有操作。可以通过<code>show master status\G</code>获得binlog的存储位置。binlog可以被用来恢复数据、主从复制以及审计(audit)，例如统计是否有对数据库的攻击。当<code>sync_binlog==0</code>时，由底层文件系统控制对binlog缓存的刷新。对于InnoDB而言，它将binlog统一写到一块缓存中，等事务提交之后，直接将缓冲中的binlog写入binlog文件，该缓冲大小由<code>binlog_cache_size</code>决定，默认为32K，并且是基于会话的。可以通过<code>mysqlbinlog</code>查看当前的binlog。</p>
-<h2 id="redo-undo-log"><a href="#redo-undo-log" class="headerlink" title="redo/undo log"></a>redo/undo log</h2><p>InnoDB拥有redo log和undo log，redo log存储于形如<code>ib_logfile*</code>的文件里面。<br>InnoDB通过force log at commit机制实现事务的持久性。即当事务提交的时候，要首先将redo log（而不是undo log）写入<strong>文件</strong>进行持久化。这里注意，一般redo log会先被写到内存中的缓冲区内，但提交的时候强制刷盘。盘实际上是一次fsync操作，确保位于内核高速缓冲区的数据被磁盘。特别地，如果我们不希望使用文件系统的缓存，需要设置<code>O_DIRECT</code>启用直接IO/裸IO，从用户空间直接将写到磁盘（比如说DMA）上。此外，还有一个<code>O_SYNC</code>，这个表示write操作<a href="https://stackoverflow.com/questions/5055859/how-are-the-o-sync-and-o-direct-flags-in-open2-different-alike" target="_blank" rel="noopener">在操作系统将所有数据发送给磁盘之后才能返回</a>。当然了，通过设置<code>innodb_flush_log_at_trx_commit</code>为0，可以不让InnoDB在每次提交事务的时候都fsync，这样的话就依赖于其他两个定时和剩余空间的条件了。当MySQL宕机后，可能会丢失1秒内的事务。特别地，这个值还可以被设为2，此时数据会被写到内核高速缓存中，但不会立即刷入磁盘，在这种情况下，只要系统不宕机，那么MySQL宕机后的安全性也是能得到保证的。</p>
-<p>redo log实际上可以保证事务的Duration特性。相应地undo log记录数据被修改<strong>前</strong>的值，可以在事务失败时rollback，或者实现MVCC功能，是保证事务的Isolation特性。通过redo log可以在宕机恢复后恢复已提交的事务，如果没有redo log，就需要在事务commit时完成所有的刷脏页操作。但这个对性能是一个损伤，有了redo log，就可以把日志记到磁盘上，然后异步刷脏页了。通过undo log可以在宕机恢复后回滚未提交的事务，如果有了undo log，在事务提交前也可以刷脏页了。</p>
-<p>redo log基本上顺序写的，但是undo log需要随机读写。<br>redo/undo log在事务执行过程中随时写入，而binlog是在事务commit前写入的。</p>
-<p>和binlog不一样，redo/undo log是物理日志，记录了数据页的修改，而binlog是逻辑日志，记录了事务的原始逻辑。并且redo log是在4GB的空间中循环写的，所以没有归档的功能。</p>
-<h2 id="Group-Commit"><a href="#Group-Commit" class="headerlink" title="Group Commit"></a>Group Commit</h2><h2 id="两阶段提交2PC"><a href="#两阶段提交2PC" class="headerlink" title="两阶段提交2PC"></a>两阶段提交2PC</h2><p>需要特别注意，2PC不是2PL。其实我们在<a href="/2019/03/12/2pc-3pc/">专门的文章</a>中已经介绍过原始版本的2PC和3PC算法了，我们将研究这个算法在MySQL中的应用。</p>
+<h2 id="redo-undo-log"><a href="#redo-undo-log" class="headerlink" title="redo/undo log"></a>redo/undo log</h2><p>和binlog不一样，redo/undo log是物理日志，记录了数据页的修改，而binlog是逻辑日志，记录了事务的原始逻辑。redo/undo log在事务执行过程中随时写入，而binlog是在事务commit前写入的。</p>
+<h3 id="Redo-log简介"><a href="#Redo-log简介" class="headerlink" title="Redo log简介"></a>Redo log简介</h3><p>InnoDB通过force log at commit机制实现事务的持久性。即当事务提交的时候，要首先将redo log（而不是undo log）写入<strong>文件</strong>进行持久化。这里注意，一般redo log会先被写到内存中的缓冲区内，但提交的时候强制刷盘。盘实际上是一次fsync操作，确保位于内核高速缓冲区的数据被磁盘。特别地，如果我们不希望使用文件系统的缓存，需要设置<code>O_DIRECT</code>启用直接IO/裸IO，从用户空间直接将写到磁盘（比如说DMA）上。此外，还有一个<code>O_SYNC</code>，这个表示write操作<a href="https://stackoverflow.com/questions/5055859/how-are-the-o-sync-and-o-direct-flags-in-open2-different-alike" target="_blank" rel="noopener">在操作系统将所有数据发送给磁盘之后才能返回</a>。当然了，通过设置<code>innodb_flush_log_at_trx_commit</code>为0，可以不让InnoDB在每次提交事务的时候都fsync，这样的话就依赖于其他两个定时和剩余空间的条件了。当MySQL宕机后，可能会丢失1秒内的事务。特别地，这个值还可以被设为2，此时数据会被写到内核高速缓存中，但不会立即刷入磁盘，在这种情况下，只要系统不宕机，那么MySQL宕机后的安全性也是能得到保证的。</p>
+<h3 id="undo-log简介以及和redo-log的比较"><a href="#undo-log简介以及和redo-log的比较" class="headerlink" title="undo log简介以及和redo log的比较"></a>undo log简介以及和redo log的比较</h3><p>redo log实际上可以保证事务的Duration特性。相应地undo log记录数据被修改<strong>前</strong>的值，实际上保证事务的Isolation特性。undo log常用的地方是：</p>
+<ol>
+<li>事务失败时rollback</li>
+<li>MVCC功能<br> <a href="https://zhuanlan.zhihu.com/p/52977862" target="_blank" rel="noopener">在InnoDB中每个SQL语句执行前都会得到一个read view</a>，其中主要保存了当前活跃（没有commit）的事务的ID号。根据数据库的Isolation特性，这些事务对本事务是不可见的。<br> 通过读undo log链可以看到该条记录的历史版本，可以实现不同事务版本号都拥有自己独立的快照数据版本。</li>
+</ol>
+<h3 id="读写和刷盘"><a href="#读写和刷盘" class="headerlink" title="读写和刷盘"></a>读写和刷盘</h3><p>通过redo log可以在宕机恢复后恢复已提交的事务，如果没有redo log，就需要在事务commit时完成所有的刷脏页操作。但这个对性能是一个损伤，有了redo log，就可以把日志记到磁盘上，然后异步刷脏页了。通过undo log可以在宕机恢复后回滚未提交的事务，如果有了undo log，在事务提交前也可以刷脏页了。</p>
+<p>redo log基本上顺序写的，但是undo log需要随机读写。<br>redo log存储于形如<code>ib_logfile*</code>的文件里面。此外，redo log是在4GB的空间中循环写的，所以没有归档的功能。如果需要归档，就要借助于类似<code>ib_arch_log_</code>形式的归档重做日志，该日志始终是对<code>ib_logfile1</code>这个文件进行归档。InnoDB一般先会把redo log写到位于内存中的缓冲区内，然后在下面三种情况下进行刷新</p>
+<ol>
+<li>每隔一秒</li>
+<li>每个事务提交时</li>
+<li>redo log缓冲池剩余空间小于1/2</li>
+</ol>
+<p><img src="/img/innodb/innodb-mem.png" alt=""></p>
+<h2 id="binlog和redo-undo-log的协同工作"><a href="#binlog和redo-undo-log的协同工作" class="headerlink" title="binlog和redo/undo log的协同工作"></a>binlog和redo/undo log的协同工作</h2><h3 id="两阶段提交2PC"><a href="#两阶段提交2PC" class="headerlink" title="两阶段提交2PC"></a>两阶段提交2PC</h3><p>需要特别注意，2PC不是2PL。其实我们在<a href="/2019/03/12/2pc-3pc/">专门的文章</a>中已经介绍过原始版本的2PC和3PC算法了，我们将研究这个算法在MySQL中的应用。</p>
 <p>在同时出现有binlog和redo log日志时，如何提交事务呢？是先写哪个log？在故障恢复时，以哪个log为准？此外，还要考虑到binlog还被用来进行MySQL的主从复制，这使得Master库的数据实际依赖于redo log，而Slave库的数据实际依赖于binlog，问题更加复杂。例如Master写了binlog，然后还没有写redo log就宕机了，但是这个binlog已经被传给Slave执行了，那主从不一致就会发生。</p>
-<p>因此，我们需要设计一套合适的提交流程，两阶段提交<code>innodb_support_xa</code>被用来解决这个问题。此时MySQL会把这个普通事务作为XA事务来处理，但是这个XA事务并不是分布式事务，而是作为<a href="https://www.jianshu.com/p/328ad87bde5e" target="_blank" rel="noopener">内部XA事务</a>。<a href="https://zhuanlan.zhihu.com/p/98948473" target="_blank" rel="noopener">内部XA事务用于同一实例下跨多引擎事务，由Binlog作为协调者，比如在一个存储引擎提交时，需要将提交信息写入二进制日志，这就是一个分布式内部XA事务，只不过二进制日志的参与者是MySQL本身</a>。而对外部XA而言，应用程序是协调者。</p>
+<p>因此，我们需要设计一套合适的提交流程，两阶段提交<code>innodb_support_xa</code>被用来解决这个问题。此时MySQL会把这个普通事务作为XA事务来处理，但是这个XA事务并不是分布式事务，而是作为<a href="https://www.jianshu.com/p/328ad87bde5e" target="_blank" rel="noopener">内部XA事务</a>。<a href="https://zhuanlan.zhihu.com/p/98948473" target="_blank" rel="noopener">内部XA事务用于同一实例下跨多引擎事务，<a href="http://mysql.taobao.org/monthly/2021/01/02/" target="_blank" rel="noopener">由Binlog作为协调者</a>，比如在一个存储引擎提交时，需要将提交信息写入二进制日志，这就是一个分布式内部XA事务，只不过二进制日志的参与者是MySQL本身</a>。而对外部XA而言，应用程序是协调者。</p>
 <p>MySQL的两阶段提交的实现<code>ha_commit_trans</code>是：</p>
 <ol>
 <li>写redo log，并标记该事务处于prepare状态<br> 实际上，是调用下层引擎提供的prepare方法。并且会获取<code>prepare_commit_mutex</code>锁。<br> 【Q】此时需要落盘么，还是到第3步落盘？<a href="https://www.cnblogs.com/zhoujinyi/p/5257558.html" target="_blank" rel="noopener">应该是这一步就要落盘了</a>。<br> 【Q】事务的状态会被写到redo log里面么？<br> 此时Duration得到了保障，但是该状态下的事务对其他事务是不可见的。</li>
@@ -441,22 +471,34 @@
 <li>扫描最后一个binlog，提取XID<br> 这是因为事务不会跨binlog，并且binlog rotate的时候会刷盘。</li>
 <li>扫描redo log中所有处于prepare状态的XID，和binlog中最后一个XID比较。如果存在即提交，否则回滚。</li>
 </ol>
-<h2 id="Group-Commit-Bug"><a href="#Group-Commit-Bug" class="headerlink" title="Group Commit Bug"></a>Group Commit Bug</h2><p>上面的过程中，“双1”的要求导致性能是下降的。然而，叫做<a href="https://bugs.mysql.com/bug.php?id=13669" target="_blank" rel="noopener">Group Commit Bug</a>的问题会加重这一点。</p>
+<h3 id="Group-Commit-Bug"><a href="#Group-Commit-Bug" class="headerlink" title="Group Commit Bug"></a>Group Commit Bug</h3><p>上面的过程中，“双1”的要求导致性能是下降的。然而，叫做<a href="https://bugs.mysql.com/bug.php?id=13669" target="_blank" rel="noopener">Group Commit Bug</a>的问题会加重这一点。</p>
 <p>首先介绍Group Commit呢。因为fsync的代价很大，所以InnoDB实现了Group Commit技术，也就是将多次事务提交通过一次fsync刷回磁盘。也就是将所有要fsync的事务加入一个队列，由队头的线程负责将队列中所有的事务都一次fsync掉。在这个过程完成之后，队伍中的所有线程都被唤醒，完成自己的事务提交工作。可以看出，通过Group Commit，可以实现“并发”提交多个事务。</p>
 <p>然后我们可以得到一个观察，在Group Commit时binlog和redo log日志的顺序未必是相同的。就如下面这张<a href="https://www.zhihu.com/question/413276827" target="_blank" rel="noopener">著名的图</a>一样，事务的执行顺序是1/2/3，binlog也是按照这个顺序提交的。但是因为2PC并没有约束不同事务的提交顺序，所以InnoDB可以按照2/3/1的顺序提交。在“On-line Backup Taken”后，Slave的备份中会没有T1的提交记录。<br><img src="/img/innodb/t1-t2-t3-commit.png" alt=""></p>
 <p>可以看出，二阶段提交能够保证同一个事务的redo log和binlog的顺序一致性问题，但是无法解决多个事务提交顺序一致性的问题。为此，在5.5之前版本的MySQL的做法是在prepare时就获取<code>prepare_commit_mutex</code>锁，并且在事务commit之后再释放。这就导致了prepare、写log、commit这个过程全部是串行的，Group Commit名存实亡。这也就是这个bug的核心内容。</p>
-<h2 id="Binary-Log-Group-Commit-BLGC-技术"><a href="#Binary-Log-Group-Commit-BLGC-技术" class="headerlink" title="Binary Log Group Commit(BLGC)技术"></a>Binary Log Group Commit(BLGC)技术</h2><p>分为三个阶段：</p>
+<h3 id="Binary-Log-Group-Commit-BLGC-技术"><a href="#Binary-Log-Group-Commit-BLGC-技术" class="headerlink" title="Binary Log Group Commit(BLGC)技术"></a>Binary Log Group Commit(BLGC)技术</h3><h4 id="5-6方案"><a href="#5-6方案" class="headerlink" title="5.6方案"></a>5.6方案</h4><p>将原来2PC中的commit拆分为三个阶段：</p>
 <ol>
-<li>flush</li>
-<li>sync</li>
-<li>commit</li>
+<li>flush<br> 多线程按照进入顺序将binlog从缓存写到文件，但不刷盘。</li>
+<li>sync<br> 将文件中的binlog一次性刷盘。</li>
+<li>commit<br> 各个线程按顺序，作commit（这是一个InnoDB过程）。</li>
 </ol>
-<h2 id="LSN"><a href="#LSN" class="headerlink" title="LSN"></a>LSN</h2><p>LSN(log sequence number)是InnoDB中的一个长度为8字节的数，存在于redo log和数据页中。<br><figure class="highlight vim"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">&gt; show engine innodb status\G</span><br><span class="line">Log sequence <span class="keyword">number</span>          <span class="number">19739600</span> 表示当前最新的<span class="keyword">redo</span> <span class="built_in">log</span>（一般在缓冲区内）的LSN</span><br><span class="line">Log <span class="keyword">buffer</span> assigned <span class="keyword">up</span> <span class="keyword">to</span>    <span class="number">19739600</span> </span><br><span class="line">Log <span class="keyword">buffer</span> completed <span class="keyword">up</span> <span class="keyword">to</span>   <span class="number">19739600</span> </span><br><span class="line">Log written <span class="keyword">up</span> <span class="keyword">to</span>            <span class="number">19739600</span></span><br><span class="line">Log flushed <span class="keyword">up</span> <span class="keyword">to</span>            <span class="number">19739600</span> 表示已经刷到磁盘上的<span class="keyword">redo</span> <span class="built_in">log</span>的LSN</span><br><span class="line">Added dirty pages <span class="keyword">up</span> <span class="keyword">to</span>      <span class="number">19739600</span> </span><br><span class="line">Pages flushed <span class="keyword">up</span> <span class="keyword">to</span>          <span class="number">19739600</span> 表示已经刷到磁盘上数据页的最高的LSN</span><br><span class="line">Last checkpoint at           <span class="number">19739600</span> 表示Checkpoint上的最高LSN</span><br></pre></td></tr></table></figure></p>
+<p>这三个阶段各自维护一个队列，第一个进入队列的线程成为Leader，和原先的Group Commit一样，代理队列中的所有线程完成该阶段的任务，然后把这个队列全部移动到下个队列中。如果下个队列是非空的，那么Leader需要把自己变成下个队列的Follower。</p>
+<h4 id="5-7方案"><a href="#5-7方案" class="headerlink" title="5.7方案"></a>5.7方案</h4><p>在5.6的逻辑中，每个事务独立做prepare，并且write/sync redo log，这一部分可能成为性能瓶颈。<a href="https://segmentfault.com/a/1190000014810628" target="_blank" rel="noopener">在5.7版本中</a>，将redo log刷盘的实际推迟到了flush阶段，放到写binlog文件操作前。这样redo log也能实现按Group批量写了。</p>
+<p><a href="https://opensource.actionsky.com/20190404-mgr/" target="_blank" rel="noopener">这种方案</a>的流程：</p>
+<ol>
+<li>flush<br> 刷盘redo log。<br> 写binlog，不刷盘。<br> 如果在这个阶段发生宕机，因为binlog未必刷盘，是易失的，所以可能会导致<strong>该组</strong>事务rollback。</li>
+<li>sync<br> binlog刷盘。<br> 通过<code>binlog_group_commit_sync_delay</code>和<code>binlog_group_commit_sync_no_delay_count</code>在时间和数量上控制刷盘。<br> 在这个阶段后，因为binlog已经刷盘，所以在宕机后要提交事务。</li>
+<li>commit<br> <strong>依次</strong>Commit该组事务。<br> 由于binlog已经刷盘，所以这个过程并不需要刷盘。</li>
+</ol>
+<p>得到如下图所示的2PC过程简图。<br><img src="http://img.blog.itpub.net/blog/2019/01/14/e14bfae3e4eeb53e.jpeg?x-oss-process=style/bb" alt=""></p>
+<h2 id="LSN"><a href="#LSN" class="headerlink" title="LSN"></a>LSN</h2><p>LSN(log sequence number)是InnoDB中的一个长度为8字节的数，表示每个redo log的编号，具体来说，表示事务写入到redo log的字节总量，有点类似于TCP里面的Sequence Number。<br>下面show status语句中的这些数字，就是LSN。<br><figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">&gt; show engine innodb status\G</span><br><span class="line">Log sequence number          19739600 表示当前最新的redo log（一般在缓冲区内）的LSN</span><br><span class="line">Log buffer assigned up to    19739600 </span><br><span class="line">Log buffer completed up to   19739600</span><br></pre></td></tr></table></figure></p>
+<p>下面written和flushed的差别，就是写了多少和刷新多少的区别，由于至少保证了每秒都fsync，所以两者差距应该不大。<br><figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Log written up to            19739600</span><br><span class="line">Log flushed up to            19739600 表示已经刷到磁盘上的redo log的LSN</span><br></pre></td></tr></table></figure></p>
+<p>下面的这些项目，描述了刷脏页和建立检查点的进度。<br><figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">Added dirty pages up to      19739600 </span><br><span class="line">Pages flushed up to          19739600 表示已经刷到磁盘上数据页的最高的LSN</span><br><span class="line">Last checkpoint at           19739600 表示Checkpoint上的最高LSN</span><br></pre></td></tr></table></figure></p>
+<p>LSN存在于redo log、数据页和checkpoint中。在数据页中的LSN，即<code>FIL_PAGE_LSN</code>，表示该页最后刷新时的LSN。同理，checkpoint中也会存放目前已经刷新到的LSN。因为在数据库宕机后，会从checkpoint往后开始刷脏页，所以如果检查点LSN和redo log文件的LSN是相同的，表示所有的刷脏页工作都完成了，就不需要再刷脏页恢复了。</p>
 <h1 id="页"><a href="#页" class="headerlink" title="页"></a>页</h1><p>InnoDB将数据按层次划分为表空间、segment、extent、page。其中页作为磁盘和内存之间交互的基本单位，InnoDB中页的大小一般为16KB，但可以通过<code>innodb_page_size</code>进行设置。当16KB的页放不下时，就可能发生行溢出，此时数据放在未压缩BLOB页中。</p>
 <p><img src="/img/innodb/innodb-logical-storage.png" alt=""></p>
 <p>在InnoDB中，页包括</p>
 <ol>
-<li>数据页(B-tree Node)</li>
+<li>索引页(B-tree Node)<br> 因为MySQL使用聚簇索引，所以实际上索引页就是数据页。</li>
 <li>undo页</li>
 <li>系统页</li>
 <li>事务数据页</li>
@@ -465,24 +507,26 @@
 <li>压缩BLOB页</li>
 </ol>
 <p>数据页的构成如下图所示<br><img src="/img/innodb/innodb-data-page.png" alt=""></p>
-<h3 id="insert-buffer"><a href="#insert-buffer" class="headerlink" title="insert buffer"></a>insert buffer</h3><p>聚集索引下，表中相邻行存储的物理顺序和逻辑顺序是一致的，因此一张表只能有一个聚集索引，InnoDB的聚集索引按照主键进行聚集。<br>辅助索引是非聚集索引，对于它们的插入或更新操作，不是每一次直接插入到索引页中，而是先判断插入的索引页是否在缓冲池中，若在，则直接插入；若不在，则先放入到一个insert buffer对象中。在后台线程中将insert buffer更新到辅助索引上。这样的好处是能够将同索引页多个插入合并到一个操作中完成。</p>
-<h1 id="InnoDB主要架构设计"><a href="#InnoDB主要架构设计" class="headerlink" title="InnoDB主要架构设计"></a>InnoDB主要架构设计</h1><p>InnoDB的主要架构如下所示。<br><img src="/img/innodb/innodb-arch.png" alt=""></p>
-<p>其中主线程中主要根据数据库状态运行主循环(loop)、后台循环(backgroup loop)、刷新循环(flush loop)和暂停循环(suspend loop)四个循环。</p>
-<p><img src="/img/innodb/main_thread.png" alt=""></p>
-<p>若干IO Thread主要分为四类：read、write、insert buffer和log IO，在当前版本下，可以通过<code>innodb_read_io_threads</code>等参数进行设置。<br>Purge Thread用来回收已经使用并分配的UNDO页，当设置<code>innodb_purge_threads</code>大于0时，该线程会启动，从而减轻主线程负担。<br>Page Cleaner Thread用来刷新脏页，它也是为了减轻主线程负担。</p>
-<p>InnoDB设有缓冲池，用来存放从磁盘中读到的页。在读取页时，首先会尝试从缓冲池中查找，否则读磁盘上的页。如前面所讲，脏页会定时被刷回磁盘，这个是通过一个叫Checkpoint的机制实现的。<br>通常，缓冲池中的缓存页类型有索引页、数据页、undo页、insert buffer、adaptive hash index、锁信息lock info、数据字典信息。InnoDB将<code>innodb_buffer_pool_instances</code>设置为大于1，此时可以得到多个缓冲池实例。<br>缓冲池中的Database pages通过LRU算法进行管理（但adaptive hash index、lock信息、insert buffer等信息并没有放在缓冲池中），将最近使用的页放在最前面。InnoDB为LRU加入了midpoint位置，新读到的页会先放到midpoint，而不是LRU首部，在midpoint之前的称为new列表，之后的称为old列表。当数据库启动时，LRU是空的，这时候首先需要从Free列表中查找可用的空闲页，放到LRU中，否则使用LRU算法淘汰列表末尾的页。可以通过<code>SHOW ENGINE INNODB STATUS</code>观察LRU列表和Free列表的情况。例如，可以通过Buffer pool hit rate（实际没找到在哪里）缓冲池命中率，如果命中率较低的话，需要观察是不是因为全表扫描引起的LRU列表被污染的问题。还可以通过<code>information_schema.INNODB_BUFFER_POOL_STATS</code>观察缓冲池的运行状态。</p>
-<p>InnoDB一般先会把redo log写到位于内存中的缓冲区内，然后在下面三种情况下进行刷新</p>
+<h2 id="缓冲池"><a href="#缓冲池" class="headerlink" title="缓冲池"></a>缓冲池</h2><p>InnoDB设有缓冲池，用来存放从磁盘中读到的页，在缓冲池中的页一般称为逻辑页(page)，在硬盘上的页一般称为物理页(block)。在读取页时，首先会尝试从缓冲池中查找，否则读磁盘上的页。<br>通常，缓冲池中的缓存页类型有索引页、数据页、undo页、insert buffer、adaptive hash index、锁信息lock info、数据字典信息。InnoDB将<code>innodb_buffer_pool_instances</code>设置为大于1，此时可以得到多个缓冲池实例。<br>缓冲池中的Database pages通过LRU算法进行管理（但adaptive hash index、lock信息、insert buffer等信息并没有放在缓冲池中），将最近使用的页放在最前面。InnoDB为LRU加入了midpoint位置，新读到的页会先放到midpoint，而不是LRU首部，在midpoint之前的称为new列表，之后的称为old列表。当数据库启动时，LRU是空的，这时候首先需要从Free列表中查找可用的空闲页，放到LRU中，否则使用LRU算法淘汰列表末尾的页。可以通过<code>SHOW ENGINE INNODB STATUS</code>观察LRU列表和Free列表的情况。例如，可以通过Buffer pool hit rate（实际没找到在哪里）缓冲池命中率，如果命中率较低的话，需要观察是不是因为全表扫描引起的LRU列表被污染的问题。还可以通过<code>information_schema.INNODB_BUFFER_POOL_STATS</code>观察缓冲池的运行状态。</p>
+<h2 id="插入缓冲-Insert-Buffer"><a href="#插入缓冲-Insert-Buffer" class="headerlink" title="插入缓冲(Insert Buffer)"></a>插入缓冲(Insert Buffer)</h2><p>我们知道，聚簇索引下，表中相邻行存储的物理顺序和逻辑顺序是一致的，因此一张表只能有一个聚簇索引，InnoDB的聚集索引按照主键进行聚集。<br>但是，辅助索引是非聚簇索引，对于它们的插入或更新操作，就可能会导致随机读写，从而产生性能问题。<br>因此，InnoDB引入了插入缓冲，此时不是将数据直接插入到索引页中，而是先判断要插入的索引页是否在缓冲池中，若在，则直接插入；若不在，则先放入到一个insert buffer对象中，这样就可以先返回了。在后台线程中将insert buffer更新(merge)到辅助索引上。<br>插入缓冲的好处是能将同索引页多个插入合并到一个操作中完成，类似这种多次写合并成一次写的操作，在InnoDB的实现中是非常常见的优化，例如Group Commit等功能实际上也是基于同样的优化思路。</p>
+<p>插入缓冲需要满足以下的条件：</p>
 <ol>
-<li>每隔一秒</li>
-<li>每个事务提交时</li>
-<li>重做日志缓冲池剩余空间小于1/2</li>
+<li>执行插入或者更新的是非聚簇索引</li>
+<li>索引不是unique的<br> 反过来想，如果可以是unique的，那么在插入的时候就需要保证此时这个键还没有，而这就要去查索引了。本来插入缓冲引进就是为了避免查索引的，这下每次都要查了，就是南辕北辙，所以插入缓冲是不能对unique适用的。</li>
 </ol>
-<p><img src="/img/innodb/innodb-mem.png" alt=""></p>
-<p>InnoDB使用Checkpoint的机制将脏页刷新回磁盘，这样可以抑制redo log和缓冲池的不断增长，同时避免在宕机后通过redo log重头开始恢复造成很大的恢复开销。Checkpoint分为Sharp和Fuzzy，前者在数据库关闭时刷回所有的脏页，如果在运行时采用，会严重降低可用性。而Fuzzy只会刷新一部分脏页，主要分为以下情况</p>
+<h3 id="Change-Buffer"><a href="#Change-Buffer" class="headerlink" title="Change Buffer"></a>Change Buffer</h3><h3 id="Checkpoint刷脏"><a href="#Checkpoint刷脏" class="headerlink" title="Checkpoint刷脏"></a>Checkpoint刷脏</h3><p>InnoDB使用Checkpoint的机制将buffer pool中的脏页刷新回磁盘，这样可以抑制redo log和缓冲池的不断增长，同时避免在宕机后通过redo log重头开始恢复造成很大的恢复开销。</p>
+<p>Checkpoint分为Sharp和Fuzzy。Sharp会刷buffer pool里面所有的脏页，并且记录下最新的已提交事务的LSN。<a href="https://developer.aliyun.com/article/233172" target="_blank" rel="noopener">Sharp产生数据库在某一时刻的一致性数据</a>，如果在运行时发生，会严重降低可用性，因此一般在数据库关闭时用。</p>
+<p>Fuzzy只会刷新一部分脏页。Fuzzy主要分为以下情况</p>
 <ol>
 <li>主线程以一定时间间隔刷新脏页</li>
-<li></li>
+<li><code>FLUSH_LRU_LIST</code><br> 当LRU列表中的空闲也不够时，需要移除掉尾端的页，如果这些页是脏页的话，需要做checkpoint。从MySQL 5.6版本后，这个过程由Page cleaner线程执行。</li>
+<li>Async/Sync</li>
+<li>Dirty Page too much<br> 这个很直接，当缓冲池里面的脏页太多的时候，就会触发Checkpoint。</li>
 </ol>
+<h2 id="doublewrite"><a href="#doublewrite" class="headerlink" title="doublewrite"></a>doublewrite</h2><p>刷盘的过程存在partial write的问题。因为InnoDB的页大小(16KB)通常大于操作系统的页大小(4KB)，因此刷盘的过程往往不是原子的。例如当写完第一个4K块之后系统因为停电而宕机，这一块的page数据就会被破坏。</p>
+<p>那么redo log能够解决问题么？并不能，因为page已经损坏了，我们怎么知道用什么redo log来恢复这个page呢？【Q】也许可以从某一个checkpoint读取redo log来恢复了？</p>
+<p>为了解决这个问题，InnoDB引入双写(doublewrite)策略。也就是在刷盘时，先将脏页写到内存中的2MB大小的doublewrite buffer上。接着doublewrite buffer会分两次，每次写1MB到共享表空间，并且立刻刷盘。在doublewrite刷盘结束之后，在将doublewrite buffer的数据写入真正的数据文件上。</p>
+<p><a href="http://jockchou.github.io/blog/2015/07/23/innodb-doublewrite-buffer.html" target="_blank" rel="noopener">文章</a>指出，在启用主从复制的时候，从库上可以关闭doublewrite功能。</p>
 <h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
 <li><a href="https://blog.csdn.net/b1303110335/article/details/51174540" target="_blank" rel="noopener">https://blog.csdn.net/b1303110335/article/details/51174540</a></li>
 <li><a href="https://www.cnblogs.com/softidea/p/5977860.html" target="_blank" rel="noopener">https://www.cnblogs.com/softidea/p/5977860.html</a></li>
@@ -501,6 +545,9 @@
 <li><a href="https://cseweb.ucsd.edu/classes/sp16/cse291-e/applications/ln/lecture8.html" target="_blank" rel="noopener">https://cseweb.ucsd.edu/classes/sp16/cse291-e/applications/ln/lecture8.html</a></li>
 <li><a href="https://www.cnblogs.com/zhoujinyi/p/5257558.html" target="_blank" rel="noopener">https://www.cnblogs.com/zhoujinyi/p/5257558.html</a></li>
 <li><a href="https://zhuanlan.zhihu.com/p/343449447" target="_blank" rel="noopener">https://zhuanlan.zhihu.com/p/343449447</a></li>
+<li><a href="https://opensource.actionsky.com/20190404-mgr/" target="_blank" rel="noopener">https://opensource.actionsky.com/20190404-mgr/</a></li>
+<li><a href="http://jockchou.github.io/blog/2015/07/23/innodb-architecture.html" target="_blank" rel="noopener">http://jockchou.github.io/blog/2015/07/23/innodb-architecture.html</a></li>
+<li><a href="http://jockchou.github.io/blog/2015/07/23/innodb-doublewrite-buffer.html" target="_blank" rel="noopener">http://jockchou.github.io/blog/2015/07/23/innodb-doublewrite-buffer.html</a></li>
 </ol>
 
       
@@ -656,7 +703,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">148</span>
+                <span class="site-state-item-count">149</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -669,7 +716,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">151</span>
+                <span class="site-state-item-count">152</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -755,7 +802,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#配置"><span class="nav-number">1.</span> <span class="nav-text">配置</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#MySQL体系结构与存储引擎"><span class="nav-number">2.</span> <span class="nav-text">MySQL体系结构与存储引擎</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Log"><span class="nav-number">3.</span> <span class="nav-text">Log</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Slow-log"><span class="nav-number">3.1.</span> <span class="nav-text">Slow log</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#查询日志"><span class="nav-number">3.2.</span> <span class="nav-text">查询日志</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#binlog"><span class="nav-number">3.3.</span> <span class="nav-text">binlog</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#redo-undo-log"><span class="nav-number">3.4.</span> <span class="nav-text">redo/undo log</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Group-Commit"><span class="nav-number">3.5.</span> <span class="nav-text">Group Commit</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#两阶段提交2PC"><span class="nav-number">3.6.</span> <span class="nav-text">两阶段提交2PC</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Group-Commit-Bug"><span class="nav-number">3.7.</span> <span class="nav-text">Group Commit Bug</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Binary-Log-Group-Commit-BLGC-技术"><span class="nav-number">3.8.</span> <span class="nav-text">Binary Log Group Commit(BLGC)技术</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#LSN"><span class="nav-number">3.9.</span> <span class="nav-text">LSN</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#页"><span class="nav-number">4.</span> <span class="nav-text">页</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#insert-buffer"><span class="nav-number">4.0.1.</span> <span class="nav-text">insert buffer</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#InnoDB主要架构设计"><span class="nav-number">5.</span> <span class="nav-text">InnoDB主要架构设计</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">6.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#配置"><span class="nav-number">1.</span> <span class="nav-text">配置</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#MySQL体系结构与存储引擎"><span class="nav-number">2.</span> <span class="nav-text">MySQL体系结构与存储引擎</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#MySQL主要架构"><span class="nav-number">2.1.</span> <span class="nav-text">MySQL主要架构</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#InnoDB主要架构"><span class="nav-number">2.2.</span> <span class="nav-text">InnoDB主要架构</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Log"><span class="nav-number">3.</span> <span class="nav-text">Log</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Slow-log"><span class="nav-number">3.1.</span> <span class="nav-text">Slow log</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#查询日志"><span class="nav-number">3.2.</span> <span class="nav-text">查询日志</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#binlog"><span class="nav-number">3.3.</span> <span class="nav-text">binlog</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#redo-undo-log"><span class="nav-number">3.4.</span> <span class="nav-text">redo/undo log</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Redo-log简介"><span class="nav-number">3.4.1.</span> <span class="nav-text">Redo log简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#undo-log简介以及和redo-log的比较"><span class="nav-number">3.4.2.</span> <span class="nav-text">undo log简介以及和redo log的比较</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#读写和刷盘"><span class="nav-number">3.4.3.</span> <span class="nav-text">读写和刷盘</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#binlog和redo-undo-log的协同工作"><span class="nav-number">3.5.</span> <span class="nav-text">binlog和redo/undo log的协同工作</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#两阶段提交2PC"><span class="nav-number">3.5.1.</span> <span class="nav-text">两阶段提交2PC</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Group-Commit-Bug"><span class="nav-number">3.5.2.</span> <span class="nav-text">Group Commit Bug</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Binary-Log-Group-Commit-BLGC-技术"><span class="nav-number">3.5.3.</span> <span class="nav-text">Binary Log Group Commit(BLGC)技术</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#5-6方案"><span class="nav-number">3.5.3.1.</span> <span class="nav-text">5.6方案</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#5-7方案"><span class="nav-number">3.5.3.2.</span> <span class="nav-text">5.7方案</span></a></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#LSN"><span class="nav-number">3.6.</span> <span class="nav-text">LSN</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#页"><span class="nav-number">4.</span> <span class="nav-text">页</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#缓冲池"><span class="nav-number">4.1.</span> <span class="nav-text">缓冲池</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#插入缓冲-Insert-Buffer"><span class="nav-number">4.2.</span> <span class="nav-text">插入缓冲(Insert Buffer)</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Change-Buffer"><span class="nav-number">4.2.1.</span> <span class="nav-text">Change Buffer</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Checkpoint刷脏"><span class="nav-number">4.2.2.</span> <span class="nav-text">Checkpoint刷脏</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#doublewrite"><span class="nav-number">4.3.</span> <span class="nav-text">doublewrite</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">5.</span> <span class="nav-text">Reference</span></a></li></ol></div>
             
 
           </div>
