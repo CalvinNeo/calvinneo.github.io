@@ -108,7 +108,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/concur/mesi.jpg">
 <meta property="og:image" content="http://www.calvinneo.com/img/concur/speed_cmp.jpg">
 <meta property="og:image" content="http://www.calvinneo.com/img/bfbc/dclpjj.png">
-<meta property="og:updated_time" content="2020-11-10T04:36:16.620Z">
+<meta property="og:updated_time" content="2021-04-19T16:05:27.838Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="并发编程重要概念及比较">
 <meta name="twitter:description" content="在本篇中比较了各种并发、并行技术。并发(concurrency)强调的是逻辑上的同时发生，是语义上的模型(semantic model)，在实际上并发程序可能是由一个处理器同时(simultaneously)处理多个任务，因此并发过程中常出现一个线程等待其他资源的情况。此时常伴随着线程的阻塞和调度。并发过程通常可划分为多个级别：Blocking、Obstruction-Free、Lock-Free">
@@ -388,7 +388,7 @@
         <p>在本篇中比较了各种并发、并行技术。<br><strong>并发(concurrency)</strong>强调的是逻辑上的同时发生，是语义上的模型(semantic model)，在实际上并发程序可能是由一个处理器同时(simultaneously)处理多个任务，因此并发过程中常出现一个线程等待其他资源的情况。此时常伴随着线程的阻塞和调度。并发过程通常可划分为<a href="http://ifeve.com/lock-free-and-wait-free/" target="_blank" rel="noopener">多个级别</a>：Blocking、Obstruction-Free、Lock-Free、Wait-Free，其中后三种统称为Non-blocking的。<br><strong>并行(parallelism)</strong>属于并发，是运行期的行为(runtime behavior)，并行强调这两个并发事件实际上也是同时发生的，例如在多个处理器上运行的多个任务。但我们不能讲这两个概念绝对化，例如在处理器层面，流水线绝对是并发的，但在操作系统之上提供的机制来说，却体现出顺序的特性。<br>【未完待续】</p>
 <a id="more"></a>
 <h1 id="处理器层面的并发"><a href="#处理器层面的并发" class="headerlink" title="处理器层面的并发"></a>处理器层面的并发</h1><p>处理器在硬件架构上可以被分为对称多处理器(Symmetric Multiprocessing, SMP)、非均匀访问存储模型(Non-Uniform Memory Access, NUMA)、Massive Parallel Processing(MPP)等。其中SMP被广泛用于PC中，架构简单，但扩展性较差。<br>这里简单地论述处理器层面的并发相关，例如流水线、分支预测、多级缓存等技术。</p>
-<h2 id="流水线-pipeline"><a href="#流水线-pipeline" class="headerlink" title="流水线(pipeline)"></a>流水线(pipeline)</h2><h3 id="流水线和吞吐量"><a href="#流水线和吞吐量" class="headerlink" title="流水线和吞吐量"></a>流水线和吞吐量</h3><p>我们通常使用GOPS（每秒千兆次操作）来定义吞吐量，表示每秒内执行操作的次数。CPU流水线的目的是为了提高吞吐量(throughput)，但会增加每条指令的延迟(latency)，这是因为执行一条指令需要经过更多的流水线寄存器。CSAPP使用一个称为SEQ的架构来描述流水线的通用模型，一条指令在CPU中被执行会经过取指(fetch)、译码(decode)、执行(execute)、访存(memory)、写回(write back)、更新PC（在SEQ+中和取指进行了合并）等阶段。容易想到在某一时钟周期内，每一个阶段都可以独立运行。例如当指令PC在执行阶段时，我们可以对指令PC+1进行译码，这样译码器就不会闲置，这就是流水线化的一个简单思路。这种流水线设计很常见，以486为例，其拥有两条5级流水线<code>取指F-&gt;译码D1-&gt;转址D2-&gt;执行EX-&gt;写回WB</code>。<br>出于两点的考虑，流水线技术会制约了吞吐量能提高的上限：</p>
+<h2 id="流水线-pipeline"><a href="#流水线-pipeline" class="headerlink" title="流水线(pipeline)"></a>流水线(pipeline)</h2><h3 id="流水线和吞吐量"><a href="#流水线和吞吐量" class="headerlink" title="流水线和吞吐量"></a>流水线和吞吐量</h3><p>我们通常使用GOPS（每秒千兆次操作）来定义吞吐量，表示每秒内执行操作的次数。CPU流水线的目的是为了提高吞吐量(throughput)，但会增加每条指令的延迟(latency)，这是因为执行一条指令需要经过更多的流水线寄存器。CSAPP使用一个称为SEQ的架构来描述流水线的通用模型，一条指令在CPU中被执行会经过取指(fetch)、译码(decode)、执行(execute)、访存(memory)、写回(write back)、更新PC（在SEQ+中和取指进行了合并）等阶段。<br><strong>取指</strong>从PC处取得指令。指令包含icode和ifun。还包含译码阶段需要读取的寄存器rA和rB（可选的），一个常数valC。<br><strong>译码</strong>指的是从寄存器读取。读到的数令为valA和valB。<br><strong>访存</strong>指的是<strong>读写内存</strong>。如果读内存，读到的值令为valM。<br><strong>写回</strong>指的是写回到<strong>寄存器</strong>。<br>特别注意，处理器可以读写寄存器和内存，读写寄存器和读写内存是不同的阶段。<br>容易想到在某一时钟周期内，每一个阶段都可以独立运行。例如当指令PC在执行阶段时，我们可以对指令PC+1进行译码，这样译码器就不会闲置，这就是流水线化的一个简单思路。这种流水线设计很常见，以486为例，其拥有两条5级流水线<code>取指F-&gt;译码D1-&gt;转址D2-&gt;执行EX-&gt;写回WB</code>。<br>出于两点的考虑，流水线技术会制约了吞吐量能提高的上限：</p>
 <ol>
 <li>流水线不同阶段的延迟是不同<br> 如下图所示，流水线的吞吐量会受到其中最长操作的局限。<br> <img src="/img/concur/lsx_ttl_ys.png" alt=""></li>
 <li>一个较深的流水线可能带来很大的流水线寄存器延迟<br> 这是来自于增加的流水线寄存器所带来的额外开销。</li>
@@ -856,7 +856,7 @@ pthread_cond_wait(&amp;cond, &amp;mutex);
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">152</span>
+                <span class="site-state-item-count">153</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
