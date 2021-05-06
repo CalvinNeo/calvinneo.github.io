@@ -107,7 +107,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/leveldb/compaction/versionset.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/leveldb/compaction/versionset_link.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/leveldb/compaction/AddBoundaryInputsProblem.png">
-<meta property="og:updated_time" content="2021-04-23T14:22:59.334Z">
+<meta property="og:updated_time" content="2021-04-24T15:12:51.040Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="LevelDB之Compaction实现">
 <meta name="twitter:description" content="本文介绍LevelDB的SSTable之间的Compaction。Compaction分两种：  Minor Compaction 对应Memtable到SSTable的过程。 Major Compaction 对应SSTable文件之间的归并。涉及到两个Level的SSTable文件。 Major Compaction中还可以细分，比如是否Manual等。对于非Manual，还有seek com">
@@ -423,8 +423,8 @@
 <li>kLogFile：WAL日志文件，文件名数字.log</li>
 <li>kDBLockFile：db锁文件，文件名LOCK</li>
 <li>kTableFile：SSTable文件，文件名数字.sst</li>
-<li>kDescriptorFile：Manifest文件，存储VersionEdit信息，文件名为MANIFEST-数字<br> 对应<code>descriptor_file_</code>这个字段。</li>
-<li>kCurrentFile：记录的Manifest文件，文件名为CURRENT</li>
+<li>kDescriptorFile：Manifest文件，存储VersionEdit信息，文件名为MANIFEST-数字<br> 对应<code>descriptor_file_</code>这个字段。<br> Manifest文件中维护了所有的SSTable的key范围，层级，以及其他的元信息。</li>
+<li>kCurrentFile：记录当前的Manifest文件，文件名为CURRENT</li>
 <li>kTempFile：临时文件，db在修复【？】过程中会产生临时文件，文件名为数字.dbtmp</li>
 <li>kInfoLogFile：日志文件，文件名为LOG</li>
 </ol>
@@ -662,8 +662,14 @@
 <li>LevelDB中，每个user key在一层中是不是只会出现一次？<br> 大多数情况是的，有两个例外。<br> 首先，Level0是Overlap的，可能有多个。<br> 其次，如果使用了Snapshot，那么在下层可能也会有user key相同，但是sequence不同的。见<code>AddBoundaryInputs</code>的论述。</li>
 <li>我们往Manifest文件里面写了什么？</li>
 <li>LevelDB有容量限制么？<br> <a href="https://stackoverflow.com/questions/31742460/is-there-record-number-limit-in-leveldb" target="_blank" rel="noopener">应该是没有的，但是当最下面一层变得特别大之后，Compaction的开销会很大</a>。</li>
-<li>LevelDB到底是限制的每一层的文件数量还是大小？</li>
-<li>LevelDB每一层的文件数量有限制么？<br> 首先Level0肯定有，大家说是4个么？我觉得不是。参考下面的代码，4只是表示有4个文件就开始Level0的Compaction。当文件数达到12个，才是上限，这个时候就要停止写了。 <figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// Level-0 compaction is started when we hit this many files.</span></span><br><span class="line"><span class="keyword">static</span> <span class="keyword">const</span> <span class="keyword">int</span> kL0_CompactionTrigger = <span class="number">4</span>;</span><br><span class="line"><span class="comment">// Soft limit on number of level-0 files.  We slow down writes at this point.</span></span><br><span class="line"><span class="keyword">static</span> <span class="keyword">const</span> <span class="keyword">int</span> kL0_SlowdownWritesTrigger = <span class="number">8</span>;</span><br><span class="line"><span class="comment">// Maximum number of level-0 files.  We stop writes at this point.</span></span><br><span class="line"><span class="keyword">static</span> <span class="keyword">const</span> <span class="keyword">int</span> kL0_StopWritesTrigger = <span class="number">12</span>;</span><br></pre></td></tr></table></figure>
+<li><p>LevelDB到底是限制的每一层的文件数量还是大小？<br> 【Q】如果限制的是总大小，如果保证生成的SSTable的大小是大致相同的？<br>  对于Major Compaction来说，是在<code>DoCompactionWork</code>里面通过下面的代码来判断的</p>
+  <figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (compact-&gt;builder-&gt;FileSize() &gt;=</span><br><span class="line">   compact-&gt;compaction-&gt;MaxOutputFileSize()) &#123;</span><br></pre></td></tr></table></figure>
+<p>  这个调用最后会转到<code>options-&gt;max_file_size</code>上。</p>
+</li>
+<li><p>LevelDB每一层的文件数量有限制么？<br> 首先Level0肯定有，大家说是4个么？我觉得不是。参考下面的代码，4只是表示有4个文件就开始Level0的Compaction。当文件数达到12个，才是上限，这个时候就要停止写了。</p>
+ <figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// Level-0 compaction is started when we hit this many files.</span></span><br><span class="line"><span class="keyword">static</span> <span class="keyword">const</span> <span class="keyword">int</span> kL0_CompactionTrigger = <span class="number">4</span>;</span><br><span class="line"><span class="comment">// Soft limit on number of level-0 files.  We slow down writes at this point.</span></span><br><span class="line"><span class="keyword">static</span> <span class="keyword">const</span> <span class="keyword">int</span> kL0_SlowdownWritesTrigger = <span class="number">8</span>;</span><br><span class="line"><span class="comment">// Maximum number of level-0 files.  We stop writes at this point.</span></span><br><span class="line"><span class="keyword">static</span> <span class="keyword">const</span> <span class="keyword">int</span> kL0_StopWritesTrigger = <span class="number">12</span>;</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>LevelDB底层SSTable中的数据永无出头之日么？<br> 怎么可能，只要数据被修改，那么就会先到Memtable里面。</p>
 </li>
 </ol>
 <h2 id="DBImpl-BackgroundCompaction-1"><a href="#DBImpl-BackgroundCompaction-1" class="headerlink" title="DBImpl::BackgroundCompaction"></a>DBImpl::BackgroundCompaction</h2><p>下面是对Major Compaction的处理。</p>
@@ -825,6 +831,10 @@
 
           <div class="post-nav-prev post-nav-item">
             
+              <a href="/2021/04/24/leveldb-proc/" rel="prev" title="LevelDB之流程概览">
+                LevelDB之流程概览 <i class="fa fa-chevron-right"></i>
+              </a>
+            
           </div>
         </div>
       
@@ -902,7 +912,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">153</span>
+                <span class="site-state-item-count">155</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
