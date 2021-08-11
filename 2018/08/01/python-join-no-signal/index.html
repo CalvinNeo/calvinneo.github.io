@@ -1,0 +1,1195 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="python,Linux,并行计算,多线程," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="在文章subprocess模块用法中介绍了Python中的threading.Thread.join()时不能响应信号的问题。这个问题被Python官方标记为Bug。Python官方的Issue指出这个Bug与Python的signal、基础线程库thread（C实现）和高级线程库threading（Python封装）都有关，下面首先概览这三个模块的实现，接着通过编译调试的方式来观赏这个Bug的具">
+<meta name="keywords" content="python,Linux,并行计算,多线程">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Python中join不能响应信号的问题">
+<meta property="og:url" content="http://www.calvinneo.com/2018/08/01/python-join-no-signal/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="在文章subprocess模块用法中介绍了Python中的threading.Thread.join()时不能响应信号的问题。这个问题被Python官方标记为Bug。Python官方的Issue指出这个Bug与Python的signal、基础线程库thread（C实现）和高级线程库threading（Python封装）都有关，下面首先概览这三个模块的实现，接着通过编译调试的方式来观赏这个Bug的具">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:image" content="http://www.calvinneo.com/img/python-thread-join-signal/phe.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/python-thread-join-signal/log0.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/python-thread-join-signal/logcode1.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/python-thread-join-signal/log1.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/python-thread-join-signal/tick.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/python-thread-join-signal/cor.png">
+<meta property="og:updated_time" content="2018-08-05T05:52:52.984Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Python中join不能响应信号的问题">
+<meta name="twitter:description" content="在文章subprocess模块用法中介绍了Python中的threading.Thread.join()时不能响应信号的问题。这个问题被Python官方标记为Bug。Python官方的Issue指出这个Bug与Python的signal、基础线程库thread（C实现）和高级线程库threading（Python封装）都有关，下面首先概览这三个模块的实现，接着通过编译调试的方式来观赏这个Bug的具">
+<meta name="twitter:image" content="http://www.calvinneo.com/img/python-thread-join-signal/phe.png">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2018/08/01/python-join-no-signal/"/>
+
+
+
+
+
+  <title>Python中join不能响应信号的问题 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2018/08/01/python-join-no-signal/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                Python中join不能响应信号的问题
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2018-08-01T23:41:45+08:00">
+                2018-08-01
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>在<a href="/2018/07/17/subprocess_usage/">文章subprocess模块用法</a>中介绍了Python中的<code>threading.Thread.join()</code>时不能响应信号的问题。这个问题<a href="https://bugs.python.org/issue1167930" target="_blank" rel="noopener">被Python官方标记为Bug</a>。<br>Python官方的Issue指出这个Bug与Python的signal、基础线程库thread（C实现）和高级线程库threading（Python封装）都有关，下面首先概览这三个模块的实现，接着通过编译调试的方式来观赏这个Bug的具体过程。</p>
+<a id="more"></a>
+<h1 id="一个简单的测试程序"><a href="#一个简单的测试程序" class="headerlink" title="一个简单的测试程序"></a>一个简单的测试程序</h1><p>这里提供一个可以在Ubuntu 16.04上的Python2.7上重现的代码片段。主程序调用<code>threading_timeout_test</code>时能够正常响应<code>SIGINT</code>等信号，调用<code>threading_test</code>时不能正常响应信号。<br><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> sys, os, signal, subprocess, multiprocessing, time</span><br><span class="line"><span class="keyword">import</span> threading, thread</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">on_shutdown</span><span class="params">(i, j)</span>:</span></span><br><span class="line">    <span class="keyword">print</span> <span class="string">"Bye"</span></span><br><span class="line">    os._exit(<span class="number">0</span>)</span><br><span class="line"></span><br><span class="line">signal.signal(signal.SIGINT, on_shutdown)</span><br><span class="line">signal.signal(signal.SIGTERM, on_shutdown)</span><br><span class="line">signal.signal(signal.SIGHUP, on_shutdown)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">inner</span><span class="params">()</span>:</span></span><br><span class="line">    <span class="keyword">while</span> <span class="number">1</span>:</span><br><span class="line">        time.sleep(<span class="number">1</span>)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">threading_test</span><span class="params">()</span>:</span></span><br><span class="line">    ths = threading.Thread(target=inner)</span><br><span class="line">    ths.daemon = <span class="keyword">True</span></span><br><span class="line">    ths.start()</span><br><span class="line">    ths.join()</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">threading_timeout_test</span><span class="params">()</span>:</span></span><br><span class="line">    ths = threading.Thread(target=inner)</span><br><span class="line">    ths.daemon = <span class="keyword">True</span></span><br><span class="line">    ths.start()</span><br><span class="line">    ths.join(<span class="number">100</span>)</span><br><span class="line"></span><br><span class="line">threading_test()</span><br></pre></td></tr></table></figure></p>
+<p>ps一下发现此时进程处于<code>Sl</code>状态。<br><img src="/img/python-thread-join-signal/phe.png" alt=""></p>
+<h1 id="Python中的signal机制"><a href="#Python中的signal机制" class="headerlink" title="Python中的signal机制"></a>Python中的signal机制</h1><p>在signalmodule的开头注释中我们看到Python的信号只能为主线程所设置和捕获，这和POSIX原生signal不同了。在POSIX中，信号是传递给整个进程中的随机线程的。我们偏向于通过设置信号屏蔽字的方式，或者借助<code>sigwait</code>，让一个线程专门等待信号，这样将一个单线程完全异步的逻辑变为了同步的逻辑。<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// signalmodule.c</span></span><br><span class="line"><span class="comment">// 翻译版</span></span><br><span class="line"><span class="comment">/*</span></span><br><span class="line"><span class="comment">   Python线程语义:</span></span><br><span class="line"><span class="comment"></span></span><br><span class="line"><span class="comment">   - 只有主线程可以设置signal handler</span></span><br><span class="line"><span class="comment">   - 任何线程可以获得signal handler</span></span><br><span class="line"><span class="comment">   - 信号只传送给主线程</span></span><br><span class="line"><span class="comment"></span></span><br><span class="line"><span class="comment">   我们不支持像SIGFPE之类的同步信号，也不支持使用信号做线程间通讯。</span></span><br><span class="line"><span class="comment">   这是因为并不是所有的线程库都支持。</span></span><br><span class="line"><span class="comment">   </span></span><br><span class="line"><span class="comment">   在一些实现中由键盘产生的信号如SIGINT会被分发到所有线程(SGI)，</span></span><br><span class="line"><span class="comment">   或者按照随机概率(POSIX有中等概率会被发送到主线程)任意线程(Solaris)。</span></span><br><span class="line"><span class="comment">   目前的机制需要兼容这三种特性，因此signal handler会忽略掉所有getpid()不等于主线程中的结果的信号。</span></span><br><span class="line"><span class="comment">   </span></span><br><span class="line"><span class="comment">   // 注：我认为CPython以pthread为底层的线程实现不会出现不同线程getpid()不等的情况，</span></span><br><span class="line"><span class="comment">   // 可能作者的意思是在其他系统中可能会出现这种情况</span></span><br><span class="line"><span class="comment">*/</span></span><br></pre></td></tr></table></figure></p>
+<p>我个人理解上面这一段话的意思是Python为了简化在不同OS上的处理，选择为信号处理增加了限制。<br>Python在<code>signal_signal</code>中负责注册信号。<br><figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// thread_pthread.h</span></span><br><span class="line"><span class="comment">// 这个函数用来获得当前线程的threadid</span></span><br><span class="line"><span class="keyword">long</span></span><br><span class="line">PyThread_get_thread_ident(<span class="keyword">void</span>)</span><br><span class="line">&#123;</span><br><span class="line">    <span class="comment">// pthread_t的大小不定，为4或者8</span></span><br><span class="line">    <span class="comment">// 注意这个函数对线程切换是敏感的，宜加上volatile</span></span><br><span class="line">    <span class="keyword">volatile</span> <span class="keyword">pthread_t</span> threadid;</span><br><span class="line">    <span class="keyword">if</span> (!initialized)</span><br><span class="line">        <span class="comment">// 我们将在稍后介绍这个函数的作用</span></span><br><span class="line">        PyThread_init_thread();</span><br><span class="line">    <span class="comment">/* Jump through some hoops for Alpha OSF/1 */</span></span><br><span class="line">    threadid = pthread_self();</span><br><span class="line"><span class="meta">#<span class="meta-keyword">if</span> SIZEOF_PTHREAD_T &lt;= SIZEOF_LONG</span></span><br><span class="line">    <span class="keyword">return</span> (<span class="keyword">long</span>) threadid;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">else</span></span></span><br><span class="line">    <span class="keyword">return</span> (<span class="keyword">long</span>) *(<span class="keyword">long</span> *) &amp;threadid;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// signalmodule.c</span></span><br><span class="line"><span class="keyword">static</span> PyObject *</span><br><span class="line">signal_signal(PyObject *self, PyObject *args)</span><br><span class="line">&#123;</span><br><span class="line">    PyObject *obj;</span><br><span class="line">    <span class="keyword">int</span> sig_num;</span><br><span class="line">    PyObject *old_handler;</span><br><span class="line">    <span class="keyword">void</span> (*func)(<span class="keyword">int</span>);</span><br><span class="line">    <span class="comment">// 传进来的tuple有两项，第一项是sig_num，第二项是一个ob_type-&gt;tp_name是function，也就是处理函数</span></span><br><span class="line">    <span class="keyword">if</span> (!PyArg_ParseTuple(args, <span class="string">"iO:signal"</span>, &amp;sig_num, &amp;obj))</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> MS_WINDOWS</span></span><br><span class="line">    <span class="comment">/* Validate that sig_num is one of the allowable signals */</span></span><br><span class="line">    <span class="keyword">switch</span> (sig_num) &#123;</span><br><span class="line">        <span class="keyword">case</span> SIGABRT: <span class="keyword">break</span>;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> SIGBREAK</span></span><br><span class="line">        <span class="comment">/* Issue #10003: SIGBREAK is not documented as permitted, but works and corresponds to CTRL_BREAK_EVENT. */</span></span><br><span class="line">        <span class="keyword">case</span> SIGBREAK: <span class="keyword">break</span>;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">        <span class="keyword">case</span> SIGFPE: <span class="keyword">break</span>;</span><br><span class="line">        <span class="keyword">case</span> SIGILL: <span class="keyword">break</span>;</span><br><span class="line">        <span class="keyword">case</span> SIGINT: <span class="keyword">break</span>;</span><br><span class="line">        <span class="keyword">case</span> SIGSEGV: <span class="keyword">break</span>;</span><br><span class="line">        <span class="keyword">case</span> SIGTERM: <span class="keyword">break</span>;</span><br><span class="line">        <span class="keyword">default</span>:</span><br><span class="line">            PyErr_SetString(PyExc_ValueError, <span class="string">"invalid signal value"</span>);</span><br><span class="line">            <span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line">    &#125;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> WITH_THREAD</span></span><br><span class="line">    <span class="comment">// 不能子线程中设置信号</span></span><br><span class="line">    <span class="keyword">if</span> (PyThread_get_thread_ident() != main_thread) &#123;</span><br><span class="line">        PyErr_SetString(PyExc_ValueError, <span class="string">"signal only works in main thread"</span>);</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line">    &#125;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">    <span class="keyword">if</span> (sig_num &lt; <span class="number">1</span> || sig_num &gt;= NSIG) &#123;</span><br><span class="line">        PyErr_SetString(PyExc_ValueError, <span class="string">"signal number out of range"</span>);</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (obj == IgnoreHandler)</span><br><span class="line">        func = SIG_IGN;</span><br><span class="line">    <span class="keyword">else</span> <span class="keyword">if</span> (obj == DefaultHandler)</span><br><span class="line">        func = SIG_DFL;</span><br><span class="line">    <span class="keyword">else</span> <span class="keyword">if</span> (!PyCallable_Check(obj)) &#123;</span><br><span class="line">        PyErr_SetString(PyExc_TypeError,</span><br><span class="line"><span class="string">"signal handler must be signal.SIG_IGN, signal.SIG_DFL, or a callable object"</span>);</span><br><span class="line">                <span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span></span><br><span class="line">        func = signal_handler;</span><br><span class="line">    <span class="keyword">if</span> (PyOS_setsig(sig_num, func) == SIG_ERR) &#123;</span><br><span class="line">        PyErr_SetFromErrno(PyExc_RuntimeError);</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    old_handler = Handlers[sig_num].func;</span><br><span class="line">    <span class="comment">// 清空触发位</span></span><br><span class="line">    <span class="comment">// 当信号发生时，在`trip_signal`中会将tripped设为1</span></span><br><span class="line">    Handlers[sig_num].tripped = <span class="number">0</span>;</span><br><span class="line">    Py_INCREF(obj);</span><br><span class="line">    <span class="comment">// 设置信号处理函数</span></span><br><span class="line">    Handlers[sig_num].func = obj;</span><br><span class="line">    <span class="keyword">if</span> (old_handler != <span class="literal">NULL</span>)</span><br><span class="line">        <span class="keyword">return</span> old_handler;</span><br><span class="line">    <span class="keyword">else</span></span><br><span class="line">        Py_RETURN_NONE;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>Python在<code>signal_handler</code>中负责处理信号。<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// signalmodule.c</span></span><br><span class="line"><span class="comment">// 这个函数将在稍后详细讨论</span></span><br><span class="line"><span class="keyword">static</span> <span class="keyword">void</span></span><br><span class="line">trip_signal(<span class="keyword">int</span> sig_num)</span><br><span class="line">&#123;</span><br><span class="line">    Handlers[sig_num].tripped = <span class="number">1</span>;</span><br><span class="line">    ...</span><br><span class="line">    Py_AddPendingCall(checksignals_witharg, <span class="literal">NULL</span>);</span><br><span class="line">    <span class="keyword">if</span> (wakeup_fd != <span class="number">-1</span>)</span><br><span class="line">        write(wakeup_fd, <span class="string">"\0"</span>, <span class="number">1</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">static</span> <span class="keyword">void</span></span><br><span class="line">signal_handler(<span class="keyword">int</span> sig_num)</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">int</span> save_errno = errno;</span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">if</span> defined(WITH_THREAD) &amp;&amp; defined(WITH_PTH)</span></span><br><span class="line">    <span class="keyword">if</span> (PyThread_get_thread_ident() != main_thread) &#123;</span><br><span class="line">        pth_raise(*(<span class="keyword">pth_t</span> *) main_thread, sig_num);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span></span><br><span class="line">#endif</span><br><span class="line">    &#123;</span><br><span class="line">#ifdef WITH_THREAD</span><br><span class="line">    <span class="comment">/* See NOTES section above */</span></span><br><span class="line">    <span class="keyword">if</span> (getpid() == main_pid)</span><br><span class="line">#endif</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="built_in">printf</span>(<span class="string">"Received POSIX signal in thread %x\n"</span>, PyThread_get_thread_ident());</span><br><span class="line">        trip_signal(sig_num);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifndef</span> HAVE_SIGACTION</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> SIGCHLD</span></span><br><span class="line">    <span class="comment">/* To avoid infinite recursion, this signal remains</span></span><br><span class="line"><span class="comment">       reset until explicit re-instated.</span></span><br><span class="line"><span class="comment">       Don't clear the 'func' field as it is our pointer</span></span><br><span class="line"><span class="comment">       to the Python handler... */</span></span><br><span class="line">    <span class="keyword">if</span> (sig_num != SIGCHLD)</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">    <span class="comment">/* If the handler was not set up with sigaction, reinstall it.  See</span></span><br><span class="line"><span class="comment">     * Python/pythonrun.c for the implementation of PyOS_setsig which</span></span><br><span class="line"><span class="comment">     * makes this true.  See also issue8354. */</span></span><br><span class="line">    PyOS_setsig(sig_num, signal_handler);</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* Issue #10311: asynchronously executing signal handlers should not</span></span><br><span class="line"><span class="comment">       mutate errno under the feet of unsuspecting C code. */</span></span><br><span class="line">    errno = save_errno;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>出于方便说明的考虑，我们将在后面查看<code>Py_AddPendingCall</code>的定义。</p>
+<h1 id="Python的threading模块"><a href="#Python的threading模块" class="headerlink" title="Python的threading模块"></a>Python的threading模块</h1><h2 id="threading-Thread-join-方法"><a href="#threading-Thread-join-方法" class="headerlink" title="threading.Thread.join()方法"></a>threading.Thread.join()方法</h2><p>Python的低级线程模块<code>thread</code>并没有提供<code>join</code>的原语，<code>threading.Thread.join()</code>在Python层面进行了封装实现。<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// threading.py</span></span><br><span class="line">def Condition(*args, **kwargs):</span><br><span class="line">    <span class="keyword">return</span> _Condition(*args, **kwargs)</span><br><span class="line">    </span><br><span class="line">class Thread(_Verbose):</span><br><span class="line">    def __init__(self, group=None, target=None, name=None,</span><br><span class="line">             args=(), kwargs=None, verbose=None):</span><br><span class="line">        ...</span><br><span class="line">        # 意料之中的CV，稍后我们来看看具体实现</span><br><span class="line">        # 注意threading中还提供了一个递归锁RLock，我们这里用不到</span><br><span class="line">        self.__block = Condition(Lock())</span><br><span class="line">        </span><br><span class="line">    def join(self, timeout=None):</span><br><span class="line">        <span class="string">""</span><span class="string">"Wait until the thread terminates.</span></span><br><span class="line"><span class="string">        翻译版</span></span><br><span class="line"><span class="string">        </span></span><br><span class="line"><span class="string">        join函数会阻塞直到被join的线程正常终结，因未处理的异常终结，或者`timeout`超时退出</span></span><br><span class="line"><span class="string">        </span></span><br><span class="line"><span class="string">        可选参数`timeout`可以是一个浮点数，用来表示超时时间。因为`join()`方法一直返回None，</span></span><br><span class="line"><span class="string">        所以需要在join返回后调用`isALive`来判断究竟是发生了超时(此时线程还活着)，还是线程已经终结</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">        同一个线程可以被join很多次</span></span><br><span class="line"><span class="string">        </span></span><br><span class="line"><span class="string">        join自己会抛出RuntimeError，否则导致死锁</span></span><br><span class="line"><span class="string">        在线程初始化或者启动前join会抛出RuntimeError</span></span><br><span class="line"><span class="string">        "</span><span class="string">""</span></span><br><span class="line">        <span class="keyword">if</span> <span class="keyword">not</span> self.__initialized:</span><br><span class="line">            raise RuntimeError(<span class="string">"Thread.__init__() not called"</span>)</span><br><span class="line">        <span class="keyword">if</span> <span class="keyword">not</span> self.__started.is_set():</span><br><span class="line">            raise RuntimeError(<span class="string">"cannot join thread before it is started"</span>)</span><br><span class="line">        <span class="comment">// join自己会导致死锁</span></span><br><span class="line">        <span class="keyword">if</span> self is current_thread():</span><br><span class="line">            raise RuntimeError(<span class="string">"cannot join current thread"</span>)</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> __debug__:</span><br><span class="line">            <span class="keyword">if</span> <span class="keyword">not</span> self.__stopped:</span><br><span class="line">                self._note(<span class="string">"%s.join(): waiting until thread stops"</span>, self)</span><br><span class="line">        # 锁住CV对应的锁，后面看到实际是个Lock = _allocate_lock</span><br><span class="line">        self.__block.acquire()</span><br><span class="line">        <span class="keyword">try</span>:</span><br><span class="line">            <span class="keyword">if</span> timeout is None:</span><br><span class="line">                # 和POSIX编程一样，这里同样要放在<span class="keyword">while</span>循环里面</span><br><span class="line">                <span class="keyword">while</span> <span class="keyword">not</span> self.__stopped:</span><br><span class="line">                    # 等待条件变量</span><br><span class="line">                    self.__block.wait()</span><br><span class="line">                <span class="keyword">if</span> __debug__:</span><br><span class="line">                    self._note(<span class="string">"%s.join(): thread stopped"</span>, self)</span><br><span class="line">            <span class="keyword">else</span>:</span><br><span class="line">                deadline = _time() + timeout</span><br><span class="line">                <span class="keyword">while</span> <span class="keyword">not</span> self.__stopped:</span><br><span class="line">                    delay = deadline - _time()</span><br><span class="line">                    <span class="keyword">if</span> delay &lt;= <span class="number">0</span>:</span><br><span class="line">                        <span class="keyword">if</span> __debug__:</span><br><span class="line">                            self._note(<span class="string">"%s.join(): timed out"</span>, self)</span><br><span class="line">                        <span class="keyword">break</span></span><br><span class="line">                    self.__block.wait(delay)</span><br><span class="line">                <span class="keyword">else</span>:</span><br><span class="line">                    <span class="keyword">if</span> __debug__:</span><br><span class="line">                        self._note(<span class="string">"%s.join(): thread stopped"</span>, self)</span><br><span class="line">        finally:</span><br><span class="line">            self.__block.release()</span><br></pre></td></tr></table></figure></p>
+<p>我们注意<code>if timeout is None:</code>这个条件，两个分支的代码相差无几，但在我的Ubuntu 16.04上的Python2.7.12中分别使用或不使用timeout进行join，却一个不能响应SIG，一个可以。显而易见，原因在<code>self.__block.wait()</code>这个方法中。而<code>self.__block.wait()</code>实际上在一个条件变量上进行等待。</p>
+<h2 id="Condition条件变量"><a href="#Condition条件变量" class="headerlink" title="Condition条件变量"></a>Condition条件变量</h2><p>从上面的代码我们能看到<code>self.__block</code>实际上是个条件变量<code>_Condition</code>，这个<code>_Condition</code>实现地比较简陋，它并不会像C++中的<code>std::condition_variable</code>一样隔段时间解锁看看条件是否满足，事实上它根本就不接受一个condition参数，共享同一个<code>_Condition</code>的线程通过<code>wait</code>这个<code>_Condition</code>上的事件，或者<code>notify</code>系列向这个<code>_Condition</code>通告这个事件。此外，<code>_Condition</code>将互斥锁也整合了进去，我们不要在外面挂一个mutex之类的东西了。<br><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br><span class="line">130</span><br><span class="line">131</span><br><span class="line">132</span><br><span class="line">133</span><br><span class="line">134</span><br><span class="line">135</span><br><span class="line">136</span><br><span class="line">137</span><br><span class="line">138</span><br><span class="line">139</span><br><span class="line">140</span><br><span class="line">141</span><br><span class="line">142</span><br><span class="line">143</span><br><span class="line">144</span><br><span class="line">145</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># threading.py</span></span><br><span class="line">_allocate_lock = thread.allocate_lock</span><br><span class="line"><span class="comment"># 互斥锁</span></span><br><span class="line">Lock = _allocate_lock</span><br><span class="line"><span class="comment"># 递归锁（略）</span></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">RLock</span><span class="params">(*args, **kwargs)</span>:</span></span><br><span class="line">    <span class="string">"""Factory function that returns a new reentrant lock.</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">    A reentrant lock must be released by the thread that acquired it. Once a</span></span><br><span class="line"><span class="string">    thread has acquired a reentrant lock, the same thread may acquire it again</span></span><br><span class="line"><span class="string">    without blocking; the thread must release it once for each time it has</span></span><br><span class="line"><span class="string">    acquired it.</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">    """</span></span><br><span class="line">    <span class="keyword">return</span> _RLock(*args, **kwargs)</span><br><span class="line">    </span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">_Condition</span><span class="params">(_Verbose)</span>:</span></span><br><span class="line">    <span class="function"><span class="keyword">def</span> <span class="title">__init__</span><span class="params">(self, lock=None, verbose=None)</span>:</span></span><br><span class="line">        _Verbose.__init__(self, verbose)</span><br><span class="line">        <span class="keyword">if</span> lock <span class="keyword">is</span> <span class="keyword">None</span>:</span><br><span class="line">            lock = RLock()</span><br><span class="line">        self.__lock = lock</span><br><span class="line">        <span class="comment"># Export the lock's acquire() and release() methods</span></span><br><span class="line">        self.acquire = lock.acquire</span><br><span class="line">        self.release = lock.release</span><br><span class="line">        <span class="comment"># If the lock defines _release_save() and/or _acquire_restore(),</span></span><br><span class="line">        <span class="comment"># these override the default implementations (which just call</span></span><br><span class="line">        <span class="comment"># release() and acquire() on the lock).  Ditto for _is_owned().</span></span><br><span class="line">        <span class="keyword">try</span>:</span><br><span class="line">            self._release_save = lock._release_save</span><br><span class="line">        <span class="keyword">except</span> AttributeError:</span><br><span class="line">            <span class="keyword">pass</span></span><br><span class="line">        <span class="keyword">try</span>:</span><br><span class="line">            self._acquire_restore = lock._acquire_restore</span><br><span class="line">        <span class="keyword">except</span> AttributeError:</span><br><span class="line">            <span class="keyword">pass</span></span><br><span class="line">        <span class="keyword">try</span>:</span><br><span class="line">            self._is_owned = lock._is_owned</span><br><span class="line">        <span class="keyword">except</span> AttributeError:</span><br><span class="line">            <span class="keyword">pass</span></span><br><span class="line">        self.__waiters = []</span><br><span class="line">        </span><br><span class="line">    <span class="function"><span class="keyword">def</span> <span class="title">_release_save</span><span class="params">(self)</span>:</span></span><br><span class="line">        self.__lock.release()           <span class="comment"># No state to save</span></span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">def</span> <span class="title">_acquire_restore</span><span class="params">(self, x)</span>:</span></span><br><span class="line">        self.__lock.acquire()           <span class="comment"># Ignore saved state</span></span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">def</span> <span class="title">_is_owned</span><span class="params">(self)</span>:</span></span><br><span class="line">        <span class="comment"># Return True if lock is owned by current_thread.</span></span><br><span class="line">        <span class="comment"># This method is called only if __lock doesn't have _is_owned().</span></span><br><span class="line">        <span class="keyword">if</span> self.__lock.acquire(<span class="number">0</span>):</span><br><span class="line">            self.__lock.release()</span><br><span class="line">            <span class="keyword">return</span> <span class="keyword">False</span></span><br><span class="line">        <span class="keyword">else</span>:</span><br><span class="line">            <span class="keyword">return</span> <span class="keyword">True</span></span><br><span class="line">        </span><br><span class="line">    <span class="function"><span class="keyword">def</span> <span class="title">wait</span><span class="params">(self, timeout=None)</span>:</span></span><br><span class="line">        <span class="string">"""Wait until notified or until a timeout occurs.</span></span><br><span class="line"><span class="string">        </span></span><br><span class="line"><span class="string">        如果调用的线程没有取得锁将抛出`RuntimeError`错误。</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">        这个方法释放锁`__lock`，然后阻塞直到同一个CV被另一个线程中的`notify()`或`notifyAll()`通知，</span></span><br><span class="line"><span class="string">        或者发生超时。一旦发生以上情况，它会重新获得锁并返回。</span></span><br><span class="line"><span class="string">        </span></span><br><span class="line"><span class="string">        `timeout`参数是一个表示秒数的浮点。</span></span><br><span class="line"><span class="string">        </span></span><br><span class="line"><span class="string">        当锁是递归锁`RLock`，release方法并不会直接解锁它，相应地一个内部的接口被使用，</span></span><br><span class="line"><span class="string">        从而保证它需要调用和acquire相同的重数才能被解锁。</span></span><br><span class="line"><span class="string">        """</span></span><br><span class="line">        <span class="comment"># 必须持有锁才能操作共享变量</span></span><br><span class="line">        <span class="keyword">if</span> <span class="keyword">not</span> self._is_owned():</span><br><span class="line">            <span class="keyword">raise</span> RuntimeError(<span class="string">"cannot wait on un-acquired lock"</span>)</span><br><span class="line">        <span class="comment"># 实际调用thread模块对应实现中的`thread_PyThread_allocate_lock`函数，将在稍后看到</span></span><br><span class="line">        waiter = _allocate_lock()</span><br><span class="line">        <span class="comment"># 实际调用thread模块对应实现中的`lock_PyThread_acquire_lock`函数</span></span><br><span class="line">        <span class="comment"># 先acquire一下waiter</span></span><br><span class="line">        waiter.acquire()</span><br><span class="line">        <span class="comment"># 将代表自己的锁`waiter`加入`self.__waiters`队列中，</span></span><br><span class="line">        self.__waiters.append(waiter)</span><br><span class="line">        <span class="comment"># 释放掉持有的lock</span></span><br><span class="line">        saved_state = self._release_save() <span class="comment"># 暂时不明白为啥要有个返回值</span></span><br><span class="line">        <span class="keyword">try</span>:    <span class="comment"># restore state no matter what (e.g., KeyboardInterrupt)</span></span><br><span class="line">            <span class="keyword">if</span> timeout <span class="keyword">is</span> <span class="keyword">None</span>:</span><br><span class="line">                <span class="comment"># 再acquire一下waiter，这下阻塞了，原来把它当信号量用</span></span><br><span class="line">                <span class="comment"># 等signal释放掉一个锁</span></span><br><span class="line">                waiter.acquire()</span><br><span class="line">                <span class="keyword">if</span> __debug__:</span><br><span class="line">                    self._note(<span class="string">"%s.wait(): got it"</span>, self)</span><br><span class="line">            <span class="keyword">else</span>:</span><br><span class="line">                <span class="comment"># 翻译</span></span><br><span class="line">                <span class="comment"># 这里使用一个busy loop轮询是划不来的，所以我们得sleep，</span></span><br><span class="line">                <span class="comment"># 不过如果睡一个较长的时间，程序的响应性会变差。</span></span><br><span class="line">                <span class="comment"># 这个机制sleep interval的区间在[0.0005, 0.05]之间，每次按照2的幂增长。</span></span><br><span class="line">                endtime = _time() + timeout</span><br><span class="line">                delay = <span class="number">0.0005</span> <span class="comment"># 500 us -&gt; initial delay of 1 ms</span></span><br><span class="line">                <span class="keyword">while</span> <span class="keyword">True</span>:</span><br><span class="line">                    <span class="comment"># 这里的0是一个waitflag，表示我们需不需要等待直到获得锁，</span></span><br><span class="line">                    <span class="comment"># 因为我们现在有timeout，所以不能直接阻塞，而是不停地睡觉直到条件达成或者超时</span></span><br><span class="line">                    gotit = waiter.acquire(<span class="number">0</span>)</span><br><span class="line">                    <span class="keyword">if</span> gotit:</span><br><span class="line">                        <span class="keyword">break</span></span><br><span class="line">                    remaining = endtime - _time()</span><br><span class="line">                    <span class="keyword">if</span> remaining &lt;= <span class="number">0</span>:</span><br><span class="line">                        <span class="keyword">break</span></span><br><span class="line">                    delay = min(delay * <span class="number">2</span>, remaining, <span class="number">.05</span>)</span><br><span class="line">                    _sleep(delay)</span><br><span class="line">                <span class="keyword">if</span> <span class="keyword">not</span> gotit:</span><br><span class="line">                    <span class="keyword">if</span> __debug__:</span><br><span class="line">                        self._note(<span class="string">"%s.wait(%s): timed out"</span>, self, timeout)</span><br><span class="line">                    <span class="keyword">try</span>:</span><br><span class="line">                        self.__waiters.remove(waiter)</span><br><span class="line">                    <span class="keyword">except</span> ValueError:</span><br><span class="line">                        <span class="keyword">pass</span></span><br><span class="line">                <span class="keyword">else</span>:</span><br><span class="line">                    <span class="keyword">if</span> __debug__:</span><br><span class="line">                        self._note(<span class="string">"%s.wait(%s): got it"</span>, self, timeout)</span><br><span class="line">        <span class="keyword">finally</span>:</span><br><span class="line">            self._acquire_restore(saved_state)</span><br><span class="line">            </span><br><span class="line">    <span class="function"><span class="keyword">def</span> <span class="title">notify</span><span class="params">(self, n=<span class="number">1</span>)</span>:</span></span><br><span class="line">        <span class="string">"""Wake up one or more threads waiting on this condition, if any.</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">        如果调用的线程没有取得锁将抛出`RuntimeError`错误。</span></span><br><span class="line"><span class="string">    </span></span><br><span class="line"><span class="string">        这个方法唤醒CV上的至多n个线程，当没有线程在等待时它相当于nop函数</span></span><br><span class="line"><span class="string">        """</span></span><br><span class="line">        <span class="comment"># 必须持有锁才能操作共享变量</span></span><br><span class="line">        <span class="keyword">if</span> <span class="keyword">not</span> self._is_owned():</span><br><span class="line">            <span class="keyword">raise</span> RuntimeError(<span class="string">"cannot notify on un-acquired lock"</span>)</span><br><span class="line">        __waiters = self.__waiters</span><br><span class="line">        <span class="comment"># 我们取出前n个进行通知</span></span><br><span class="line">        waiters = __waiters[:n]</span><br><span class="line">        <span class="keyword">if</span> <span class="keyword">not</span> waiters:</span><br><span class="line">            <span class="keyword">if</span> __debug__:</span><br><span class="line">                self._note(<span class="string">"%s.notify(): no waiters"</span>, self)</span><br><span class="line">            <span class="keyword">return</span></span><br><span class="line">        self._note(<span class="string">"%s.notify(): notifying %d waiter%s"</span>, self, n,</span><br><span class="line">                   n!=<span class="number">1</span> <span class="keyword">and</span> <span class="string">"s"</span> <span class="keyword">or</span> <span class="string">""</span>)</span><br><span class="line">        <span class="keyword">for</span> waiter <span class="keyword">in</span> waiters:</span><br><span class="line">            waiter.release()</span><br><span class="line">            <span class="keyword">try</span>:</span><br><span class="line">                __waiters.remove(waiter)</span><br><span class="line">            <span class="keyword">except</span> ValueError:</span><br><span class="line">                <span class="keyword">pass</span></span><br></pre></td></tr></table></figure></p>
+<p>从上面的代码我们可以看到一旦调用<code>waiter.acquire()</code>，程序就不能响应信号了，我们接下来到<code>thread</code>模块中看这个函数的实现。</p>
+<h1 id="thread模块"><a href="#thread模块" class="headerlink" title="thread模块"></a>thread模块</h1><h2 id="Pythread锁"><a href="#Pythread锁" class="headerlink" title="Pythread锁"></a>Pythread锁</h2><p>承接上文，我们看到<code>thread._allocate_lock</code>实际调用了<code>thread_PyThread_allocate_lock()</code>创建了一个<code>lockobject</code>对象。<code>lockobject</code>对象中包含了一个<code>lock_lock</code>，这个实际上是一个<code>PyThread_type_lock</code>对象，由<code>PyThread_allocate_lock()</code>创建，也就是锁基于操作系统API的具体实现，我们将在稍后看到。<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// pythread.h</span></span><br><span class="line"><span class="comment">// 注意PyThread_type_lock中的实际对象根据具体实现而不同</span></span><br><span class="line"><span class="keyword">typedef</span> <span class="keyword">void</span> *PyThread_type_lock;</span><br><span class="line"><span class="keyword">typedef</span> <span class="keyword">void</span> *PyThread_type_sema;</span><br><span class="line"></span><br><span class="line">PyAPI_FUNC(PyThread_type_lock) PyThread_allocate_lock(<span class="keyword">void</span>);</span><br><span class="line">PyAPI_FUNC(<span class="keyword">void</span>) PyThread_free_lock(PyThread_type_lock);</span><br><span class="line">PyAPI_FUNC(<span class="keyword">int</span>) PyThread_acquire_lock(PyThread_type_lock, <span class="keyword">int</span>);</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> WAIT_LOCK	1</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> NOWAIT_LOCK	0</span></span><br><span class="line">PyAPI_FUNC(<span class="keyword">void</span>) PyThread_release_lock(PyThread_type_lock);</span><br><span class="line"></span><br><span class="line"><span class="comment">// threadmodule.c</span></span><br><span class="line"><span class="keyword">static</span> PyMethodDef thread_methods[] = &#123;</span><br><span class="line">    &#123;<span class="string">"start_new_thread"</span>,        (PyCFunction)thread_PyThread_start_new_thread,</span><br><span class="line">                            METH_VARARGS,</span><br><span class="line">                            start_new_doc&#125;,</span><br><span class="line">    &#123;<span class="string">"start_new"</span>,               (PyCFunction)thread_PyThread_start_new_thread,</span><br><span class="line">                            METH_VARARGS,</span><br><span class="line">                            start_new_doc&#125;,</span><br><span class="line">    &#123;<span class="string">"allocate_lock"</span>,           (PyCFunction)thread_PyThread_allocate_lock,</span><br><span class="line">     METH_NOARGS, allocate_doc&#125;,</span><br><span class="line">    ...</span><br><span class="line">    &#123;<span class="literal">NULL</span>,                      <span class="literal">NULL</span>&#125;           <span class="comment">/* sentinel */</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="keyword">static</span> PyObject *</span><br><span class="line">thread_PyThread_allocate_lock(PyObject *self)</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">return</span> (PyObject *) newlockobject();</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span> &#123;</span></span><br><span class="line">    <span class="comment">// Python对象的通用头，包含了引用计数等信息</span></span><br><span class="line">    PyObject_HEAD</span><br><span class="line">    PyThread_type_lock lock_lock;</span><br><span class="line">    PyObject *in_weakreflist;</span><br><span class="line">&#125; lockobject;</span><br><span class="line"></span><br><span class="line"><span class="keyword">static</span> lockobject *</span><br><span class="line">newlockobject(<span class="keyword">void</span>)</span><br><span class="line">&#123;</span><br><span class="line">    lockobject *self;</span><br><span class="line">    self = PyObject_New(lockobject, &amp;Locktype);</span><br><span class="line">    <span class="keyword">if</span> (self == <span class="literal">NULL</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line">    self-&gt;lock_lock = PyThread_allocate_lock();</span><br><span class="line">    self-&gt;in_weakreflist = <span class="literal">NULL</span>;</span><br><span class="line">    <span class="keyword">if</span> (self-&gt;lock_lock == <span class="literal">NULL</span>) &#123;</span><br><span class="line">        Py_DECREF(self);</span><br><span class="line">        PyErr_SetString(ThreadError, <span class="string">"can't allocate lock"</span>);</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> self;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p><code>PyThread_allocate_lock</code>系列函数的实现因系统而异。以Linux为例有两种方式，分别基于<code>sem_t</code>和基于<code>pthread_mutex</code>/<code>pthread_cond</code>的。<br>我们首先查看基于信号量的机制<br><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// thread_pthread.h</span></span><br><span class="line">PyThread_type_lock</span><br><span class="line">PyThread_allocate_lock(<span class="keyword">void</span>)</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">sem_t</span> *lock;</span><br><span class="line">    <span class="keyword">int</span> status, error = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">    dprintf((<span class="string">"PyThread_allocate_lock called\n"</span>));</span><br><span class="line">    <span class="keyword">if</span> (!initialized)</span><br><span class="line">        PyThread_init_thread();</span><br><span class="line"></span><br><span class="line">    lock = (<span class="keyword">sem_t</span> *)<span class="built_in">malloc</span>(<span class="keyword">sizeof</span>(<span class="keyword">sem_t</span>));</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (lock) &#123;</span><br><span class="line">        <span class="comment">// 信号量只在线程间共享</span></span><br><span class="line">        status = sem_init(lock, <span class="number">0</span>, <span class="number">1</span>);</span><br><span class="line">        CHECK_STATUS(<span class="string">"sem_init"</span>);</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (error) &#123;</span><br><span class="line">            <span class="built_in">free</span>((<span class="keyword">void</span> *)lock);</span><br><span class="line">            lock = <span class="literal">NULL</span>;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    dprintf((<span class="string">"PyThread_allocate_lock() -&gt; %p\n"</span>, lock));</span><br><span class="line">    <span class="keyword">return</span> (PyThread_type_lock)lock;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">void</span></span><br><span class="line">PyThread_free_lock(PyThread_type_lock lock)</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">sem_t</span> *thelock = (<span class="keyword">sem_t</span> *)lock;</span><br><span class="line">    <span class="keyword">int</span> status, error = <span class="number">0</span>;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 这种用法第一是禁止WARNING，第二是用来做跳转，如`(void *)0;`</span></span><br><span class="line">    (<span class="keyword">void</span>) error; </span><br><span class="line">    dprintf((<span class="string">"PyThread_free_lock(%p) called\n"</span>, lock));</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!thelock)</span><br><span class="line">        <span class="keyword">return</span>;</span><br><span class="line"></span><br><span class="line">    status = sem_destroy(thelock);</span><br><span class="line">    CHECK_STATUS(<span class="string">"sem_destroy"</span>);</span><br><span class="line"></span><br><span class="line">    <span class="built_in">free</span>((<span class="keyword">void</span> *)thelock);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">int</span></span><br><span class="line">PyThread_acquire_lock(PyThread_type_lock lock, <span class="keyword">int</span> waitflag)</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">int</span> success;</span><br><span class="line">    <span class="keyword">sem_t</span> *thelock = (<span class="keyword">sem_t</span> *)lock;</span><br><span class="line">    <span class="keyword">int</span> status, error = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">    (<span class="keyword">void</span>) error; <span class="comment">/* silence unused-but-set-variable warning */</span></span><br><span class="line">    dprintf((<span class="string">"PyThread_acquire_lock(%p, %d) called\n"</span>, lock, waitflag));</span><br><span class="line"></span><br><span class="line">    <span class="keyword">do</span> &#123;</span><br><span class="line">        <span class="keyword">if</span> (waitflag)</span><br><span class="line">            status = fix_status(sem_wait(thelock));</span><br><span class="line">        <span class="keyword">else</span></span><br><span class="line">            status = fix_status(sem_trywait(thelock));</span><br><span class="line">    &#125; <span class="keyword">while</span> (status == EINTR); <span class="comment">/* Retry if interrupted by a signal */</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (waitflag) &#123;</span><br><span class="line">        CHECK_STATUS(<span class="string">"sem_wait"</span>);</span><br><span class="line">    &#125; <span class="keyword">else</span> <span class="keyword">if</span> (status != EAGAIN) &#123;</span><br><span class="line">        CHECK_STATUS(<span class="string">"sem_trywait"</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    success = (status == <span class="number">0</span>) ? <span class="number">1</span> : <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">    dprintf((<span class="string">"PyThread_acquire_lock(%p, %d) -&gt; %d\n"</span>, lock, waitflag, success));</span><br><span class="line">    <span class="keyword">return</span> success;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">void</span></span><br><span class="line">PyThread_release_lock(PyThread_type_lock lock)</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">sem_t</span> *thelock = (<span class="keyword">sem_t</span> *)lock;</span><br><span class="line">    <span class="keyword">int</span> status, error = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">    (<span class="keyword">void</span>) error; <span class="comment">/* silence unused-but-set-variable warning */</span></span><br><span class="line">    dprintf((<span class="string">"PyThread_release_lock(%p) called\n"</span>, lock));</span><br><span class="line"></span><br><span class="line">    status = sem_post(thelock);</span><br><span class="line">    CHECK_STATUS(<span class="string">"sem_post"</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>另一种方式是使用mutex和CV的经典实现，由于实际上没有用到，所以单独讨论。</p>
+<h1 id="观赏Bug形成过程"><a href="#观赏Bug形成过程" class="headerlink" title="观赏Bug形成过程"></a>观赏Bug形成过程</h1><p>在先前的讨论中我们已经确定了问题的所在是<code>waiter.acquire()</code>这个方法，对应到CPython内部就是<code>PyThread_allocate_lock</code>这个函数。<code>PyThread_allocate_lock</code>函数根据宏的不同选项有两种实现方式，在我的Ubuntu上提供了<code>sem_t</code>，所以默认使用<code>sem_t</code>的实现。我们跟踪这个<code>PyThread_allocate_lock</code>，发现这个函数能够正常加解锁，但是发送SIGINT信号却不能打断程序。<br><img src="/img/python-thread-join-signal/log0.png" alt=""></p>
+<p>那么究竟是Python直接屏蔽了Native POSIX signal，还是出于其他的原因？为此重新编译了Python 2.7.6并进行按照下图打了Log进行调试。<br><img src="/img/python-thread-join-signal/logcode1.png" alt=""></p>
+<p>得到结果如下图。<br><img src="/img/python-thread-join-signal/log1.png" alt=""></p>
+<p>注意其中的<code>^CSIG 2</code>，这是我在signalmodule中的<code>signal_handler</code>函数的开头设置打印语句，此时Ctrl+C能够输出<code>SIG 2</code>，并且通过了<code>if (getpid() == main_pid)</code>的检测，到达了<code>trip_signal</code>。我们在这个函数中输出了<code>Add pending 2 callback</code>，和我们之前注册的时候相同。接着<code>trip_signal</code>调用了<code>Py_AddPendingCall</code>。</p>
+<p>我们接下来查看<code>Py_AddPendingCall</code>的代码，他在<strong>ceval.c</strong>里面，这个文件也是Python的main loop的所在地。<br>经过调试，<code>Py_AddPendingCall</code>中记录了这个信号已经被成功加到了<code>pendingcalls[0]</code>。截止目前已发现Python在POSIX层面是收到了<code>SIG 2</code>，并且挂载下半部程序。因此可以初步断定异常原因是信号处理下半部并没有能够被运行。<br><figure class="highlight cs"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// ceval.c</span></span><br><span class="line"><span class="comment">// 这就是CPython臭名昭著的全局解释器锁GIL，</span></span><br><span class="line"><span class="comment">// GIL保证了同时只有一个线程在解释器中运行</span></span><br><span class="line"><span class="keyword">static</span> PyThread_type_lock interpreter_lock = <span class="number">0</span>; <span class="comment">/* This is the GIL */</span></span><br><span class="line"><span class="keyword">static</span> PyThread_type_lock pending_lock = <span class="number">0</span>; <span class="comment">/* for pending calls */</span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> NPENDINGCALLS 32</span></span><br><span class="line"><span class="keyword">static</span> <span class="keyword">struct</span> &#123;</span><br><span class="line">    <span class="keyword">int</span> (*func)(<span class="keyword">void</span> *);</span><br><span class="line">    <span class="keyword">void</span> *arg;</span><br><span class="line">&#125; pendingcalls[NPENDINGCALLS];</span><br><span class="line"><span class="keyword">static</span> <span class="keyword">int</span> pendingfirst = <span class="number">0</span>;</span><br><span class="line"><span class="keyword">static</span> <span class="keyword">int</span> pendinglast = <span class="number">0</span>;</span><br><span class="line"><span class="keyword">static</span> <span class="keyword">volatile</span> <span class="keyword">int</span> pendingcalls_to_do = <span class="number">1</span>; <span class="comment">/* trigger initialization of lock */</span></span><br><span class="line"><span class="keyword">static</span> <span class="keyword">char</span> pendingbusy = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">int</span></span><br><span class="line">Py_AddPendingCall(<span class="keyword">int</span> (*func)(<span class="keyword">void</span> *), <span class="keyword">void</span> *arg)</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">int</span> i, j, result=<span class="number">0</span>;</span><br><span class="line">    PyThread_type_lock <span class="keyword">lock</span> = pending_lock;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">/* try a few times for the lock.  Since this mechanism is used</span></span><br><span class="line"><span class="comment">     * for signal handling (on the main thread), there is a (slim)</span></span><br><span class="line"><span class="comment">     * chance that a signal is delivered on the same thread while we</span></span><br><span class="line"><span class="comment">     * hold the lock during the Py_MakePendingCalls() function.</span></span><br><span class="line"><span class="comment">     * This avoids a deadlock in that case.</span></span><br><span class="line"><span class="comment">     * Note that signals can be delivered on any thread.  In particular,</span></span><br><span class="line"><span class="comment">     * on Windows, a SIGINT is delivered on a system-created worker</span></span><br><span class="line"><span class="comment">     * thread.</span></span><br><span class="line"><span class="comment">     * We also check for lock being NULL, in the unlikely case that</span></span><br><span class="line"><span class="comment">     * this function is called before any bytecode evaluation takes place.</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">     <span class="comment">/* 翻译</span></span><br><span class="line"><span class="comment">     * 自旋100次尝试请求锁。因为这个机制被用来做信号处理(限于主线程)，</span></span><br><span class="line"><span class="comment">     * 因此有较小的几率一个信号在同一个线程在`Py_MakePendingCalls()`函数中持有锁时被通告。</span></span><br><span class="line"><span class="comment">     * 这种情况下使用多次尝试能够在以极大概率获取锁时避免死锁。</span></span><br><span class="line"><span class="comment">     * 注意信号(这里应该是原生的信号)可以被通告到任意线程。</span></span><br><span class="line"><span class="comment">     * 特别地，Windows上的SIGINT会被通告到system-created worker thread上。</span></span><br><span class="line"><span class="comment">     * 我们同时检查`lock`是否是NULL，因为可能有较小的概率这个函数在（初始化）之前被调用</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">if</span> (<span class="keyword">lock</span> != NULL) &#123;</span><br><span class="line">        <span class="keyword">for</span> (i = <span class="number">0</span>; i&lt;<span class="number">100</span>; i++) &#123;</span><br><span class="line">            <span class="keyword">if</span> (PyThread_acquire_lock(<span class="keyword">lock</span>, NOWAIT_LOCK))</span><br><span class="line">                <span class="keyword">break</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">if</span> (i == <span class="number">100</span>)</span><br><span class="line">            <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 将当前请求入队</span></span><br><span class="line">    i = pendinglast;</span><br><span class="line">    j = (i + <span class="number">1</span>) % NPENDINGCALLS;</span><br><span class="line">    printf(<span class="string">"Insert into pendingcalls[] at %d\n"</span>, i);</span><br><span class="line">    <span class="keyword">if</span> (j == pendingfirst) &#123;</span><br><span class="line">        result = <span class="number">-1</span>; <span class="comment">/* Queue full */</span></span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        pendingcalls[i].func = func;</span><br><span class="line">        pendingcalls[i].arg = arg;</span><br><span class="line">        pendinglast = j;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="comment">/* signal main loop */</span></span><br><span class="line">    _Py_Ticker = <span class="number">0</span>;</span><br><span class="line">    pendingcalls_to_do = <span class="number">1</span>;</span><br><span class="line">    <span class="keyword">if</span> (<span class="keyword">lock</span> != NULL)</span><br><span class="line">        PyThread_release_lock(<span class="keyword">lock</span>);</span><br><span class="line">    <span class="keyword">return</span> result;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">int</span></span><br><span class="line">Py_MakePendingCalls(<span class="keyword">void</span>)</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">int</span> i;</span><br><span class="line">    <span class="keyword">int</span> r = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!pending_lock) &#123;</span><br><span class="line">        <span class="comment">/* initial allocation of the lock */</span></span><br><span class="line">        pending_lock = PyThread_allocate_lock();</span><br><span class="line">        <span class="keyword">if</span> (pending_lock == NULL)</span><br><span class="line">            <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    printf(<span class="string">"Py_MakePendingCalls: before checking main thread\n"</span>);</span><br><span class="line">    <span class="comment">/* only service pending calls on main thread */</span></span><br><span class="line">    <span class="keyword">if</span> (main_thread &amp;&amp; PyThread_get_thread_ident() != main_thread)</span><br><span class="line">        <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">    <span class="comment">/* don't perform recursive pending calls */</span></span><br><span class="line">    <span class="keyword">if</span> (pendingbusy)</span><br><span class="line">        <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">    printf(<span class="string">"Py_MakePendingCalls: before loop pendingcalls[]\n"</span>);</span><br><span class="line">    pendingbusy = <span class="number">1</span>;</span><br><span class="line">    <span class="comment">/* perform a bounded number of calls, in case of recursion */</span></span><br><span class="line">    <span class="keyword">for</span> (i=<span class="number">0</span>; i&lt;NPENDINGCALLS; i++) &#123;</span><br><span class="line">        <span class="keyword">int</span> j;</span><br><span class="line">        <span class="keyword">int</span> (*func)(<span class="keyword">void</span> *);</span><br><span class="line">        <span class="keyword">void</span> *arg = NULL;</span><br><span class="line"></span><br><span class="line">        <span class="comment">/* pop one item off the queue while holding the lock */</span></span><br><span class="line">        PyThread_acquire_lock(pending_lock, WAIT_LOCK);</span><br><span class="line">        j = pendingfirst;</span><br><span class="line">        <span class="keyword">if</span> (j == pendinglast) &#123;</span><br><span class="line">            func = NULL; <span class="comment">/* Queue empty */</span></span><br><span class="line">        &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">            func = pendingcalls[j].func;</span><br><span class="line">            arg = pendingcalls[j].arg;</span><br><span class="line">            pendingfirst = (j + <span class="number">1</span>) % NPENDINGCALLS;</span><br><span class="line">        &#125;</span><br><span class="line">        pendingcalls_to_do = pendingfirst != pendinglast;</span><br><span class="line">        PyThread_release_lock(pending_lock);</span><br><span class="line">        <span class="comment">/* having released the lock, perform the callback */</span></span><br><span class="line">        <span class="keyword">if</span> (func == NULL)</span><br><span class="line">            <span class="keyword">break</span>;</span><br><span class="line">        <span class="comment">// 这里的func实际上就是`checksignals_witharg`这个函数</span></span><br><span class="line">        printf(<span class="string">"Py_MakePendingCalls: before call pendingcalls[%d] = %d\n"</span>, j, (<span class="keyword">int</span>)pendingcalls[j].func);</span><br><span class="line">        r = func(arg);</span><br><span class="line">        printf(<span class="string">"Py_MakePendingCalls: after call pendingcalls[%d] = %d\n"</span>, j, (<span class="keyword">int</span>)pendingcalls[j].func);</span><br><span class="line">        <span class="keyword">if</span> (r)</span><br><span class="line">            <span class="keyword">break</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    pendingbusy = <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">return</span> r;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>使用<code>Py_AddPendingCall</code>加入队列<code>pendingcalls</code>中的信号将会在<code>Py_MakePendingCalls</code>中被真正处理，这有点类似Linux中断下半部的机制。这里的<code>func</code>实际上是<code>trip_signal</code>调用<code>Py_AddPendingCall</code>的第一个参数<code>checksignals_witharg</code>，也是一个函数。<code>checksignals_witharg</code>这个函数很短，只调用了<code>PyErr_CheckSignals</code>这个函数。我们下面查看具体代码，需要注意<code>Handlers[i].func</code>和<code>pendingcalls[j].func</code>不一样。<br><figure class="highlight nimrod"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br></pre></td><td class="code"><pre><span class="line">// signalmodule.c</span><br><span class="line"><span class="keyword">static</span> <span class="built_in">void</span></span><br><span class="line">trip_signal(<span class="built_in">int</span> sig_num)</span><br><span class="line">&#123;</span><br><span class="line">    <span class="type">Handlers</span>[sig_num].tripped = <span class="number">1</span>;</span><br><span class="line">    <span class="keyword">if</span> (is_tripped)</span><br><span class="line">        <span class="keyword">return</span>;</span><br><span class="line">    /* <span class="type">Set</span> is_tripped after setting .tripped, <span class="keyword">as</span> it gets</span><br><span class="line">       cleared <span class="keyword">in</span> <span class="type">PyErr_CheckSignals</span>() before .tripped. */</span><br><span class="line">    is_tripped = <span class="number">1</span>;</span><br><span class="line">    <span class="type">Py_AddPendingCall</span>(checksignals_witharg, <span class="type">NULL</span>);</span><br><span class="line">    <span class="keyword">if</span> (wakeup_fd != -<span class="number">1</span>)</span><br><span class="line">        write(wakeup_fd, <span class="string">"\0"</span>, <span class="number">1</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="built_in">int</span></span><br><span class="line"><span class="type">PyErr_CheckSignals</span>(<span class="built_in">void</span>)</span><br><span class="line">&#123;</span><br><span class="line">    <span class="built_in">int</span> i;</span><br><span class="line">    <span class="type">PyObject</span> *f;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!is_tripped)</span><br><span class="line">        <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">#ifdef WITH_THREAD</span></span><br><span class="line">    <span class="keyword">if</span> (<span class="type">PyThread_get_thread_ident</span>() != main_thread)</span><br><span class="line">        <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line"><span class="comment">#endif</span></span><br><span class="line"></span><br><span class="line">    /*</span><br><span class="line">     * <span class="type">The</span> is_tripped variable <span class="keyword">is</span> meant to speed up the calls to</span><br><span class="line">     * <span class="type">PyErr_CheckSignals</span> (both directly <span class="keyword">or</span> via pending calls) <span class="keyword">when</span> no</span><br><span class="line">     * signal has arrived. <span class="type">This</span> variable <span class="keyword">is</span> <span class="built_in">set</span> to <span class="number">1</span> <span class="keyword">when</span> a signal arrives</span><br><span class="line">     * <span class="keyword">and</span> it <span class="keyword">is</span> <span class="built_in">set</span> to <span class="number">0</span> here, <span class="keyword">when</span> we know some signals arrived. <span class="type">This</span> way</span><br><span class="line">     * we can run the registered handlers <span class="keyword">with</span> no signals blocked.</span><br><span class="line">     *</span><br><span class="line">     * <span class="type">NOTE</span>: <span class="keyword">with</span> this approach we can have a situation where is_tripped <span class="keyword">is</span></span><br><span class="line">     *       <span class="number">1</span> but we have no more signals to handle (<span class="type">Handlers</span>[i].tripped</span><br><span class="line">     *       <span class="keyword">is</span> <span class="number">0</span> <span class="keyword">for</span> every signal i). <span class="type">This</span> won't <span class="keyword">do</span> us <span class="built_in">any</span> harm (<span class="keyword">except</span></span><br><span class="line">     *       we're gonna spent some cycles <span class="keyword">for</span> nothing). <span class="type">This</span> happens <span class="keyword">when</span></span><br><span class="line">     *       we receive a signal i after we zero is_tripped <span class="keyword">and</span> before we</span><br><span class="line">     *       check <span class="type">Handlers</span>[i].tripped.</span><br><span class="line">     */</span><br><span class="line">    /* 翻译</span><br><span class="line">     * `is_tripped`被在没有信号到达时用来加速`<span class="type">PyErr_CheckSignals</span>`的处理。</span><br><span class="line">     * 当信号到达时`is_tripped`会被设为<span class="number">1</span>，然后在这里被清零。</span><br><span class="line">     * 注意，这个策略有一个特殊情况，当`is_tripped`时<span class="number">1</span>但我们实际没有信号可以处理，</span><br><span class="line">     * 也就是所有的`<span class="type">Handlers</span>[i].tripped`都是<span class="number">0</span>。这个最多只会浪费几次check而已。</span><br><span class="line">     * 这种特殊情况发生在我们清零完`is_tripped`之后，检查`<span class="type">Handlers</span>[i].tripped`之前。</span><br><span class="line">     */</span><br><span class="line">    is_tripped = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!(f = (<span class="type">PyObject</span> *)<span class="type">PyEval_GetFrame</span>()))</span><br><span class="line">        f = <span class="type">Py_None</span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (i = <span class="number">1</span>; i &lt; <span class="type">NSIG</span>; i++) &#123;</span><br><span class="line">        <span class="keyword">if</span> (<span class="type">Handlers</span>[i].tripped) &#123;</span><br><span class="line">            <span class="type">PyObject</span> *<span class="literal">result</span> = <span class="type">NULL</span>;</span><br><span class="line">            <span class="type">PyObject</span> *arglist = <span class="type">Py_BuildValue</span>(<span class="string">"(iO)"</span>, i, f);</span><br><span class="line">            <span class="type">Handlers</span>[i].tripped = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">            <span class="keyword">if</span> (arglist) &#123;</span><br><span class="line">                // 可以发现实际调用了`<span class="type">PyEval_CallObject</span>`来执行`<span class="type">Handlers</span>[i].func`。</span><br><span class="line">                printf(<span class="string">"PyErr_CheckSignals called %d\n"</span>, (<span class="built_in">int</span>)<span class="type">Handlers</span>[i].func);</span><br><span class="line">                <span class="literal">result</span> = <span class="type">PyEval_CallObject</span>(<span class="type">Handlers</span>[i].func, arglist);</span><br><span class="line">                <span class="type">Py_DECREF</span>(arglist);</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="keyword">if</span> (!<span class="literal">result</span>)</span><br><span class="line">                <span class="keyword">return</span> -<span class="number">1</span>;</span><br><span class="line"></span><br><span class="line">            <span class="type">Py_DECREF</span>(<span class="literal">result</span>);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>刚才我们已经知道Python使用<code>Py_MakePendingCalls</code>往下的调用链<code>Py_MakePendingCalls -&gt; checksignals_witharg(即pendingcalls[j].func) -&gt; PyErr_CheckSignals -&gt; Handlers[i].func</code>，而<code>Py_MakePendingCalls</code>这个函数在当前栈帧的主循环<code>PyEval_EvalFrameEx</code>中被以一定的Tick的时间间隔被调用。<br><figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* for manipulating the thread switch and periodic "stuff" - used to be</span></span><br><span class="line"><span class="comment">   per thread, now just a pair o' globals */</span></span><br><span class="line"><span class="keyword">int</span> _Py_CheckInterval = <span class="number">100</span>;</span><br><span class="line"><span class="keyword">volatile</span> <span class="keyword">int</span> _Py_Ticker = <span class="number">0</span>; </span><br><span class="line"></span><br><span class="line">PyObject *</span><br><span class="line">PyEval_EvalFrameEx(PyFrameObject *f, <span class="keyword">int</span> throwflag)</span><br><span class="line">&#123;</span><br><span class="line">    ...</span><br><span class="line">    <span class="keyword">for</span> (;;) &#123;</span><br><span class="line">        <span class="comment">// 这个循环里面不停地根据取指而执行</span></span><br><span class="line">        ...</span><br><span class="line">        <span class="comment">// 这里`_Py_Ticker`实际上就是一个倒计时器，从初始值`_Py_CheckInterval`往下递减，</span></span><br><span class="line">        <span class="comment">// 当归零时进入下面的分支，进行一次check</span></span><br><span class="line">        <span class="keyword">if</span> (--_Py_Ticker &lt; <span class="number">0</span>) &#123;</span><br><span class="line">            <span class="keyword">if</span> (*next_instr == SETUP_FINALLY) &#123;</span><br><span class="line">                <span class="comment">/* Make the last opcode before a try: finally: block uninterruptible. */</span></span><br><span class="line">                <span class="keyword">goto</span> fast_next_opcode;</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="comment">// 还原计数器</span></span><br><span class="line">            _Py_Ticker = _Py_CheckInterval;</span><br><span class="line">            tstate-&gt;tick_counter++;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> WITH_TSC</span></span><br><span class="line">            ticked = <span class="number">1</span>;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">            <span class="comment">// 如果有待处理的signal</span></span><br><span class="line">            <span class="keyword">if</span> (pendingcalls_to_do) &#123;</span><br><span class="line">                <span class="comment">// 调用`Py_MakePendingCalls`执行下半部</span></span><br><span class="line">                <span class="keyword">if</span> (Py_MakePendingCalls() &lt; <span class="number">0</span>) &#123;</span><br><span class="line">                    why = WHY_EXCEPTION;</span><br><span class="line">                    <span class="keyword">goto</span> on_error;</span><br><span class="line">                &#125;</span><br><span class="line">                <span class="keyword">if</span> (pendingcalls_to_do)</span><br><span class="line">                    <span class="comment">// 翻译</span></span><br><span class="line">                    <span class="comment">// 这个说明`Py_MakePendingCalls`执行没有成功，</span></span><br><span class="line">                    <span class="comment">// 将_Py_Ticker设为0，这样可以进行线程切换，</span></span><br><span class="line">                    <span class="comment">// 从而让其他线程可以重新尝试一次，</span></span><br><span class="line">                    <span class="comment">// 然后就可能成功</span></span><br><span class="line">                    <span class="built_in">printf</span>(<span class="string">"Py_MakePendingCalls Failed, current thread %x main thread %x \n"</span>, </span><br><span class="line">                      PyThread_get_thread_ident(), main_thread);</span><br><span class="line">                    _Py_Ticker = <span class="number">0</span>;</span><br><span class="line">            &#125;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> WITH_THREAD</span></span><br><span class="line">            <span class="comment">// 下面的过程实现了线程切换。</span></span><br><span class="line">            <span class="keyword">if</span> (interpreter_lock) &#123;</span><br><span class="line">                <span class="keyword">if</span> (PyThreadState_Swap(<span class="literal">NULL</span>) != tstate)</span><br><span class="line">                    Py_FatalError(<span class="string">"ceval: tstate mix-up"</span>);</span><br><span class="line">                <span class="built_in">printf</span>(<span class="string">"Thread %x yield \n"</span>, PyThread_get_thread_ident());</span><br><span class="line">                <span class="comment">// 假如当前线程持有GIL，就释放</span></span><br><span class="line">                PyThread_release_lock(interpreter_lock);</span><br><span class="line"></span><br><span class="line">                <span class="comment">// 此时其他线程可以竞争这个GIL</span></span><br><span class="line">                </span><br><span class="line">                <span class="comment">// 本线程重新获取GIL</span></span><br><span class="line">                PyThread_acquire_lock(interpreter_lock, <span class="number">1</span>);</span><br><span class="line">                <span class="built_in">printf</span>(<span class="string">"Thread %x resume \n"</span>, PyThread_get_thread_ident());</span><br><span class="line">                <span class="keyword">if</span> (PyThreadState_Swap(tstate) != <span class="literal">NULL</span>)</span><br><span class="line">                    Py_FatalError(<span class="string">"ceval: orphan tstate"</span>);</span><br><span class="line"></span><br><span class="line">                <span class="comment">/* Check for thread interrupts */</span></span><br><span class="line"></span><br><span class="line">                <span class="keyword">if</span> (tstate-&gt;async_exc != <span class="literal">NULL</span>) &#123;</span><br><span class="line">                    x = tstate-&gt;async_exc;</span><br><span class="line">                    tstate-&gt;async_exc = <span class="literal">NULL</span>;</span><br><span class="line">                    PyErr_SetNone(x);</span><br><span class="line">                    Py_DECREF(x);</span><br><span class="line">                    why = WHY_EXCEPTION;</span><br><span class="line">                    <span class="keyword">goto</span> on_error;</span><br><span class="line">                &#125;</span><br><span class="line">            &#125;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">        &#125;</span><br><span class="line">    fast_next_opcode:</span><br><span class="line">       ...</span><br></pre></td></tr></table></figure></p>
+<p>下面的图来自<a href="http://www.dabeaz.com/python/UnderstandingGIL.pdf" target="_blank" rel="noopener">dabeaz</a>，形象地展示了上面源码所描述的Python线程切换的过程。<br><img src="/img/python-thread-join-signal/tick.png" alt=""></p>
+<p>现在我们发现一个问题，在上面的代码中<code>Py_MakePendingCalls Failed</code>输出了，这意味着我们的信号处理函数没有成功。为什么没有成功呢？我们回看<code>Py_MakePendingCalls</code>的Log输出在<code>Py_MakePendingCalls: before checking main thread</code>戛然而止，说明此时的线程并不是主线程！我们进一步查看线程调度情况，发现在主线程调用<code>join()</code>之后就一直睡眠了，其中唯一一次唤醒就是收到了SIGINT，主线程将这个信号放到<code>pendingcalls</code>之后又回去睡觉了，之后虽然子线程屡次调用<code>Py_MakePendingCalls</code>检查到了有待处理的信号，但由于自己不是主线程所以也是爱莫能助。<br>下面我们着手解决这个问题，一个简单的方法就是让子线程也可以处理由主线程添加到<code>pendingcalls</code>中的信号，于是我们对代码中进行两处修改：</p>
+<ol>
+<li>注释掉<code>PyErr_CheckSignals</code>中的<code>if (PyThread_get_thread_ident() != main_thread)</code></li>
+<li>注释掉<code>Py_MakePendingCalls</code>中的<code>if (main_thread &amp;&amp; PyThread_get_thread_ident() != main_thread)</code></li>
+</ol>
+<p>再次编译调试，发现可以正常退出了<br><img src="/img/python-thread-join-signal/cor.png" alt=""></p>
+<h1 id="杂项函数的实现"><a href="#杂项函数的实现" class="headerlink" title="杂项函数的实现"></a>杂项函数的实现</h1><h2 id="线程创建"><a href="#线程创建" class="headerlink" title="线程创建"></a>线程创建</h2><figure class="highlight cs"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// thread.c</span></span><br><span class="line"><span class="keyword">void</span></span><br><span class="line">PyThread_init_thread(<span class="keyword">void</span>)</span><br><span class="line">&#123;</span><br><span class="line"><span class="meta">#ifdef Py_DEBUG</span></span><br><span class="line">    <span class="keyword">char</span> *p = Py_GETENV(<span class="string">"PYTHONTHREADDEBUG"</span>);</span><br><span class="line">    <span class="keyword">if</span> (p) &#123;</span><br><span class="line">        <span class="keyword">if</span> (*p)</span><br><span class="line">            thread_debug = atoi(p);</span><br><span class="line">        <span class="keyword">else</span></span><br><span class="line">            thread_debug = <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span> /* Py_DEBUG */</span></span><br><span class="line">    <span class="keyword">if</span> (initialized)</span><br><span class="line">        <span class="keyword">return</span>;</span><br><span class="line">    initialized = <span class="number">1</span>;</span><br><span class="line">    dprintf((<span class="string">"PyThread_init_thread called\n"</span>));</span><br><span class="line">    PyThread__init_thread();</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">static</span> <span class="keyword">void</span></span><br><span class="line">PyThread__init_thread(<span class="keyword">void</span>)</span><br><span class="line">&#123;</span><br><span class="line">    <span class="comment">/* DO AN INIT BY STARTING THE THREAD */</span></span><br><span class="line">    <span class="keyword">static</span> <span class="keyword">int</span> dummy = <span class="number">0</span>;</span><br><span class="line">    pthread_t thread1;</span><br><span class="line">    pthread_create(&amp;thread1, NULL, (<span class="keyword">void</span> *) _noop, &amp;dummy);</span><br><span class="line">    pthread_join(thread1, NULL);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 这是创建线程的主入口</span></span><br><span class="line"><span class="keyword">long</span></span><br><span class="line">PyThread_start_new_thread(<span class="keyword">void</span> (*func)(<span class="keyword">void</span> *), <span class="keyword">void</span> *arg)</span><br><span class="line">&#123;</span><br><span class="line">    pthread_t th;</span><br><span class="line">    <span class="keyword">int</span> status;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">if</span> defined(THREAD_STACK_SIZE) || defined(PTHREAD_SYSTEM_SCHED_SUPPORTED)</span></span><br><span class="line">    pthread_attr_t attrs;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">if</span> defined(THREAD_STACK_SIZE)</span></span><br><span class="line">    size_t      tss;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"></span><br><span class="line">    dprintf((<span class="string">"PyThread_start_new_thread called\n"</span>));</span><br><span class="line">    <span class="keyword">if</span> (!initialized)</span><br><span class="line">        PyThread_init_thread();</span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">if</span> defined(THREAD_STACK_SIZE) || defined(PTHREAD_SYSTEM_SCHED_SUPPORTED)</span></span><br><span class="line">    <span class="keyword">if</span> (pthread_attr_init(&amp;attrs) != <span class="number">0</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">if</span> defined(THREAD_STACK_SIZE)</span></span><br><span class="line">    tss = (_pythread_stacksize != <span class="number">0</span>) ? _pythread_stacksize</span><br><span class="line">                                     : THREAD_STACK_SIZE;</span><br><span class="line">    <span class="keyword">if</span> (tss != <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="keyword">if</span> (pthread_attr_setstacksize(&amp;attrs, tss) != <span class="number">0</span>) &#123;</span><br><span class="line">            pthread_attr_destroy(&amp;attrs);</span><br><span class="line">            <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">if</span> defined(PTHREAD_SYSTEM_SCHED_SUPPORTED)</span></span><br><span class="line">    pthread_attr_setscope(&amp;attrs, PTHREAD_SCOPE_SYSTEM);</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"></span><br><span class="line">    status = pthread_create(&amp;th,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">if</span> defined(THREAD_STACK_SIZE) || defined(PTHREAD_SYSTEM_SCHED_SUPPORTED)</span></span><br><span class="line">                             &amp;attrs,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">else</span></span></span><br><span class="line">                             (pthread_attr_t*)NULL,</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">                             (<span class="keyword">void</span>* (*)(<span class="keyword">void</span> *))func,</span><br><span class="line">                             (<span class="keyword">void</span> *)arg</span><br><span class="line">                             );</span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">if</span> defined(THREAD_STACK_SIZE) || defined(PTHREAD_SYSTEM_SCHED_SUPPORTED)</span></span><br><span class="line">    pthread_attr_destroy(&amp;attrs);</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">    <span class="keyword">if</span> (status != <span class="number">0</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 这里直接detach了，join是Python自己实现的wait</span></span><br><span class="line">    pthread_detach(th);</span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">if</span> SIZEOF_PTHREAD_T &lt;= SIZEOF_LONG</span></span><br><span class="line">    <span class="keyword">return</span> (<span class="keyword">long</span>) th;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">else</span></span></span><br><span class="line">    <span class="keyword">return</span> (<span class="keyword">long</span>) *(<span class="keyword">long</span> *) &amp;th;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h2 id="线程状态转移"><a href="#线程状态转移" class="headerlink" title="线程状态转移"></a>线程状态转移</h2><figure class="highlight haxe"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// pystate.c</span></span><br><span class="line">PyThreadState *</span><br><span class="line">PyThreadState_Swap(PyThreadState *<span class="keyword">new</span><span class="type">ts</span>)</span><br><span class="line">&#123;</span><br><span class="line">    PyThreadState *oldts = _PyThreadState_Current;</span><br><span class="line"></span><br><span class="line">    _PyThreadState_Current = <span class="keyword">new</span><span class="type">ts</span>;</span><br><span class="line">    <span class="comment">/* It should not be possible for more than one thread state</span></span><br><span class="line"><span class="comment">       to be used for a thread.  Check this the best we can in debug</span></span><br><span class="line"><span class="comment">       builds.</span></span><br><span class="line"><span class="comment">    */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">if</span> defined(Py_DEBUG) &amp;&amp; defined(WITH_THREAD)</span></span><br><span class="line">    <span class="keyword">if</span> (<span class="keyword">new</span><span class="type">ts</span>) &#123;</span><br><span class="line">        <span class="comment">/* This can be called from PyEval_RestoreThread(). Similar</span></span><br><span class="line"><span class="comment">           to it, we need to ensure errno doesn't change.</span></span><br><span class="line"><span class="comment">        */</span></span><br><span class="line">        int err = errno;</span><br><span class="line">        PyThreadState *check = PyGILState_GetThisThreadState();</span><br><span class="line">        <span class="keyword">if</span> (check &amp;&amp; check-&gt;interp == <span class="keyword">new</span><span class="type">ts</span>-&gt;interp &amp;&amp; check != <span class="keyword">new</span><span class="type">ts</span>)</span><br><span class="line">            Py_FatalError(<span class="string">"Invalid thread state for this thread"</span>);</span><br><span class="line">        errno = err;</span><br><span class="line">    &#125;</span><br><span class="line"><span class="meta">#endif</span></span><br><span class="line">    <span class="keyword">return</span> oldts;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h2 id="CV-Mutex实现锁"><a href="#CV-Mutex实现锁" class="headerlink" title="CV+Mutex实现锁"></a>CV+Mutex实现锁</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// thread_pthread.h</span></span><br><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span> &#123;</span></span><br><span class="line">    <span class="keyword">char</span>             locked; <span class="comment">/* 0=unlocked, 1=locked */</span></span><br><span class="line">    <span class="comment">/* a &lt;cond, mutex&gt; pair to handle an acquire of a locked lock */</span></span><br><span class="line">    <span class="keyword">pthread_cond_t</span>   lock_released;</span><br><span class="line">    <span class="keyword">pthread_mutex_t</span>  mut;</span><br><span class="line">&#125; pthread_lock;</span><br><span class="line"></span><br><span class="line"><span class="keyword">int</span></span><br><span class="line">PyThread_acquire_lock(PyThread_type_lock lock, <span class="keyword">int</span> waitflag)</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">int</span> success;</span><br><span class="line">    pthread_lock *thelock = (pthread_lock *)lock;</span><br><span class="line">    <span class="keyword">int</span> status, error = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">    dprintf((<span class="string">"PyThread_acquire_lock(%p, %d) called\n"</span>, lock, waitflag));</span><br><span class="line">    </span><br><span class="line">    status = pthread_mutex_lock( &amp;thelock-&gt;mut );</span><br><span class="line">    CHECK_STATUS(<span class="string">"pthread_mutex_lock[1]"</span>);</span><br><span class="line">    success = thelock-&gt;locked == <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> ( !success &amp;&amp; waitflag ) &#123;</span><br><span class="line">        <span class="comment">/* continue trying until we get the lock */</span></span><br><span class="line"></span><br><span class="line">        <span class="comment">/* mut must be locked by me -- part of the condition protocol */</span></span><br><span class="line">        <span class="keyword">while</span> ( thelock-&gt;locked ) &#123;</span><br><span class="line">            status = pthread_cond_wait(&amp;thelock-&gt;lock_released,</span><br><span class="line">                                       &amp;thelock-&gt;mut);</span><br><span class="line">            CHECK_STATUS(<span class="string">"pthread_cond_wait"</span>);</span><br><span class="line">        &#125;</span><br><span class="line">        success = <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (success) thelock-&gt;locked = <span class="number">1</span>;</span><br><span class="line">    status = pthread_mutex_unlock( &amp;thelock-&gt;mut );</span><br><span class="line">    CHECK_STATUS(<span class="string">"pthread_mutex_unlock[1]"</span>);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (error) success = <span class="number">0</span>;</span><br><span class="line">    dprintf((<span class="string">"PyThread_acquire_lock(%p, %d) -&gt; %d\n"</span>, lock, waitflag, success));</span><br><span class="line">    <span class="keyword">return</span> success;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">void</span></span><br><span class="line">PyThread_release_lock(PyThread_type_lock lock)</span><br><span class="line">&#123;</span><br><span class="line">    pthread_lock *thelock = (pthread_lock *)lock;</span><br><span class="line">    <span class="keyword">int</span> status, error = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">    (<span class="keyword">void</span>) error; <span class="comment">/* silence unused-but-set-variable warning */</span></span><br><span class="line">    dprintf((<span class="string">"PyThread_release_lock(%p) called\n"</span>, lock));</span><br><span class="line"></span><br><span class="line">    status = pthread_mutex_lock( &amp;thelock-&gt;mut );</span><br><span class="line">    CHECK_STATUS(<span class="string">"pthread_mutex_lock[3]"</span>);</span><br><span class="line"></span><br><span class="line">    thelock-&gt;locked = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">    status = pthread_mutex_unlock( &amp;thelock-&gt;mut );</span><br><span class="line">    CHECK_STATUS(<span class="string">"pthread_mutex_unlock[3]"</span>);</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* wake up someone (anyone, if any) waiting on the lock */</span></span><br><span class="line">    <span class="comment">// 在退出临界区时signal</span></span><br><span class="line">    status = pthread_cond_signal( &amp;thelock-&gt;lock_released );</span><br><span class="line">    CHECK_STATUS(<span class="string">"pthread_cond_signal"</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/python/" rel="tag"># python</a>
+          
+            <a href="/tags/Linux/" rel="tag"># Linux</a>
+          
+            <a href="/tags/并行计算/" rel="tag"># 并行计算</a>
+          
+            <a href="/tags/多线程/" rel="tag"># 多线程</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2018/07/23/redis_learn_object/" rel="next" title="Redis底层对象实现原理分析">
+                <i class="fa fa-chevron-left"></i> Redis底层对象实现原理分析
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2018/12/07/implement-if-through-preprocessing/" rel="prev" title="通过C++预处理实现if">
+                通过C++预处理实现if <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">161</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">154</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#一个简单的测试程序"><span class="nav-number">1.</span> <span class="nav-text">一个简单的测试程序</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Python中的signal机制"><span class="nav-number">2.</span> <span class="nav-text">Python中的signal机制</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Python的threading模块"><span class="nav-number">3.</span> <span class="nav-text">Python的threading模块</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#threading-Thread-join-方法"><span class="nav-number">3.1.</span> <span class="nav-text">threading.Thread.join()方法</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Condition条件变量"><span class="nav-number">3.2.</span> <span class="nav-text">Condition条件变量</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#thread模块"><span class="nav-number">4.</span> <span class="nav-text">thread模块</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Pythread锁"><span class="nav-number">4.1.</span> <span class="nav-text">Pythread锁</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#观赏Bug形成过程"><span class="nav-number">5.</span> <span class="nav-text">观赏Bug形成过程</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#杂项函数的实现"><span class="nav-number">6.</span> <span class="nav-text">杂项函数的实现</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#线程创建"><span class="nav-number">6.1.</span> <span class="nav-text">线程创建</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#线程状态转移"><span class="nav-number">6.2.</span> <span class="nav-text">线程状态转移</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#CV-Mutex实现锁"><span class="nav-number">6.3.</span> <span class="nav-text">CV+Mutex实现锁</span></a></li></ol></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2021</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2018/08/01/python-join-no-signal/';
+          this.page.identifier = '2018/08/01/python-join-no-signal/';
+          this.page.title = 'Python中join不能响应信号的问题';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>

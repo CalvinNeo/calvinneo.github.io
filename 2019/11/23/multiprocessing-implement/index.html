@@ -1,0 +1,1258 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="并行计算,多线程,Python," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="在文章中介绍了multiprocessing模块用法，下面将详细介绍这个模块的实现。其内容包括：  Manager conenction.Pipe">
+<meta name="keywords" content="并行计算,多线程,Python">
+<meta property="og:type" content="article">
+<meta property="og:title" content="multiprocessing模块实现">
+<meta property="og:url" content="http://www.calvinneo.com/2019/11/23/multiprocessing-implement/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="在文章中介绍了multiprocessing模块用法，下面将详细介绍这个模块的实现。其内容包括：  Manager conenction.Pipe">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2020-04-03T10:39:29.930Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="multiprocessing模块实现">
+<meta name="twitter:description" content="在文章中介绍了multiprocessing模块用法，下面将详细介绍这个模块的实现。其内容包括：  Manager conenction.Pipe">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2019/11/23/multiprocessing-implement/"/>
+
+
+
+
+
+  <title>multiprocessing模块实现 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2019/11/23/multiprocessing-implement/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                multiprocessing模块实现
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2019-11-23T22:42:32+08:00">
+                2019-11-23
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>在<a href="/2017/04/18/multiprocessing模块用法/">文章</a>中介绍了multiprocessing模块用法，下面将详细介绍这个模块的实现。其内容包括：</p>
+<ol>
+<li>Manager</li>
+<li>conenction.Pipe</li>
+</ol>
+<a id="more"></a>
+<h1 id="Manager"><a href="#Manager" class="headerlink" title="Manager"></a>Manager</h1><p><a href="https://docs.python.org/2/library/multiprocessing.html#multiprocessing-managers" target="_blank" rel="noopener">Manager</a>对象会使用一个<code>Server</code>进程来维护需要共享的对象，而其他进程需要通过Proxy来访问这些共享对象。</p>
+<h2 id="SyncManager和BaseManager"><a href="#SyncManager和BaseManager" class="headerlink" title="SyncManager和BaseManager"></a>SyncManager和BaseManager</h2><h2 id="register"><a href="#register" class="headerlink" title="register"></a>register</h2><p>当我们调用<code>multiprocessing.Manager()</code>时，实际上创建了一个<code>SyncManager</code>，并调用它的<code>start</code>。在<code>start</code>中，会创建一个子进程来维护共享对象。<br><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># __init__.py</span></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">Manager</span><span class="params">()</span>:</span></span><br><span class="line">    <span class="string">'''</span></span><br><span class="line"><span class="string">    Returns a manager associated with a running server process</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">    The managers methods such as `Lock()`, `Condition()` and `Queue()`</span></span><br><span class="line"><span class="string">    can be used to create shared objects.</span></span><br><span class="line"><span class="string">    '''</span></span><br><span class="line">    <span class="keyword">from</span> multiprocessing.managers <span class="keyword">import</span> SyncManager</span><br><span class="line">    m = SyncManager()</span><br><span class="line">    m.start()</span><br><span class="line">    <span class="keyword">return</span> m</span><br></pre></td></tr></table></figure></p>
+<p>我们可以通过<code>SyncManager.dict()</code>等方法创建共享对象，并返回其代理。我们首先来查看它的实现。<br><figure class="highlight vbnet"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> SyncManager(BaseManager):</span><br><span class="line">    <span class="comment"><span class="doctag">'''</span></span></span><br><span class="line">    Subclass <span class="keyword">of</span> `BaseManager` which supports a number <span class="keyword">of</span> <span class="keyword">shared</span> <span class="built_in">object</span> types.</span><br><span class="line"></span><br><span class="line">    The types registered are those intended <span class="keyword">for</span> the synchronization</span><br><span class="line">    <span class="keyword">of</span> threads, plus `dict`, `list` <span class="keyword">and</span> `<span class="keyword">Namespace</span>`.</span><br><span class="line"></span><br><span class="line">    The `multiprocessing.Manager()` <span class="keyword">function</span> creates started instances <span class="keyword">of</span></span><br><span class="line">    this <span class="keyword">class</span>.</span><br><span class="line">    <span class="comment"><span class="doctag">'''</span></span></span><br><span class="line">SyncManager.register(<span class="comment">'Queue', Queue.Queue)</span></span><br><span class="line">SyncManager.register(<span class="comment">'dict', dict, DictProxy)</span></span><br><span class="line">SyncManager.register(<span class="comment">'Iterator', proxytype=IteratorProxy, create_method=False)</span></span><br><span class="line"></span><br><span class="line">...</span><br></pre></td></tr></table></figure></p>
+<p>从源码上看，<code>SyncManager</code>继承了一个<code>BaseManager</code>，通过<code>register</code>方法在这之中添加了对不同类型共享对象的支持。<br><figure class="highlight jboss-cli"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 'dict', dict, DictProxy</span></span><br><span class="line">@classmethod</span><br><span class="line">def register<span class="params">(cls, typeid, <span class="attr">callable</span>=None, <span class="attr">proxytype</span>=None, <span class="attr">exposed</span>=None,</span></span><br><span class="line"><span class="params">             <span class="attr">method_to_typeid</span>=None, <span class="attr">create_method</span>=True)</span>:</span><br></pre></td></tr></table></figure></p>
+<p>这个函数主要是围绕传入的几个参数的，我们结合整个函数的源码看这些参数的作用。</p>
+<ol>
+<li><code>cls</code>类似于成员函数里的self，用来在类里面表示自己</li>
+<li><code>typeid</code>是一个字符串，对应于”Queue”/“dict”等</li>
+<li><code>callable</code>用来创建typeid对应的对象，对应于上面的<code>Queue.Queue</code>和<code>dict</code>等。如果一个manager实例通过<code>from_address()</code>创建，或者<code>create_method</code>参数时False的，那么callable就可以被设置为None</li>
+<li><p><code>proxytype</code>是<code>BaseProxy</code>的子类，用来创建一个用来访问这个共享对象的代理，如果设置为None，就会默认使用<code>Autoproxy</code></p>
+ <figure class="highlight elm"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="title">if</span> proxy<span class="keyword">type</span> is <span class="type">None</span>:</span><br><span class="line">    proxy<span class="keyword">type</span> = <span class="type">AutoProxy</span></span><br></pre></td></tr></table></figure>
+</li>
+<li><p><code>exposed</code>用来限定proxy上的这个方法名字是不是public的。<br> 如果请求访问一个没有exposed的接口，那么就会<code>AttributeError</code>并且调用<code>fallback_func</code>。</p>
+ <figure class="highlight nimrod"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 来自serve_client方法</span></span><br><span class="line"><span class="keyword">try</span>:</span><br><span class="line">    ...</span><br><span class="line">    <span class="keyword">if</span> methodname <span class="keyword">not</span> <span class="keyword">in</span> exposed:</span><br><span class="line">    <span class="keyword">raise</span> <span class="type">AttributeError</span>(</span><br><span class="line">        '<span class="keyword">method</span> %r <span class="keyword">of</span> %r <span class="keyword">object</span> <span class="keyword">is</span> <span class="keyword">not</span> <span class="keyword">in</span> exposed=%r' %</span><br><span class="line">        (methodname, <span class="keyword">type</span>(obj), exposed)</span><br><span class="line">        )</span><br><span class="line">    ...</span><br><span class="line"><span class="keyword">except</span> <span class="type">AttributeError</span>:</span><br><span class="line">    <span class="keyword">if</span> methodname <span class="keyword">is</span> <span class="type">None</span>:</span><br><span class="line">        msg = ('<span class="comment">#TRACEBACK', format_exc())</span></span><br><span class="line">    <span class="keyword">else</span>:</span><br><span class="line">        <span class="keyword">try</span>:</span><br><span class="line">            fallback_func = self.fallback_mapping[methodname]</span><br><span class="line">            <span class="literal">result</span> = fallback_func(</span><br><span class="line">                self, conn, ident, obj, *args, **kwds</span><br><span class="line">                )</span><br><span class="line">            msg = ('<span class="comment">#RETURN', result)</span></span><br><span class="line">        <span class="keyword">except</span> <span class="type">Exception</span>:</span><br><span class="line">            msg = ('<span class="comment">#TRACEBACK', format_exc())</span></span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+<p> 如果指定<code>exposed</code>为None，那么就会使用<code>proxytype._exposed_</code>，如果<code>proxytype._exposed_</code>也是None，那么就使用这个共享对象的所有的public方法</p>
+ <figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">exposed = exposed <span class="keyword">or</span> getattr(proxytype, <span class="string">'_exposed_'</span>, <span class="keyword">None</span>)</span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">all_methods</span><span class="params">(obj)</span>:</span></span><br><span class="line">    temp = []</span><br><span class="line">    <span class="keyword">for</span> name <span class="keyword">in</span> dir(obj):</span><br><span class="line">        func = getattr(obj, name)</span><br><span class="line">        <span class="keyword">if</span> hasattr(func, <span class="string">'__call__'</span>):</span><br><span class="line">            temp.append(name)</span><br><span class="line">    <span class="keyword">return</span> temp</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">public_methods</span><span class="params">(obj)</span>:</span></span><br><span class="line">    <span class="keyword">return</span> [name <span class="keyword">for</span> name <span class="keyword">in</span> all_methods(obj) <span class="keyword">if</span> name[<span class="number">0</span>] != <span class="string">'_'</span>]</span><br></pre></td></tr></table></figure>
+</li>
+<li><p><code>method_to_typeid</code><br> 这个是一个<code>dict</code>，列出了所有返回值是一个proxy的方法。如果没有指定，那么就使用<code>proxytype._method_to_typeid_</code>，如果仍然为空，那么所有的返回值都按值复制。我们可以参考下面的方法</p>
+ <figure class="highlight cs"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta"># 在BaseManager.register中</span></span><br><span class="line">method_to_typeid = method_to_typeid or \</span><br><span class="line">                   getattr(proxytype, <span class="string">'_method_to_typeid_'</span>, None)</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> method_to_typeid:</span><br><span class="line">    <span class="keyword">for</span> key, <span class="keyword">value</span> <span class="keyword">in</span> method_to_typeid.items():</span><br><span class="line">        <span class="function">assert <span class="title">type</span>(<span class="params">key</span>) <span class="keyword">is</span> str, '%r <span class="keyword">is</span> not a <span class="keyword">string</span>' % key</span></span><br><span class="line"><span class="function">        assert <span class="title">type</span>(<span class="params"><span class="keyword">value</span></span>) <span class="keyword">is</span> str, '%r <span class="keyword">is</span> not a <span class="keyword">string</span>' % <span class="keyword">value</span></span></span><br><span class="line"><span class="function"></span></span><br><span class="line"><span class="function"># 在全局空间</span></span><br><span class="line"><span class="function">PoolProxy._method_to_typeid_ </span>= &#123;</span><br><span class="line">    <span class="string">'apply_async'</span>: <span class="string">'AsyncResult'</span>,</span><br><span class="line">    <span class="string">'map_async'</span>: <span class="string">'AsyncResult'</span>,</span><br><span class="line">    <span class="string">'imap'</span>: <span class="string">'Iterator'</span>,</span><br><span class="line">    <span class="string">'imap_unordered'</span>: <span class="string">'Iterator'</span></span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
+</li>
+<li><p><code>create_method</code><br> 是一个布尔量，默认True。要不要创建一个和<code>typeid</code>同名的方法，并且用这个方法来通知<code>Server</code>进程创建一个共享对象并返回一个proxy。这个只有对<code>Iterator</code>类是False的，也就是说<code>Manager</code>不想提供一个接口让你显式创建一个<code>Iterator</code>。</p>
+ <figure class="highlight ruby"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> <span class="symbol">create_method:</span></span><br><span class="line">    <span class="function"><span class="keyword">def</span> <span class="title">temp</span><span class="params">(<span class="keyword">self</span>, *args, **kwds)</span></span><span class="symbol">:</span></span><br><span class="line">        ...</span><br><span class="line">    temp.__name_<span class="number">_</span> = typeid</span><br><span class="line">    setattr(cls, typeid, temp)</span><br></pre></td></tr></table></figure>
+<p> 这个<code>if</code>分支中实际上是创建了一个<code>temp</code>函数，并且通过<code>setattr</code>将这个temp函数注册为cls中的<code>typeid</code>的方法。这样当我们在调用<code>manager.XXX()</code>时，就会执行这个<code>temp</code>里面的内容。我们将在后面深入探讨这个代码。</p>
+</li>
+</ol>
+<p><code>register</code>函数除了和几个参数有关的代码之外，剩下就这几行代码了，它们的作用就是将描述这个<code>typeid</code>的信息打包，存储到<code>_registry</code>中。<br><figure class="highlight dos"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> '_registry' <span class="keyword">not</span> <span class="keyword">in</span> <span class="built_in">cls</span>.__dict__:</span><br><span class="line">    <span class="built_in">cls</span>._registry = <span class="built_in">cls</span>._registry.<span class="built_in">copy</span>()</span><br><span class="line"></span><br><span class="line"><span class="built_in">cls</span>._registry[typeid] = (</span><br><span class="line">    callable, exposed, method_to_typeid, proxytype</span><br><span class="line">    )</span><br></pre></td></tr></table></figure></p>
+<p>我们打印一下register完所有类的<code>cls._registry</code>为<code>JoinableQueue,Namespace,BoundedSemaphore,Iterator,Lock,list,RLock,Queue,Array,dict,Pool,Semaphore,Value,Event,Condition</code></p>
+<h2 id="创建共享对象（Client）"><a href="#创建共享对象（Client）" class="headerlink" title="创建共享对象（Client）"></a>创建共享对象（Client）</h2><p>这一章节的开始，我们来看<code>register</code>函数中是如何创建共享对象的，主要过程就是通读一下<code>register</code>后面的代码和<code>_create</code>函数的实现。在创建完共享对象之后，这个共享对象就可以看做是远程对象（稍后将讲解的Server端）的一个代理。<br><code>if create_method</code>中创建的<code>temp</code>入口方法的主要功能是：</p>
+<ol>
+<li>先通过<code>_create</code>通知<code>Server</code>创建一个共享变量，并返回其唯一标识<code>token</code></li>
+<li>创建一个连接到这个<code>token</code>的proxy，这个proxy还作为这个函数的返回值</li>
+<li><code>decref</code>，有关引用计数的问题将在<code>Server</code>章节中讨论</li>
+</ol>
+<figure class="highlight ruby"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># managers.py</span></span><br><span class="line"><span class="keyword">if</span> <span class="symbol">create_method:</span></span><br><span class="line">    <span class="function"><span class="keyword">def</span> <span class="title">temp</span><span class="params">(<span class="keyword">self</span>, *args, **kwds)</span></span><span class="symbol">:</span></span><br><span class="line">        util.debug(<span class="string">'requesting creation of a shared %r object'</span>, typeid)</span><br><span class="line">        <span class="comment"># exp就是之前提到的exposed</span></span><br><span class="line">        token, exp = <span class="keyword">self</span>._create(typeid, *args, **kwds)</span><br><span class="line">        proxy = proxytype(</span><br><span class="line">            token, <span class="keyword">self</span>._serializer, manager=<span class="keyword">self</span>,</span><br><span class="line">            authkey=<span class="keyword">self</span>._authkey, exposed=exp</span><br><span class="line">            )</span><br><span class="line">        conn = <span class="keyword">self</span>._Client(token.address, authkey=<span class="keyword">self</span>._authkey)</span><br><span class="line">        dispatch(conn, None, <span class="string">'decref'</span>, (token.id,))</span><br><span class="line">        <span class="keyword">return</span> proxy</span><br><span class="line">    temp.__name_<span class="number">_</span> = typeid</span><br><span class="line">    setattr(cls, typeid, temp)</span><br></pre></td></tr></table></figure>
+<h3 id="create"><a href="#create" class="headerlink" title="_create"></a>_create</h3><p>首先查看<code>_create</code>这个方法，首先不得不提的是它接受一堆<code>*args</code>和<code>**kwds</code>的参数，这两个鬼东西它自己不用，而是传给<code>dispatch</code>，而<code>dispatch</code>也不用，而是直接<code>send</code>出去。<br>下面来看流程，首先创建了一个<code>_Client</code>类型的变量<code>conn</code>。By the way，那么Server在哪里呢，稍后解释。<br><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># managers.py</span></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">_create</span><span class="params">(self, typeid, *args, **kwds)</span>:</span></span><br><span class="line">    <span class="string">'''</span></span><br><span class="line"><span class="string">    Create a new shared object; return the token and exposed tuple</span></span><br><span class="line"><span class="string">    '''</span></span><br><span class="line">    <span class="keyword">assert</span> self._state.value == State.STARTED, <span class="string">'server not yet started'</span></span><br><span class="line">    conn = self._Client(self._address, authkey=self._authkey)</span><br><span class="line">    ...</span><br></pre></td></tr></table></figure></p>
+<p>我们查看<code>__init__</code>方法得知，这个实际上就是一个套接字。特别地，如果机器支持<code>AF_UNIX</code>的话，会使用<a href="http://man7.org/linux/man-pages/man7/unix.7.html" target="_blank" rel="noopener">UNIX Domain Socket</a>来进行同一主机上的IPC，省去了网络协议栈的层层封装等流程。但从中也能看出，实际上BaseManager在设计上是能够跨机器进行通信的<br><figure class="highlight ruby"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># managers.py</span></span><br><span class="line"><span class="comment"># BaseManager.__init__</span></span><br><span class="line"><span class="keyword">self</span>._serializer = serializer <span class="comment"># 默认值是pickle</span></span><br><span class="line"><span class="keyword">self</span>._Listener, <span class="keyword">self</span>._Client = listener_client[serializer]</span><br><span class="line"><span class="comment"># 全局</span></span><br><span class="line">listener_client = &#123;</span><br><span class="line">    <span class="string">'pickle'</span> : (connection.Listener, connection.Client),</span><br><span class="line">    <span class="string">'xmlrpclib'</span> : (connection.XmlListener, connection.XmlClient)</span><br><span class="line">    &#125;</span><br><span class="line">    </span><br><span class="line"><span class="comment"># connection.py</span></span><br><span class="line">default_family = <span class="string">'AF_INET'</span></span><br><span class="line">families = [<span class="string">'AF_INET'</span>]</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> hasattr(socket, <span class="string">'AF_UNIX'</span>)<span class="symbol">:</span></span><br><span class="line">    default_family = <span class="string">'AF_UNIX'</span></span><br><span class="line">    families += [<span class="string">'AF_UNIX'</span>]</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> sys.platform == <span class="string">'win32'</span><span class="symbol">:</span></span><br><span class="line">    default_family = <span class="string">'AF_PIPE'</span></span><br><span class="line">    families += [<span class="string">'AF_PIPE'</span>]</span><br></pre></td></tr></table></figure></p>
+<p>在创建好<code>conn</code>之后，就会通过<code>dispatch</code>调用<code>conn.send</code>发送一个对methodname为”create”的调用，并且在参数表头部附上当前的<code>typeid</code>。当这个调用被传到Server类时，会调用<code>Server.create</code>方法，在Server子进程空间中创建一个共享对象，这个将在下一节讲解有关Server部分中提到。<br><figure class="highlight livecodeserver"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 继续是_create函数</span></span><br><span class="line">    ...</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        id, exposed = <span class="built_in">dispatch</span>(conn, None, <span class="string">'create'</span>, (typeid,)+args, kwds)</span><br><span class="line">    <span class="keyword">finally</span>:</span><br><span class="line">        conn.<span class="built_in">close</span>()</span><br><span class="line">    <span class="literal">return</span> Token(typeid, self.<span class="title">_address</span>, id), exposed</span><br></pre></td></tr></table></figure></p>
+<h3 id="dispatch函数"><a href="#dispatch函数" class="headerlink" title="dispatch函数"></a>dispatch函数</h3><p>下面介绍这个大boss，<code>dispatch</code>函数。<br><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># dispatch函数</span></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">dispatch</span><span class="params">(c, id, methodname, args=<span class="params">()</span>, kwds=&#123;&#125;)</span>:</span></span><br><span class="line">    <span class="string">'''</span></span><br><span class="line"><span class="string">    Send a message to manager using connection `c` and return response</span></span><br><span class="line"><span class="string">    '''</span></span><br><span class="line">    <span class="comment"># 这里的c就是从_create传过来的conn，是一个_Client对象</span></span><br><span class="line">    c.send((id, methodname, args, kwds))</span><br><span class="line">    kind, result = c.recv()</span><br><span class="line">    <span class="keyword">if</span> kind == <span class="string">'#RETURN'</span>:</span><br><span class="line">        <span class="keyword">return</span> result</span><br><span class="line">    <span class="keyword">raise</span> convert_to_error(kind, result)</span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">convert_to_error</span><span class="params">(kind, result)</span>:</span></span><br><span class="line">    <span class="keyword">if</span> kind == <span class="string">'#ERROR'</span>:</span><br><span class="line">        <span class="keyword">return</span> result</span><br><span class="line">    <span class="keyword">elif</span> kind == <span class="string">'#TRACEBACK'</span>:</span><br><span class="line">        <span class="keyword">assert</span> type(result) <span class="keyword">is</span> str</span><br><span class="line">        <span class="keyword">return</span>  RemoteError(result)</span><br><span class="line">    <span class="keyword">elif</span> kind == <span class="string">'#UNSERIALIZABLE'</span>:</span><br><span class="line">        <span class="keyword">assert</span> type(result) <span class="keyword">is</span> str</span><br><span class="line">        <span class="keyword">return</span> RemoteError(<span class="string">'Unserializable message: %s\n'</span> % result)</span><br><span class="line">    <span class="keyword">else</span>:</span><br><span class="line">        <span class="keyword">return</span> ValueError(<span class="string">'Unrecognized message type'</span>)</span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">RemoteError</span><span class="params">(Exception)</span>:</span></span><br><span class="line">    <span class="function"><span class="keyword">def</span> <span class="title">__str__</span><span class="params">(self)</span>:</span></span><br><span class="line">        <span class="keyword">return</span> (<span class="string">'\n'</span> + <span class="string">'-'</span>*<span class="number">75</span> + <span class="string">'\n'</span> + str(self.args[<span class="number">0</span>]) + <span class="string">'-'</span>*<span class="number">75</span>)</span><br></pre></td></tr></table></figure></p>
+<p>接着<code>dispatch</code>函数就调用<code>conn.recv()</code>获取返回值。返回值的<code>kind</code>一共有<code>#RETURN</code>、<code>#ERROR</code>、<code>#TRACEBACK</code>、<code>#UNSERIALIZABLE</code>四种。如果当前的<code>dispatch</code>调用返回正常的话，他应该会拿到一个<code>exposed</code>，包含了共享对象中所能够调用的所有方法名。</p>
+<p>在调用<code>dispatch</code>函数之后，<code>_create</code>就返回了一个<code>Token</code>类型和从<code>dispatch</code>拿到的<code>exposed</code>。<code>Token</code>的定义如下，被用来唯一确定一个共享对象。<br><figure class="highlight ruby"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Token</span>(<span class="title">object</span>):</span></span><br><span class="line">    <span class="string">''</span><span class="string">'</span></span><br><span class="line"><span class="string">    Type to uniquely indentify a shared object</span></span><br><span class="line"><span class="string">    '</span><span class="string">''</span></span><br><span class="line">    __slots_<span class="number">_</span> = (<span class="string">'typeid'</span>, <span class="string">'address'</span>, <span class="string">'id'</span>)</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">def</span> <span class="title">__init__</span><span class="params">(<span class="keyword">self</span>, typeid, address, id)</span></span><span class="symbol">:</span></span><br><span class="line">        (<span class="keyword">self</span>.typeid, <span class="keyword">self</span>.address, <span class="keyword">self</span>.id) = (typeid, address, id)</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">def</span> <span class="title">__getstate__</span><span class="params">(<span class="keyword">self</span>)</span></span><span class="symbol">:</span></span><br><span class="line">        <span class="keyword">return</span> (<span class="keyword">self</span>.typeid, <span class="keyword">self</span>.address, <span class="keyword">self</span>.id)</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">def</span> <span class="title">__setstate__</span><span class="params">(<span class="keyword">self</span>, state)</span></span><span class="symbol">:</span></span><br><span class="line">        (<span class="keyword">self</span>.typeid, <span class="keyword">self</span>.address, <span class="keyword">self</span>.id) = state</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">def</span> <span class="title">__repr__</span><span class="params">(<span class="keyword">self</span>)</span></span><span class="symbol">:</span></span><br><span class="line">        <span class="keyword">return</span> <span class="string">'Token(typeid=%r, address=%r, id=%r)'</span> % \</span><br><span class="line">               (<span class="keyword">self</span>.typeid, <span class="keyword">self</span>.address, <span class="keyword">self</span>.id)</span><br></pre></td></tr></table></figure></p>
+<h3 id="proxy"><a href="#proxy" class="headerlink" title="proxy"></a>proxy</h3><p>在调用<code>_create</code>通知<code>Server</code>创建完共享对象之后，<code>temp</code>函数就创建一个proxy来代理这个远程的共享对象，这里的<code>proxytype</code>是由<code>register</code>函数中传入的，一般是<code>AutoProxy</code>，我们将在后面详细介绍。<br><figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">proxy = proxytype(</span><br><span class="line">    token, self._serializer, <span class="attribute">manager</span>=self,</span><br><span class="line">    <span class="attribute">authkey</span>=self._authkey, <span class="attribute">exposed</span>=exp</span><br><span class="line">    )</span><br></pre></td></tr></table></figure></p>
+<h2 id="创建共享对象（Server）"><a href="#创建共享对象（Server）" class="headerlink" title="创建共享对象（Server）"></a>创建共享对象（Server）</h2><p>上面的内容是Client部分的初始化过程，下面我们查看Server部分。需要注意的是，虽然是Server/Client结构，但是因为<code>Manager</code>的Server和Client都在一台机器上，并且由同样的代码进行管理，所以在形式上和传统的Socket是不一样的。由于Server是作为一个子进程存在，并且这个子进程和Server本身都是由<code>BaseManager</code>来管理的，并且也需要通过<code>BaseManager</code>提供的方法来操控。所以我们可以看到很多Server部分的工作是在<code>BaseManager</code>而不是<code>Server</code>内部处理的。<br>根据<a href="https://docs.python.org/2/library/multiprocessing.html#multiprocessing-managers" target="_blank" rel="noopener">文档</a>，一旦<code>BaseManager</code>被创建，就需要调用<code>start</code>或者<code>get_server().serve_forever()</code>来确保这个manager是和一个进程关联的。查看代码可以发现，这个start是在<code>__init__.py</code>上面被调用的<br><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># __init__.py</span></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">Manager</span><span class="params">()</span>:</span></span><br><span class="line">    <span class="string">'''</span></span><br><span class="line"><span class="string">    Returns a manager associated with a running server process</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">    The managers methods such as `Lock()`, `Condition()` and `Queue()`</span></span><br><span class="line"><span class="string">    can be used to create shared objects.</span></span><br><span class="line"><span class="string">    '''</span></span><br><span class="line">    <span class="keyword">from</span> multiprocessing.managers <span class="keyword">import</span> SyncManager</span><br><span class="line">    m = SyncManager()</span><br><span class="line">    m.start()</span><br><span class="line">    <span class="keyword">return</span> m</span><br></pre></td></tr></table></figure></p>
+<p>因此要了解Server如何被创建，就要先看<code>BaseManager</code>是如何被创建的。</p>
+<h3 id="构造函数"><a href="#构造函数" class="headerlink" title="构造函数"></a>构造函数</h3><p>首先来全面查看一下<code>BaseManager</code>的构造函数<br><figure class="highlight ruby"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># managers.py</span></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">__init__</span><span class="params">(<span class="keyword">self</span>, address=None, authkey=None, serializer=<span class="string">'pickle'</span>)</span></span><span class="symbol">:</span></span><br><span class="line">    <span class="keyword">if</span> authkey is <span class="symbol">None:</span></span><br><span class="line">        authkey = current_process().authkey</span><br><span class="line">    <span class="keyword">self</span>._address = address     <span class="comment"># XXX not final address if eg ('', 0)</span></span><br><span class="line">    <span class="keyword">self</span>._authkey = AuthenticationString(authkey)</span><br><span class="line">    <span class="keyword">self</span>._state = State()</span><br><span class="line">    <span class="keyword">self</span>._state.value = State.INITIAL</span><br><span class="line">    <span class="keyword">self</span>._serializer = serializer <span class="comment"># 默认是pickle</span></span><br><span class="line">    <span class="keyword">self</span>._Listener, <span class="keyword">self</span>._Client = listener_client[serializer]</span><br></pre></td></tr></table></figure></p>
+<p>我们查看一下<code>authkey</code>的相关实现，由于其中涉及了不少<code>Process</code>相关的实现，在这里暂时不提<br><figure class="highlight ruby"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># process.py</span></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">current_process</span><span class="params">()</span></span><span class="symbol">:</span></span><br><span class="line">    <span class="keyword">return</span> _current_process</span><br><span class="line">    </span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">_MainProcess</span>(<span class="title">Process</span>):</span></span><br><span class="line">    <span class="function"><span class="keyword">def</span> <span class="title">__init__</span><span class="params">(<span class="keyword">self</span>)</span></span><span class="symbol">:</span></span><br><span class="line">        <span class="keyword">self</span>._identity = ()</span><br><span class="line">        <span class="keyword">self</span>._daemonic = False</span><br><span class="line">        <span class="keyword">self</span>._name = <span class="string">'MainProcess'</span></span><br><span class="line">        <span class="keyword">self</span>._parent_pid = None</span><br><span class="line">        <span class="keyword">self</span>._popen = None</span><br><span class="line">        <span class="keyword">self</span>._counter = itertools.count(<span class="number">1</span>)</span><br><span class="line">        <span class="keyword">self</span>._children = set()</span><br><span class="line">        <span class="keyword">self</span>._authkey = AuthenticationString(os.urandom(<span class="number">32</span>))</span><br><span class="line">        <span class="keyword">self</span>._tempdir = None</span><br><span class="line"></span><br><span class="line">_current_process = _MainProcess()</span><br><span class="line">del _MainProcess</span><br></pre></td></tr></table></figure></p>
+<h3 id="start方法"><a href="#start方法" class="headerlink" title="start方法"></a>start方法</h3><p>我们查看<code>BaseManager.start</code>方法，首先创建了一个<code>Process</code>，并通过<code>connection.Pipe</code>和这个子进程进行通信。关于这个管道的实现，在后面进行说明。<br><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># managers.py</span></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">start</span><span class="params">(self, initializer=None, initargs=<span class="params">()</span>)</span>:</span></span><br><span class="line">    <span class="string">'''</span></span><br><span class="line"><span class="string">    Spawn a server process for this manager object</span></span><br><span class="line"><span class="string">    '''</span></span><br><span class="line">    <span class="keyword">assert</span> self._state.value == State.INITIAL</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> initializer <span class="keyword">is</span> <span class="keyword">not</span> <span class="keyword">None</span> <span class="keyword">and</span> <span class="keyword">not</span> hasattr(initializer, <span class="string">'__call__'</span>):</span><br><span class="line">        <span class="keyword">raise</span> TypeError(<span class="string">'initializer must be a callable'</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># pipe over which we will retrieve address of server</span></span><br><span class="line">    reader, writer = connection.Pipe(duplex=<span class="keyword">False</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># spawn process which runs a server</span></span><br><span class="line">    self._process = Process(</span><br><span class="line">        target=type(self)._run_server,</span><br><span class="line">        args=(self._registry, self._address, self._authkey,</span><br><span class="line">              self._serializer, writer, initializer, initargs),</span><br><span class="line">        )</span><br><span class="line">    ident = <span class="string">':'</span>.join(str(i) <span class="keyword">for</span> i <span class="keyword">in</span> self._process._identity)</span><br><span class="line">    self._process.name = type(self).__name__  + <span class="string">'-'</span> + ident</span><br><span class="line">    self._process.start()</span><br><span class="line">    ...</span><br></pre></td></tr></table></figure></p>
+<ol>
+<li><code>self._registry</code><br> 这个就是之前在<code>register</code>方法中保存下来的<code>_registry</code>字典。</li>
+<li><code>self._address</code>来自于<code>BaseManager</code>的<code>__init__</code></li>
+<li><code>self._authkey</code>来自于<code>BaseManager</code>的<code>__init__</code></li>
+</ol>
+<p>下面暂停对<code>start</code>的阅读，而step in查看<code>Process</code>中执行的主函数<code>_run_server</code>，可以看到在这个方法中：</p>
+<ol>
+<li>首先执行<code>initializer</code>，这个<code>initializer</code>是<code>start</code>在<code>args</code>里面传进来的，如果是从<code>__init__.py</code>调用的，那么就是<code>None</code></li>
+<li>创建一个<code>Server</code>对象<code>_Server</code></li>
+<li>向管道里面写入<code>server.address</code>，这个会被在主进程的<code>reader</code>读取</li>
+<li>调用<code>serve_forever</code><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@classmethod</span></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">_run_server</span><span class="params">(cls, registry, address, authkey, serializer, writer,</span></span></span><br><span class="line"><span class="function"><span class="params">                initializer=None, initargs=<span class="params">()</span>)</span>:</span></span><br><span class="line">    <span class="string">'''</span></span><br><span class="line"><span class="string">    Create a server, report its address and run it</span></span><br><span class="line"><span class="string">    '''</span></span><br><span class="line">    <span class="keyword">if</span> initializer <span class="keyword">is</span> <span class="keyword">not</span> <span class="keyword">None</span>:</span><br><span class="line">        initializer(*initargs)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># create server</span></span><br><span class="line">    server = cls._Server(registry, address, authkey, serializer)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># inform parent process of the server's address</span></span><br><span class="line">    writer.send(server.address)</span><br><span class="line">    writer.close()</span><br><span class="line"></span><br><span class="line">    <span class="comment"># run the manager</span></span><br><span class="line">    util.info(<span class="string">'manager serving at %r'</span>, server.address)</span><br><span class="line">    server.serve_forever()</span><br></pre></td></tr></table></figure>
+</li>
+</ol>
+<p>关于<code>Server</code>类，我们稍后来查看，现在我们继续看完<code>start</code><br><figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 继续start方法</span></span><br><span class="line">    <span class="built_in">..</span>.</span><br><span class="line">    # <span class="builtin-name">get</span><span class="built_in"> address </span>of server</span><br><span class="line">    writer.close()</span><br><span class="line">    self._address = reader.recv()</span><br><span class="line">    reader.close()</span><br><span class="line"></span><br><span class="line">    # register a finalizer</span><br><span class="line">    self._state.value = State.STARTED</span><br><span class="line">    self.shutdown = util.Finalize(</span><br><span class="line">        self, type(self)._finalize_manager,</span><br><span class="line">        args=(self._process, self._address, self._authkey,</span><br><span class="line">              self._state, self._Client),</span><br><span class="line">        <span class="attribute">exitpriority</span>=0</span><br><span class="line">        )</span><br></pre></td></tr></table></figure></p>
+<p>额外说明一下，这里的<code>shutdown</code>在<code>__exit__</code>中被调用。这里的<code>__enter__</code>和<code>__exit__</code>被用来实现<code>with</code><br><figure class="highlight ruby"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">__enter__</span><span class="params">(<span class="keyword">self</span>)</span></span><span class="symbol">:</span></span><br><span class="line">    <span class="keyword">return</span> <span class="keyword">self</span></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">__exit__</span><span class="params">(<span class="keyword">self</span>, exc_type, exc_val, exc_tb)</span></span><span class="symbol">:</span></span><br><span class="line">    <span class="keyword">self</span>.shutdown()</span><br></pre></td></tr></table></figure></p>
+<p>实际上，<code>util.Finalize</code>是调用<code>type(self)._finalize_manager</code>，使用<code>type(self)</code>是因为<code>_finalize_manager</code>是一个类方法。一般涉及到<code>Process</code>有关的函数，都不能是带有上下文的，而必须是自由函数。在<code>_finalize_manager</code>中主要就是先创建一个<code>_Client</code>，向<code>Server</code>进程<code>self._process</code>发送<code>shutdown</code>指令，接着尝试join这个进程。如果在0.2秒之后这个进程还在的话，就尝试去<code>terminate</code>它。从<code>Process</code>源码来看，它是始终有<code>terminate</code>这个方法的，不知道为啥还需要<code>hasattr</code>来判断下。<br><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@staticmethod</span></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">_finalize_manager</span><span class="params">(process, address, authkey, state, _Client)</span>:</span></span><br><span class="line">    <span class="string">'''</span></span><br><span class="line"><span class="string">    Shutdown the manager process; will be registered as a finalizer</span></span><br><span class="line"><span class="string">    '''</span></span><br><span class="line">    <span class="keyword">if</span> process.is_alive():</span><br><span class="line">        util.info(<span class="string">'sending shutdown message to manager'</span>)</span><br><span class="line">        <span class="keyword">try</span>:</span><br><span class="line">            conn = _Client(address, authkey=authkey)</span><br><span class="line">            <span class="keyword">try</span>:</span><br><span class="line">                dispatch(conn, <span class="keyword">None</span>, <span class="string">'shutdown'</span>)</span><br><span class="line">            <span class="keyword">finally</span>:</span><br><span class="line">                conn.close()</span><br><span class="line">        <span class="keyword">except</span> Exception:</span><br><span class="line">            <span class="keyword">pass</span></span><br><span class="line"></span><br><span class="line">        process.join(timeout=<span class="number">0.2</span>)</span><br><span class="line">        <span class="keyword">if</span> process.is_alive():</span><br><span class="line">            util.info(<span class="string">'manager still alive'</span>)</span><br><span class="line">            <span class="keyword">if</span> hasattr(process, <span class="string">'terminate'</span>):</span><br><span class="line">                util.info(<span class="string">'trying to `terminate()` manager process'</span>)</span><br><span class="line">                process.terminate()</span><br><span class="line">                process.join(timeout=<span class="number">0.1</span>)</span><br><span class="line">                <span class="keyword">if</span> process.is_alive():</span><br><span class="line">                    util.info(<span class="string">'manager still alive after terminate'</span>)</span><br><span class="line"></span><br><span class="line">    state.value = State.SHUTDOWN</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        <span class="keyword">del</span> BaseProxy._address_to_local[address]</span><br><span class="line">    <span class="keyword">except</span> KeyError:</span><br><span class="line">        <span class="keyword">pass</span></span><br></pre></td></tr></table></figure></p>
+<h3 id="Server"><a href="#Server" class="headerlink" title="Server"></a>Server</h3><p>先前围绕<code>BaseManager</code>类讨论了Server部分的初始化和析构。现在我们来看<code>Server</code>这个对象，以便了解它具体负责的内容。<br>首先，照例是构造函数，包含了和套接口API很像的Listener。后面的<code>id_to_obj</code>就是Server所维护的所有共享对象了。<code>id_to_obj</code>是一个dict，它的key是由<code>&#39;%x&#39; % id(obj)</code>来生成的，之所以需要转换成字符串类型是因为<code>xmlrpclib</code>这个库只支持32位的int，所以用str保险一点（当然之前提到，实际用的是pickle）。<code>id_to_refcount</code>则用来标记每个obj的生命周期。<br><figure class="highlight ruby"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># managers.py</span></span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Server</span>(<span class="title">object</span>):</span></span><br><span class="line">    <span class="string">''</span><span class="string">'</span></span><br><span class="line"><span class="string">    Server class which runs in a process controlled by a manager object</span></span><br><span class="line"><span class="string">    '</span><span class="string">''</span></span><br><span class="line">    public = [<span class="string">'shutdown'</span>, <span class="string">'create'</span>, <span class="string">'accept_connection'</span>, <span class="string">'get_methods'</span>,</span><br><span class="line">              <span class="string">'debug_info'</span>, <span class="string">'number_of_objects'</span>, <span class="string">'dummy'</span>, <span class="string">'incref'</span>, <span class="string">'decref'</span>]</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">def</span> <span class="title">__init__</span><span class="params">(<span class="keyword">self</span>, registry, address, authkey, serializer)</span></span><span class="symbol">:</span></span><br><span class="line">        assert isinstance(authkey, bytes)</span><br><span class="line">        <span class="keyword">self</span>.registry = registry</span><br><span class="line">        <span class="keyword">self</span>.authkey = AuthenticationString(authkey)</span><br><span class="line">        Listener, Client = listener_client[serializer]</span><br><span class="line"></span><br><span class="line">        <span class="comment"># do authentication later</span></span><br><span class="line">        <span class="keyword">self</span>.listener = Listener(address=address, backlog=<span class="number">16</span>)</span><br><span class="line">        <span class="keyword">self</span>.address = <span class="keyword">self</span>.listener.address</span><br><span class="line"></span><br><span class="line">        <span class="keyword">self</span>.id_to_obj = &#123;<span class="string">'0'</span>: (None, ())&#125;</span><br><span class="line">        <span class="keyword">self</span>.id_to_refcount = &#123;&#125;</span><br><span class="line">        <span class="keyword">self</span>.mutex = threading.RLock()</span><br><span class="line">        <span class="keyword">self</span>.stop = <span class="number">0</span></span><br></pre></td></tr></table></figure></p>
+<p>回忆前面的内容，Client会调用<code>dispatch(conn, None, &#39;create&#39;, (typeid,)+args, kwds)</code>来通知子进程创建一个共享对象。看源码显而易见，肯定最终是调用<code>Server.create</code>这个方法的，但在这之前，会经过一个<code>serve_client</code>方法分发的过程。<br><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># managers.py</span></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">accept_connection</span><span class="params">(self, c, name)</span>:</span></span><br><span class="line">    <span class="string">'''</span></span><br><span class="line"><span class="string">    Spawn a new thread to serve this connection</span></span><br><span class="line"><span class="string">    '''</span></span><br><span class="line">    threading.current_thread().name = name</span><br><span class="line">    c.send((<span class="string">'#RETURN'</span>, <span class="keyword">None</span>))</span><br><span class="line">    self.serve_client(c)</span><br><span class="line">    </span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">serve_client</span><span class="params">(self, conn)</span>:</span></span><br><span class="line">        <span class="string">'''</span></span><br><span class="line"><span class="string">        Handle requests from the proxies in a particular process/thread</span></span><br><span class="line"><span class="string">        '''</span></span><br><span class="line">        util.debug(<span class="string">'starting server thread to service %r'</span>,</span><br><span class="line">                   threading.current_thread().name)</span><br><span class="line"></span><br><span class="line">        recv = conn.recv</span><br><span class="line">        send = conn.send</span><br><span class="line">        id_to_obj = self.id_to_obj</span><br><span class="line"></span><br><span class="line">        <span class="keyword">while</span> <span class="keyword">not</span> self.stop:</span><br><span class="line"></span><br><span class="line">            <span class="keyword">try</span>:</span><br><span class="line">                methodname = obj = <span class="keyword">None</span></span><br><span class="line">                request = recv()</span><br><span class="line">                ident, methodname, args, kwds = request</span><br><span class="line">                obj, exposed, gettypeid = id_to_obj[ident]</span><br><span class="line"></span><br><span class="line">                <span class="keyword">if</span> methodname <span class="keyword">not</span> <span class="keyword">in</span> exposed:</span><br><span class="line">                    <span class="keyword">raise</span> AttributeError(</span><br><span class="line">                        <span class="string">'method %r of %r object is not in exposed=%r'</span> %</span><br><span class="line">                        (methodname, type(obj), exposed)</span><br><span class="line">                        )</span><br><span class="line"></span><br><span class="line">                function = getattr(obj, methodname)</span><br><span class="line"></span><br><span class="line">                <span class="keyword">try</span>:</span><br><span class="line">                    res = function(*args, **kwds)</span><br><span class="line">                <span class="keyword">except</span> Exception, e:</span><br><span class="line">                    msg = (<span class="string">'#ERROR'</span>, e)</span><br><span class="line">                <span class="keyword">else</span>:</span><br><span class="line">                    typeid = gettypeid <span class="keyword">and</span> gettypeid.get(methodname, <span class="keyword">None</span>)</span><br><span class="line">                    <span class="keyword">if</span> typeid:</span><br><span class="line">                        rident, rexposed = self.create(conn, typeid, res)</span><br><span class="line">                        token = Token(typeid, self.address, rident)</span><br><span class="line">                        msg = (<span class="string">'#PROXY'</span>, (rexposed, token))</span><br><span class="line">                    <span class="keyword">else</span>:</span><br><span class="line">                        msg = (<span class="string">'#RETURN'</span>, res)</span><br><span class="line"></span><br><span class="line">            <span class="keyword">except</span> AttributeError:</span><br><span class="line">...</span><br></pre></td></tr></table></figure></p>
+<h2 id="Proxy"><a href="#Proxy" class="headerlink" title="Proxy"></a>Proxy</h2><p>下面我们来看Proxy部分的实现。在<code>SyncManager.register(&#39;dict&#39;, dict, DictProxy)</code>中用到的<code>DictProxy</code>是由<code>MakeProxyType</code>来生成的，这个函数就是一个创建类的简易的“宏”。它创建名字为<code>name</code>的类，继承自<code>BaseProxy</code>，并且传入一个tuple作为这个子类所拥有的方法。对于每个方法，实际调用<code>BaseProxy</code>里面的<code>_callmethod</code>来执行。<br><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line">DictProxy = MakeProxyType(<span class="string">'DictProxy'</span>, (</span><br><span class="line">    <span class="string">'__contains__'</span>, <span class="string">'__delitem__'</span>, <span class="string">'__getitem__'</span>, <span class="string">'__len__'</span>,</span><br><span class="line">    <span class="string">'__setitem__'</span>, <span class="string">'clear'</span>, <span class="string">'copy'</span>, <span class="string">'get'</span>, <span class="string">'has_key'</span>, <span class="string">'items'</span>,</span><br><span class="line">    <span class="string">'keys'</span>, <span class="string">'pop'</span>, <span class="string">'popitem'</span>, <span class="string">'setdefault'</span>, <span class="string">'update'</span>, <span class="string">'values'</span></span><br><span class="line">    ))</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">MakeProxyType</span><span class="params">(name, exposed, _cache=&#123;&#125;)</span>:</span></span><br><span class="line">    <span class="string">'''</span></span><br><span class="line"><span class="string">    Return an proxy type whose methods are given by `exposed`</span></span><br><span class="line"><span class="string">    '''</span></span><br><span class="line">    exposed = tuple(exposed)</span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        <span class="keyword">return</span> _cache[(name, exposed)]</span><br><span class="line">    <span class="keyword">except</span> KeyError:</span><br><span class="line">        <span class="keyword">pass</span></span><br><span class="line"></span><br><span class="line">    dic = &#123;&#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> meth <span class="keyword">in</span> exposed:</span><br><span class="line">        <span class="comment"># 直接eval`def`语句来创建这个方法</span></span><br><span class="line">        <span class="keyword">exec</span> <span class="string">'''def %s(self, *args, **kwds):</span></span><br><span class="line"><span class="string">        return self._callmethod(%r, args, kwds)'''</span> % (meth, meth) <span class="keyword">in</span> dic <span class="comment"># exec ... in 用法</span></span><br><span class="line"></span><br><span class="line">    <span class="comment"># 输入(类名、基类、类内定义的命名空间变量的字典)，返回新的类型</span></span><br><span class="line">    ProxyType = type(name, (BaseProxy,), dic)</span><br><span class="line">    ProxyType._exposed_ = exposed</span><br><span class="line">    _cache[(name, exposed)] = ProxyType</span><br><span class="line">    <span class="keyword">return</span> ProxyType</span><br></pre></td></tr></table></figure></p>
+<p>下面，我们来看看<code>BaseProxy</code>这个类是如何通过<code>_callmethod</code>转发方法的。可以看到，<code>BaseProxy</code>通过<code>self._tls.connection.send()</code>这个方法将需要调用的方法发送出去，看起来这个<code>_tls</code>就是个套接口了。<br><figure class="highlight oxygene"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line">def _callmethod(<span class="keyword">self</span>, methodname, args=(), kwds=<span class="comment">&#123;&#125;</span>):</span><br><span class="line">    <span class="string">'''</span></span><br><span class="line"><span class="string">    Try to call a method of the referrent and return a copy of the result</span></span><br><span class="line"><span class="string">    '''</span></span><br><span class="line">    <span class="keyword">try</span>:</span><br><span class="line">        conn = <span class="keyword">self</span>._tls.connection</span><br><span class="line">    <span class="keyword">except</span> AttributeError:</span><br><span class="line">        util.debug(<span class="string">'thread %r does not own a connection'</span>,</span><br><span class="line">                   threading.current_thread().name)</span><br><span class="line">        <span class="keyword">self</span>._connect()</span><br><span class="line">        conn = <span class="keyword">self</span>._tls.connection</span><br><span class="line"></span><br><span class="line">    conn.send((<span class="keyword">self</span>._id, methodname, args, kwds))</span><br><span class="line">    kind, <span class="keyword">result</span> = conn.recv()</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> kind == <span class="string">'#RETURN'</span>:</span><br><span class="line">        return <span class="keyword">result</span></span><br><span class="line">    elif kind == <span class="string">'#PROXY'</span>:</span><br><span class="line">        exposed, token = <span class="keyword">result</span></span><br><span class="line">        proxytype = <span class="keyword">self</span>._manager._registry[token.typeid][-<span class="number">1</span>]</span><br><span class="line">        token.address = <span class="keyword">self</span>._token.address</span><br><span class="line">        proxy = proxytype(</span><br><span class="line">            token, <span class="keyword">self</span>._serializer, manager=<span class="keyword">self</span>._manager,</span><br><span class="line">            authkey=<span class="keyword">self</span>._authkey, exposed=exposed</span><br><span class="line">            )</span><br><span class="line">        conn = <span class="keyword">self</span>._Client(token.address, authkey=<span class="keyword">self</span>._authkey)</span><br><span class="line">        dispatch(conn, None, <span class="string">'decref'</span>, (token.id,))</span><br><span class="line">        return proxy</span><br><span class="line">    <span class="keyword">raise</span> convert_to_error(kind, <span class="keyword">result</span>)</span><br></pre></td></tr></table></figure></p>
+<p>我们查看<code>BaseProxy</code>的初始化部分，看看<code>_tls</code>是何方神圣<br><figure class="highlight oxygene"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> BaseProxy(object):</span><br><span class="line">    <span class="string">'''</span></span><br><span class="line"><span class="string">    A base for proxies of shared objects</span></span><br><span class="line"><span class="string">    '''</span></span><br><span class="line">    _address_to_local = <span class="comment">&#123;&#125;</span></span><br><span class="line">    # 能在Fork后正常工作的锁</span><br><span class="line">    _mutex = util.ForkAwareThreadLock()</span><br><span class="line"></span><br><span class="line">    def __init__(<span class="keyword">self</span>, token, serializer, manager=None,</span><br><span class="line">                 authkey=None, exposed=None, incref=<span class="keyword">True</span>):</span><br><span class="line">        BaseProxy._mutex.acquire()</span><br><span class="line">        <span class="keyword">try</span>:</span><br><span class="line">            tls_idset = BaseProxy._address_to_local.get(token.address, None)</span><br><span class="line">            <span class="keyword">if</span> tls_idset <span class="keyword">is</span> None:</span><br><span class="line">                tls_idset = util.ForkAwareLocal(), ProcessLocalSet()</span><br><span class="line">                BaseProxy._address_to_local[token.address] = tls_idset</span><br><span class="line">        <span class="keyword">finally</span>:</span><br><span class="line">            BaseProxy._mutex.release()</span><br><span class="line"></span><br><span class="line">        # <span class="keyword">self</span>._tls <span class="keyword">is</span> used <span class="keyword">to</span> <span class="keyword">record</span> the connection used <span class="keyword">by</span> this</span><br><span class="line">        # thread <span class="keyword">to</span> communicate <span class="keyword">with</span> the manager at token.address</span><br><span class="line">        <span class="keyword">self</span>._tls = tls_idset[<span class="number">0</span>]</span><br><span class="line"></span><br><span class="line">        # <span class="keyword">self</span>._idset <span class="keyword">is</span> used <span class="keyword">to</span> <span class="keyword">record</span> the identities <span class="keyword">of</span> all shared</span><br><span class="line">        # objects <span class="keyword">for</span> which the current process owns references <span class="keyword">and</span></span><br><span class="line">        # which are <span class="keyword">in</span> the manager at token.address</span><br><span class="line">        <span class="keyword">self</span>._idset = tls_idset[<span class="number">1</span>]</span><br><span class="line"></span><br><span class="line">        <span class="keyword">self</span>._token = token</span><br><span class="line">        <span class="keyword">self</span>._id = <span class="keyword">self</span>._token.id</span><br><span class="line">        <span class="keyword">self</span>._manager = manager</span><br><span class="line">        <span class="keyword">self</span>._serializer = serializer</span><br><span class="line">        <span class="keyword">self</span>._Client = listener_client[serializer][<span class="number">1</span>]</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> authkey <span class="keyword">is</span> <span class="keyword">not</span> None:</span><br><span class="line">            <span class="keyword">self</span>._authkey = AuthenticationString(authkey)</span><br><span class="line">        elif <span class="keyword">self</span>._manager <span class="keyword">is</span> <span class="keyword">not</span> None:</span><br><span class="line">            <span class="keyword">self</span>._authkey = <span class="keyword">self</span>._manager._authkey</span><br><span class="line">        <span class="keyword">else</span>:</span><br><span class="line">            <span class="keyword">self</span>._authkey = current_process().authkey</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> incref:</span><br><span class="line">            <span class="keyword">self</span>._incref()</span><br><span class="line"></span><br><span class="line">        util.register_after_fork(<span class="keyword">self</span>, BaseProxy._after_fork)</span><br></pre></td></tr></table></figure></p>
+<h1 id="补充"><a href="#补充" class="headerlink" title="补充"></a>补充</h1><h2 id="Manager的Util部分"><a href="#Manager的Util部分" class="headerlink" title="Manager的Util部分"></a>Manager的Util部分</h2><p>看看这个<code>ForkAwareThreadLock</code>实现<br><figure class="highlight ruby"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">ForkAwareThreadLock</span>(<span class="title">object</span>):</span></span><br><span class="line">    <span class="function"><span class="keyword">def</span> <span class="title">__init__</span><span class="params">(<span class="keyword">self</span>)</span></span><span class="symbol">:</span></span><br><span class="line">        <span class="keyword">self</span>._reset()</span><br><span class="line">        <span class="comment"># 在每次fork之后都要reset</span></span><br><span class="line">        register_after_fork(<span class="keyword">self</span>, ForkAwareThreadLock._reset)</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">def</span> <span class="title">_reset</span><span class="params">(<span class="keyword">self</span>)</span></span><span class="symbol">:</span></span><br><span class="line">        <span class="keyword">self</span>._lock = threading.Lock()</span><br><span class="line">        <span class="keyword">self</span>.acquire = <span class="keyword">self</span>._lock.acquire</span><br><span class="line">        <span class="keyword">self</span>.release = <span class="keyword">self</span>._lock.release</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">register_after_fork</span><span class="params">(obj, func)</span></span><span class="symbol">:</span></span><br><span class="line">    _afterfork_registry[(_afterfork_counter.<span class="keyword">next</span>(), id(obj), func)] = obj</span><br><span class="line"></span><br><span class="line"><span class="comment"># 弱引用键的映射类。 当不再有对键的强引用时字典中的条目将被丢弃。</span></span><br><span class="line">_afterfork_registry = weakref.WeakValueDictionary()</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">_run_after_forkers</span><span class="params">()</span></span><span class="symbol">:</span></span><br><span class="line">    <span class="comment"># 在fork之后执行</span></span><br><span class="line">    items = list(_afterfork_registry.items())</span><br><span class="line">    items.sort()</span><br><span class="line">    <span class="keyword">for</span> (index, ident, func), obj <span class="keyword">in</span> <span class="symbol">items:</span></span><br><span class="line">        <span class="symbol">try:</span></span><br><span class="line">            func(obj)</span><br><span class="line">        except Exception, <span class="symbol">e:</span></span><br><span class="line">            info(<span class="string">'after forker raised exception %s'</span>, e)</span><br></pre></td></tr></table></figure></p>
+<p>这里需要跟踪fork之后锁的原因是<a href="https://linux.die.net/man/2/fork" target="_blank" rel="noopener">The child process is created with a single thread–the one that called fork()</a>，因此可能拥有锁的子线程并不在子进程之中。<br>可以发现，在fork之后，会执行<code>_run_after_forkers</code>方法，这个方法会遍历出<code>_afterfork_registry</code>中的所含有lock，并且将它们换成新的<code>threading.Lock()</code></p>
+<h2 id="connection-Pipe实现"><a href="#connection-Pipe实现" class="headerlink" title="connection.Pipe实现"></a>connection.Pipe实现</h2><p>可以想象，根据是否是POSIX系统分为了两种实现。根据<code>sys.platform</code>来判断系统类型。</p>
+<h3 id="POSIX"><a href="#POSIX" class="headerlink" title="POSIX"></a>POSIX</h3><p>对于POSIX系统，借助<code>socketpair</code>实现双向管道，<code>pipe</code>实现单向管道。相比于popen和pclose，<a href="https://www.ibm.com/developerworks/cn/linux/l-pipebid/index.html" target="_blank" rel="noopener">socketpair直接提供了一个双向的读写管道</a>。<br>我们知道可以通过<code>dup2</code>来进行重定向，例如<code>dup2(f, STDOUT_FILENO)</code>可以将标准输出指向文件<code>f</code>。那么这里为什么要复制一份<code>s1.fileno()</code>并来创建一个<code>_multiprocessing.Connection</code>对象呢？<br><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> multiprocessing</span><br><span class="line"><span class="keyword">import</span> _multiprocessing</span><br><span class="line"><span class="keyword">import</span> socket</span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">Pipe</span><span class="params">(duplex=True)</span>:</span></span><br><span class="line">    <span class="string">'''</span></span><br><span class="line"><span class="string">    Returns pair of connection objects at either end of a pipe</span></span><br><span class="line"><span class="string">    '''</span></span><br><span class="line">    <span class="keyword">if</span> duplex:</span><br><span class="line">        s1, s2 = socket.socketpair()</span><br><span class="line">        s1.setblocking(<span class="keyword">True</span>)</span><br><span class="line">        s2.setblocking(<span class="keyword">True</span>)</span><br><span class="line">        c1 = _multiprocessing.Connection(os.dup(s1.fileno()))</span><br><span class="line">        c2 = _multiprocessing.Connection(os.dup(s2.fileno()))</span><br><span class="line">        s1.close()</span><br><span class="line">        s2.close()</span><br><span class="line">    <span class="keyword">else</span>:</span><br><span class="line">        fd1, fd2 = os.pipe()</span><br><span class="line">        c1 = _multiprocessing.Connection(fd1, writable=<span class="keyword">False</span>)</span><br><span class="line">        c2 = _multiprocessing.Connection(fd2, readable=<span class="keyword">False</span>)</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> c1, c2</span><br></pre></td></tr></table></figure></p>
+<p>要想研究这个问题，需要查看<code>_multiprocessing.Connection</code>这个用C实现的模块。<br>通过观察<code>_multiprocessing</code>下面的目录结构可以看出，它会在c文件里面写上一堆特化的实现，然后在最后<code>#include connection.h</code>来做一个公共的实现。从<code>#define CONNECTION_NAME &quot;Connection&quot;</code>可以看出，<code>_multiprocessing.Connection</code>实际上是<code>socket_connection</code>。<br>分析一个模块，首先要找它的<code>PyMODINIT_FUNC</code>函数、<code>PyMethodDef</code>结构、<code>PyModuleDef</code>结构。但<code>_multiprocessing.Connection</code>被定义为一个对象，所以我们分析它的<code>PyVarObject_HEAD_INIT(NULL, 0)</code>的定义。可以看到，它的初始化方法是<code>connection_new</code>。</p>
+<p><a href="/asset/multiprocessing/test.py">我们尝试了下面的代码</a>，发现在Linux下面抛出<code>IOError: [Errno 9] Bad file descriptor</code>的错误。因此可以猜测到<code>s1</code>和<code>s2</code>在销毁时会释放自己的fd，这里提前复制一份出来是单纯为了复用这两个fd。</p>
+<h3 id="WINDOWS"><a href="#WINDOWS" class="headerlink" title="WINDOWS"></a>WINDOWS</h3><p>对于WINDOWS系统，借助于<code>CreateNamedPipe</code>实现。</p>
+<h1 id="注意事项"><a href="#注意事项" class="headerlink" title="注意事项"></a>注意事项</h1><p><code>multiprocessing.Manager()</code>的<code>dict()</code>不可以嵌套，也就是说下面的语句实际上会报错<br><figure class="highlight prolog"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line">def inner(metainfo):</span><br><span class="line">    metainfo[<span class="string">'mvp_info'</span>][<span class="string">"a"</span>] = <span class="number">123</span></span><br><span class="line">    print metainfo[<span class="string">'mvp_info'</span>][<span class="string">"a"</span>]</span><br><span class="line"></span><br><span class="line">if <span class="symbol">__name__</span> == <span class="string">"__main__"</span>:</span><br><span class="line">    global global_manager</span><br><span class="line"></span><br><span class="line">    global_manager = multiprocessing.<span class="symbol">Manager</span>()</span><br><span class="line"></span><br><span class="line">    metainfo = global_manager.dict()</span><br><span class="line">    metainfo[<span class="string">'mvp_info'</span>] = global_manager.dict()</span><br><span class="line">    metainfo[<span class="string">'mvp_info'</span>][<span class="string">"a"</span>] = <span class="number">100</span></span><br><span class="line">    print metainfo[<span class="string">'mvp_info'</span>][<span class="string">"a"</span>]</span><br><span class="line">    p = <span class="symbol">Process</span>(target=inner, args=(metainfo, ))</span><br><span class="line">    p.start()</span><br><span class="line">    p.join()</span><br><span class="line">    print metainfo[<span class="string">'mvp_info'</span>][<span class="string">"a"</span>]</span><br></pre></td></tr></table></figure></p>
+<h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1>
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/并行计算/" rel="tag"># 并行计算</a>
+          
+            <a href="/tags/多线程/" rel="tag"># 多线程</a>
+          
+            <a href="/tags/Python/" rel="tag"># Python</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2019/08/10/python-matplotlib-animation/" rel="next" title="使用matplotlib制作动态图表">
+                <i class="fa fa-chevron-left"></i> 使用matplotlib制作动态图表
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2019/12/22/factorio-cmd/" rel="prev" title="异星工厂常用命令介绍">
+                异星工厂常用命令介绍 <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">161</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">154</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Manager"><span class="nav-number">1.</span> <span class="nav-text">Manager</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#SyncManager和BaseManager"><span class="nav-number">1.1.</span> <span class="nav-text">SyncManager和BaseManager</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#register"><span class="nav-number">1.2.</span> <span class="nav-text">register</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#创建共享对象（Client）"><span class="nav-number">1.3.</span> <span class="nav-text">创建共享对象（Client）</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#create"><span class="nav-number">1.3.1.</span> <span class="nav-text">_create</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#dispatch函数"><span class="nav-number">1.3.2.</span> <span class="nav-text">dispatch函数</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#proxy"><span class="nav-number">1.3.3.</span> <span class="nav-text">proxy</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#创建共享对象（Server）"><span class="nav-number">1.4.</span> <span class="nav-text">创建共享对象（Server）</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#构造函数"><span class="nav-number">1.4.1.</span> <span class="nav-text">构造函数</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#start方法"><span class="nav-number">1.4.2.</span> <span class="nav-text">start方法</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Server"><span class="nav-number">1.4.3.</span> <span class="nav-text">Server</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Proxy"><span class="nav-number">1.5.</span> <span class="nav-text">Proxy</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#补充"><span class="nav-number">2.</span> <span class="nav-text">补充</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Manager的Util部分"><span class="nav-number">2.1.</span> <span class="nav-text">Manager的Util部分</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#connection-Pipe实现"><span class="nav-number">2.2.</span> <span class="nav-text">connection.Pipe实现</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#POSIX"><span class="nav-number">2.2.1.</span> <span class="nav-text">POSIX</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#WINDOWS"><span class="nav-number">2.2.2.</span> <span class="nav-text">WINDOWS</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#注意事项"><span class="nav-number">3.</span> <span class="nav-text">注意事项</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">4.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2021</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2019/11/23/multiprocessing-implement/';
+          this.page.identifier = '2019/11/23/multiprocessing-implement/';
+          this.page.title = 'multiprocessing模块实现';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+  
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Config({
+        tex2jax: {
+          inlineMath: [ ['$','$'], ["\\(","\\)"]  ],
+          processEscapes: true,
+          skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+        }
+      });
+    </script>
+
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax(), i;
+        for (i=0; i < all.length; i += 1) {
+          all[i].SourceElement().parentNode.className += ' has-jax';
+        }
+      });
+    </script>
+    <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+  
+
+
+  
+
+  
+
+</body>
+</html>

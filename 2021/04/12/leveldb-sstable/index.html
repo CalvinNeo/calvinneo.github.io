@@ -1,0 +1,1387 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="leveldb," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="本文介绍LevelDB的SSTable相关功能。SSTable是LevelDB的内存数据结构。当一个Memtable满之后，会被变成Immutable Memtable，并写入SSTable Level0。Level0的SSTable是没有经过归并的，各个Key可能互相重叠。经过Compaction达到Level1之后，就是有序的了。">
+<meta name="keywords" content="leveldb">
+<meta property="og:type" content="article">
+<meta property="og:title" content="LevelDB之SSTable实现">
+<meta property="og:url" content="http://www.calvinneo.com/2021/04/12/leveldb-sstable/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="本文介绍LevelDB的SSTable相关功能。SSTable是LevelDB的内存数据结构。当一个Memtable满之后，会被变成Immutable Memtable，并写入SSTable Level0。Level0的SSTable是没有经过归并的，各个Key可能互相重叠。经过Compaction达到Level1之后，就是有序的了。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:image" content="http://www.calvinneo.com/img/leveldb/sstable/suf.png">
+<meta property="og:updated_time" content="2021-04-14T09:43:55.607Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="LevelDB之SSTable实现">
+<meta name="twitter:description" content="本文介绍LevelDB的SSTable相关功能。SSTable是LevelDB的内存数据结构。当一个Memtable满之后，会被变成Immutable Memtable，并写入SSTable Level0。Level0的SSTable是没有经过归并的，各个Key可能互相重叠。经过Compaction达到Level1之后，就是有序的了。">
+<meta name="twitter:image" content="http://www.calvinneo.com/img/leveldb/sstable/suf.png">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2021/04/12/leveldb-sstable/"/>
+
+
+
+
+
+  <title>LevelDB之SSTable实现 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2021/04/12/leveldb-sstable/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                LevelDB之SSTable实现
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2021-04-12T23:09:06+08:00">
+                2021-04-12
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>本文介绍LevelDB的SSTable相关功能。<br>SSTable是LevelDB的内存数据结构。当一个Memtable满之后，会被变成Immutable Memtable，并写入SSTable Level0。Level0的SSTable是没有经过归并的，各个Key可能互相重叠。经过Compaction达到Level1之后，就是有序的了。</p>
+<a id="more"></a>
+<h1 id="SSTable格式"><a href="#SSTable格式" class="headerlink" title="SSTable格式"></a>SSTable格式</h1><p>SSTable体现在后缀为.sst或者.ldb的文件。<br>其实在<a href="https://github.com/google/leveldb/blob/master/doc/table_format.md" target="_blank" rel="noopener">官方文档</a>中，对SSTable的格式已经有了介绍。<br><figure class="highlight armasm"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">&lt;<span class="keyword">beginning_of_file&gt;</span></span><br><span class="line"><span class="keyword">[data </span><span class="keyword">block </span><span class="number">1</span>]</span><br><span class="line">[<span class="meta">data</span> <span class="keyword">block </span><span class="number">2</span>]</span><br><span class="line"><span class="symbol">...</span></span><br><span class="line">[<span class="meta">data</span> <span class="keyword">block </span>N]</span><br><span class="line">[meta <span class="keyword">block </span><span class="number">1</span>]</span><br><span class="line"><span class="symbol">...</span></span><br><span class="line">[meta <span class="keyword">block </span>K]</span><br><span class="line">[metaindex <span class="keyword">block]</span></span><br><span class="line"><span class="keyword">[index </span><span class="keyword">block]</span></span><br><span class="line"><span class="keyword">[Footer] </span>       (fixed size<span class="comment">; starts at file_size - sizeof(Footer))</span></span><br><span class="line">&lt;end_of_file&gt;</span><br></pre></td></tr></table></figure></p>
+<ol>
+<li>data block<br> 放KV对，是有序的（doc里面说的）。因此在查询SSTable文件的时候，也可以二分。【待确认】<br> 关于Block的组织，我们将专门讨论。</li>
+<li>meta block<br> 用来快速定位key是否在data block中</li>
+<li><p>metaindex block<br> 每个metaindex block一条记录。其中K是meta block的名字，V是指向这个meta block的BlockHandle。<br> BlockHandle类似于指针，具有下面的结构。容易看到，这里面也用了VarInt结构。</p>
+ <figure class="highlight avrasm"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="symbol">offset:</span>   varint64</span><br><span class="line"><span class="symbol">size:</span>     varint64</span><br></pre></td></tr></table></figure>
+<p> 有两种meta block类型，filter和stats:</p>
+<ol>
+<li>如果在数据库启动时指定了某个<code>FilterPolicy</code>，就会创建一个filter block。</li>
+<li>统计信息</li>
+</ol>
+</li>
+<li>index block<br> 每个data block一条entry。这个index block entry的<code>.key()</code><strong>大于等于</strong>指向的data block最后一个K【性质1】，但是<strong>严格小于</strong>下一个data block的第一个K【性质2】。<br> 因此，我们可以通过和index block比较来快速定位data block。</li>
+<li>footer<br> 包含：<ol>
+<li>metaindex handle</li>
+<li>index handle</li>
+<li>padding</li>
+<li>magic number</li>
+</ol>
+</li>
+</ol>
+<h1 id="Block实现"><a href="#Block实现" class="headerlink" title="Block实现"></a>Block实现</h1><p>SST的构建主要集中在<code>table_builder.h/cc</code>和<code>block_builder.h/cc</code>中。<br>SST的读取主要集中在<code>table.h/cc</code>和<code>block.h/cc</code>中。<br>从前面可以看到，SSTable主要有两层结构，Table(SSTable)和Block(data/index等)。<br>Table由多个Block构成，所以从Block开始分析。</p>
+<h2 id="BlockBuilder-Block原理"><a href="#BlockBuilder-Block原理" class="headerlink" title="BlockBuilder/Block原理"></a>BlockBuilder/Block原理</h2><p>BlockBuilder负责生成诸如data block、index block等所有block。<br>Block对象负责读取这些block。</p>
+<h3 id="共享前缀"><a href="#共享前缀" class="headerlink" title="共享前缀"></a>共享前缀</h3><p>因为BlockBuilder是有序的，所以可以使用共享前缀来节约空间，我们比较下面两种方式：</p>
+<ol>
+<li><p>普通</p>
+ <figure class="highlight ebnf"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="attribute">Hello World</span></span><br><span class="line"><span class="attribute">Hello William</span></span><br></pre></td></tr></table></figure>
+</li>
+<li><p>共享</p>
+ <figure class="highlight ebnf"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="attribute">Hello World</span></span><br><span class="line"><span class="attribute">       illiam</span></span><br></pre></td></tr></table></figure>
+</li>
+</ol>
+<p>Block的构造如下图所示<br><img src="/img/leveldb/sstable/suf.png" alt=""></p>
+<p>其中：</p>
+<ol>
+<li>shared_bytes<br> Key的共享前缀的长度，这里的共享指的是上一个entry</li>
+<li>key_delta/unshared_bytes<br> Key共享前缀后的剩余串和其长度</li>
+<li>value/value_length<br> 值的串和其长度</li>
+</ol>
+<p>那么如何读呢？</p>
+<ol>
+<li><p>最坏状况，我们需要读到第一个Entry，考虑下面的Key</p>
+ <figure class="highlight stylus"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">a</span><br><span class="line">ab</span><br><span class="line">abc</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>最好状况，我们读当前的就行</p>
+ <figure class="highlight stylus"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">a</span><br><span class="line">b</span><br></pre></td></tr></table></figure>
+</li>
+</ol>
+<h3 id="restart"><a href="#restart" class="headerlink" title="restart"></a>restart</h3><p>可见共享前缀会给读带来困难，因此又引入restart机制，即每隔<code>block_restart_interval</code>之后会去存储一次完整的key，对应的entry的位置称为restart point。在block中，会存储下所有的restart point。<br>因为数字存储是有序的，所以我们能通过二分restart point来加速读取，具体代码在<code>Block::Iter</code>中。读取需求一般是给定target，要求找到第一个K大于等于target的entry。因此我们可以得到如下二分</p>
+<ol>
+<li><code>mid &lt; target</code><br> 则搜索<code>[mid, right]</code></li>
+<li><code>mid &gt;= target</code><br> 搜索<code>[left, mid-1]</code><br>因为这是一个TTT…F/T的二分，所以我们要令<code>mid = (left + right + 1)/2</code></li>
+</ol>
+<h3 id="filter-block"><a href="#filter-block" class="headerlink" title="filter block"></a>filter block</h3><p>在每个data block内部，借助于二分restart可以实现$log(n)$复杂度的查询，那么能在data block之间二分么？</p>
+<p>可以通过filter block来判断某个key是否属于该data block，实现是bloom filter。</p>
+<h2 id="BlockBuilder实现"><a href="#BlockBuilder实现" class="headerlink" title="BlockBuilder实现"></a>BlockBuilder实现</h2><h3 id="方法"><a href="#方法" class="headerlink" title="方法"></a>方法</h3><ol>
+<li><code>void Add(const Slice&amp; key, const Slice&amp; value);</code><br> 每一次Add的Key，必须是有序的，从小到大的。</li>
+<li><code>Slice Finish();</code></li>
+<li><code>void Reset();</code></li>
+</ol>
+<h3 id="BlockBuilder-Add"><a href="#BlockBuilder-Add" class="headerlink" title="BlockBuilder::Add"></a>BlockBuilder::Add</h3><p>首先是三个assert：</p>
+<ol>
+<li>第一个很好理解，如果<code>finished_</code>，相当于已经调用了Finish或者Abandon等方法。</li>
+<li><code>block_restart_interval</code>表示每过多少个key就要设置一个restarts。设置完之后，<code>counter_</code>会被重置为0，所以这个不等式是成立的。</li>
+<li>最后一个是有序性检验，要不是空的，要不新来的<code>key</code>要大于老的<code>last_key_piece</code>。<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">void</span> BlockBuilder::Add(<span class="keyword">const</span> Slice&amp; key, <span class="keyword">const</span> Slice&amp; value) &#123;</span><br><span class="line">  <span class="function">Slice <span class="title">last_key_piece</span><span class="params">(last_key_)</span></span>;</span><br><span class="line">  assert(!finished_);</span><br><span class="line">  assert(counter_ &lt;= options_-&gt;block_restart_interval);</span><br><span class="line">  assert(buffer_.empty()  <span class="comment">// No values yet?</span></span><br><span class="line">         || options_-&gt;comparator-&gt;Compare(key, last_key_piece) &gt; <span class="number">0</span>);</span><br></pre></td></tr></table></figure>
+</li>
+</ol>
+<p>下面判断要不要restart：</p>
+<ol>
+<li>如果不要，和前一个key即<code>last_key_</code>比较，算出来能share多少长度。</li>
+<li>如果要，就restart。<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">size_t</span> shared = <span class="number">0</span>;</span><br><span class="line"><span class="keyword">if</span> (counter_ &lt; options_-&gt;block_restart_interval) &#123;</span><br><span class="line">  <span class="comment">// See how much sharing to do with previous string</span></span><br><span class="line">  <span class="keyword">const</span> <span class="keyword">size_t</span> min_length = <span class="built_in">std</span>::min(last_key_piece.size(), key.size());</span><br><span class="line">  <span class="keyword">while</span> ((shared &lt; min_length) &amp;&amp; (last_key_piece[shared] == key[shared])) &#123;</span><br><span class="line">    shared++;</span><br><span class="line">  &#125;</span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">  <span class="comment">// Restart compression</span></span><br><span class="line">  restarts_.push_back(buffer_.size());</span><br><span class="line">  counter_ = <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">const</span> <span class="keyword">size_t</span> non_shared = key.size() - shared;</span><br></pre></td></tr></table></figure>
+</li>
+</ol>
+<p>下面就是往<code>buffer_</code>里面写数据了。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// Add "&lt;shared&gt;&lt;non_shared&gt;&lt;value_size&gt;" to buffer_</span></span><br><span class="line">PutVarint32(&amp;buffer_, shared);</span><br><span class="line">PutVarint32(&amp;buffer_, non_shared);</span><br><span class="line">PutVarint32(&amp;buffer_, value.size());</span><br><span class="line"></span><br><span class="line"><span class="comment">// Add string delta to buffer_ followed by value</span></span><br><span class="line">buffer_.append(key.data() + shared, non_shared);</span><br><span class="line">buffer_.append(value.data(), value.size());</span><br></pre></td></tr></table></figure></p>
+<p>下面这个优化点也很有趣，首先<code>last_key_</code>保存的是一个完整的key。但是我们可以复用之前一个key的shared部分，这个是安全的。接着我们把non shared部分append上去。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">  <span class="comment">// Update state</span></span><br><span class="line">  last_key_.resize(shared);</span><br><span class="line">  last_key_.append(key.data() + shared, non_shared);</span><br><span class="line">  assert(Slice(last_key_) == key);</span><br><span class="line">  counter_++;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<h3 id="BlockBuilder-Finish"><a href="#BlockBuilder-Finish" class="headerlink" title="BlockBuilder::Finish"></a>BlockBuilder::Finish</h3><p>为啥<code>restarts_</code>不用VarInt存呢？<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">Slice BlockBuilder::Finish() &#123;</span><br><span class="line">  <span class="comment">// Append restart array</span></span><br><span class="line">  <span class="keyword">for</span> (<span class="keyword">size_t</span> i = <span class="number">0</span>; i &lt; restarts_.size(); i++) &#123;</span><br><span class="line">    PutFixed32(&amp;buffer_, restarts_[i]);</span><br><span class="line">  &#125;</span><br><span class="line">  PutFixed32(&amp;buffer_, restarts_.size());</span><br><span class="line">  finished_ = <span class="literal">true</span>;</span><br><span class="line">  <span class="keyword">return</span> Slice(buffer_);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<h2 id="Block实现-1"><a href="#Block实现-1" class="headerlink" title="Block实现"></a>Block实现</h2><ol>
+<li><p><code>uint32_t NumRestarts() const;</code><br> 之前了解过block的结构，在Block的最后，是restart点的个数。</p>
+ <figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">inline</span> <span class="keyword">uint32_t</span> Block::NumRestarts() <span class="keyword">const</span> &#123;</span><br><span class="line">  assert(size_ &gt;= <span class="keyword">sizeof</span>(<span class="keyword">uint32_t</span>));</span><br><span class="line">  <span class="keyword">return</span> DecodeFixed32(data_ + size_ - <span class="keyword">sizeof</span>(<span class="keyword">uint32_t</span>));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+</li>
+<li><p><code>const char* data_;</code>/<code>size_t size_</code>;<br> 也就是这个Block的指针和长度。</p>
+</li>
+<li><p><code>uint32_t restart_offset_;</code><br> 表示restart的开始位置</p>
+ <figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">size_ - (<span class="number">1</span> + NumRestarts()) * <span class="keyword">sizeof</span>(<span class="keyword">uint32_t</span>)</span><br></pre></td></tr></table></figure>
+</li>
+<li><p><code>bool owned_;</code><br> 取决于构造函数传入的<code>BlockContents</code>的<code>owned_</code>字段。</p>
+</li>
+</ol>
+<h3 id="Block-Iter"><a href="#Block-Iter" class="headerlink" title="Block::Iter"></a>Block::Iter</h3><h4 id="Seek"><a href="#Seek" class="headerlink" title="Seek"></a>Seek</h4><p>这个函数是一个二分的实现。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">Seek</span><span class="params">(<span class="keyword">const</span> Slice&amp; target)</span> override </span>&#123;</span><br><span class="line">  <span class="comment">// Binary search in restart array to find the last restart point</span></span><br><span class="line">  <span class="comment">// with a key &lt; target</span></span><br><span class="line">  <span class="keyword">uint32_t</span> left = <span class="number">0</span>;</span><br><span class="line">  <span class="keyword">uint32_t</span> right = num_restarts_ - <span class="number">1</span>;</span><br><span class="line">  <span class="keyword">int</span> current_key_compare = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> (Valid()) &#123;</span><br><span class="line">    <span class="comment">// If we're already scanning, use the current position as a starting</span></span><br><span class="line">    <span class="comment">// point. This is beneficial if the key we're seeking to is ahead of the</span></span><br><span class="line">    <span class="comment">// current position.</span></span><br><span class="line">    current_key_compare = Compare(key_, target);</span><br><span class="line">    <span class="keyword">if</span> (current_key_compare &lt; <span class="number">0</span>) &#123;</span><br><span class="line">      <span class="comment">// key_ is smaller than target</span></span><br><span class="line">      left = restart_index_;</span><br><span class="line">    &#125; <span class="keyword">else</span> <span class="keyword">if</span> (current_key_compare &gt; <span class="number">0</span>) &#123;</span><br><span class="line">      right = restart_index_;</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">      <span class="comment">// We're seeking to the key we're already at.</span></span><br><span class="line">      <span class="keyword">return</span>;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">while</span> (left &lt; right) &#123;</span><br><span class="line">    <span class="keyword">uint32_t</span> mid = (left + right + <span class="number">1</span>) / <span class="number">2</span>;</span><br><span class="line">    <span class="keyword">uint32_t</span> region_offset = GetRestartPoint(mid);</span><br><span class="line">    <span class="keyword">uint32_t</span> shared, non_shared, value_length;</span><br><span class="line">    <span class="keyword">const</span> <span class="keyword">char</span>* key_ptr =</span><br><span class="line">        DecodeEntry(data_ + region_offset, data_ + restarts_, &amp;shared,</span><br><span class="line">                    &amp;non_shared, &amp;value_length);</span><br><span class="line">    <span class="keyword">if</span> (key_ptr == <span class="literal">nullptr</span> || (shared != <span class="number">0</span>)) &#123;</span><br><span class="line">      CorruptionError();</span><br><span class="line">      <span class="keyword">return</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="function">Slice <span class="title">mid_key</span><span class="params">(key_ptr, non_shared)</span></span>;</span><br><span class="line">    <span class="keyword">if</span> (Compare(mid_key, target) &lt; <span class="number">0</span>) &#123;</span><br><span class="line">      <span class="comment">// Key at "mid" is smaller than "target".  Therefore all</span></span><br><span class="line">      <span class="comment">// blocks before "mid" are uninteresting.</span></span><br><span class="line">      left = mid;</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">      <span class="comment">// Key at "mid" is &gt;= "target".  Therefore all blocks at or</span></span><br><span class="line">      <span class="comment">// after "mid" are uninteresting.</span></span><br><span class="line">      right = mid - <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="comment">// We might be able to use our current position within the restart block.</span></span><br><span class="line">  <span class="comment">// This is true if we determined the key we desire is in the current block</span></span><br><span class="line">  <span class="comment">// and is after than the current key.</span></span><br><span class="line">  assert(current_key_compare == <span class="number">0</span> || Valid());</span><br><span class="line">  <span class="keyword">bool</span> skip_seek = left == restart_index_ &amp;&amp; current_key_compare &lt; <span class="number">0</span>;</span><br><span class="line">  <span class="keyword">if</span> (!skip_seek) &#123;</span><br><span class="line">    SeekToRestartPoint(left);</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="comment">// Linear search (within restart block) for first key &gt;= target</span></span><br><span class="line">  <span class="keyword">while</span> (<span class="literal">true</span>) &#123;</span><br><span class="line">    <span class="keyword">if</span> (!ParseNextKey()) &#123;</span><br><span class="line">      <span class="keyword">return</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (Compare(key_, target) &gt;= <span class="number">0</span>) &#123;</span><br><span class="line">      <span class="keyword">return</span>;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<h1 id="Table实现"><a href="#Table实现" class="headerlink" title="Table实现"></a>Table实现</h1><h2 id="TableBuilder"><a href="#TableBuilder" class="headerlink" title="TableBuilder"></a>TableBuilder</h2><p>对于Add/Flush/Finish/Abandon，此时Adandon和Finish不能已经被调用。</p>
+<ol>
+<li><code>Status ChangeOptions(const Options&amp; options);</code><br> 修改option，但是只有某些可以在构建之后被修改。对于那些不能修改的，会报错。</li>
+<li><code>void Add(const Slice&amp; key, const Slice&amp; value);</code><br> 增加一个KV对。<br> key is after any previously added key according to comparator，往TableBuilder里面加KV，必须是有序的？</li>
+<li><code>void Flush();</code><br> 刷盘，一般不直接用。主要被用来保证两个相邻的Entry不会在同一个data block中。</li>
+<li><code>Status status() const;</code></li>
+<li><code>Status Finish();</code><br> 结束当前表的构建。</li>
+<li><code>void Abandon();</code><br> 表示需要丢弃当前缓存内容，并且结束表的构建。</li>
+<li><code>uint64_t NumEntries() const;</code><br> Add了多少次，实际上返回的是<code>TableBuilder::Rep</code>里面的<code>num_entries</code></li>
+<li><code>uint64_t FileSize() const;</code></li>
+<li><code>void WriteBlock(BlockBuilder* block, BlockHandle* handle);</code></li>
+<li><code>void WriteRawBlock(const Slice&amp; data, CompressionType, BlockHandle* handle);</code></li>
+</ol>
+<p>此外，TableBuilder持有一个Req类型的对象指针，用来隐藏相关实现。</p>
+<h2 id="TableBuilder-Rep"><a href="#TableBuilder-Rep" class="headerlink" title="TableBuilder::Rep"></a>TableBuilder::Rep</h2><p>具有下面的：</p>
+<ol>
+<li><code>Options options;</code></li>
+<li><code>Options index_block_options;</code></li>
+<li><code>WritableFile* file;</code><br> <code>WritableFile</code>是一个接口，具体实现可以分为随机读写文件，顺序读写文件等。</li>
+<li><code>uint64_t offset;</code></li>
+<li><code>Status status;</code><br> 是<code>ok()</code>的返回值，表示是否发生了错误。一般，错误会在<code>file</code>里面的Append和Flush方法中出现。</li>
+<li><code>BlockBuilder data_block;</code></li>
+<li><code>BlockBuilder index_block;</code></li>
+<li><code>std::string last_key;</code><br> 每一次Add会更新这个字段。因为Add是有序的，所以实际上就表示了当前最大的key。</li>
+<li><code>int64_t num_entries;</code><br> 见<code>NumEntries</code>。</li>
+<li><code>bool closed;</code><br> Finish和Abandon会设置为true。</li>
+<li><code>FilterBlockBuilder* filter_block;</code></li>
+<li><code>bool pending_index_entry;</code><br> 当写完一个data block之后，设置<code>pending_index_entry</code>，表示需要更新index block。<br> 因此这里有个不变量，当且仅当<code>data_block</code>为空的时候<code>pending_index_entry</code>才是true。也就是说当写入一个data block后（注意一个table中有多个data block），设置<code>pending_index_entry</code>为true，之后更新index block。<br> 原因是直到我们见到下一个data block的第一个key的时候才能写index。这样我们可以在写index的时候用尽可能短的key。例如我们已经知道第一个data block中最大的是”the quick brown fox”，而第二个data block中最小的是”the who”。这样通过之前提到的<code>FindShortestSeparator</code>，我们就可以用”the r”作为index block中的entry。这个entry满足条件，即大于等于第一个block中的所有key，并且小于第二个block中的所有key。<br> 因此，顺序是：<ol>
+<li>写一个data block</li>
+<li>接到下一个Add请求</li>
+<li>根据<code>last_key</code>和当前传入的Key，写index</li>
+<li>正常处理该Add请求</li>
+</ol>
+</li>
+<li><code>BlockHandle pending_handle;</code><br> Handle to add to index block。不是说用这个handle来写index block，而是会把这个handle里面的值写到index block里面作为index。</li>
+<li><code>std::string compressed_output;</code></li>
+</ol>
+<h3 id="TableBuilder-Add"><a href="#TableBuilder-Add" class="headerlink" title="TableBuilder::Add"></a>TableBuilder::Add</h3><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">void</span> TableBuilder::Add(<span class="keyword">const</span> Slice&amp; key, <span class="keyword">const</span> Slice&amp; value) &#123;</span><br><span class="line">  Rep* r = rep_;</span><br><span class="line">  assert(!r-&gt;closed);</span><br><span class="line">  <span class="keyword">if</span> (!ok()) <span class="keyword">return</span>;</span><br><span class="line">  <span class="keyword">if</span> (r-&gt;num_entries &gt; <span class="number">0</span>) &#123;</span><br><span class="line">    assert(r-&gt;options.comparator-&gt;Compare(key, Slice(r-&gt;last_key)) &gt; <span class="number">0</span>);</span><br><span class="line">  &#125;</span><br></pre></td></tr></table></figure>
+<p>如果<code>pending_index_entry</code>是true，说明之前已经写入了一个data block。于是我们就要插入index，并且清空<code>pending_index_entry</code>标志。这一部分原理在<code>pending_index_entry</code>讲解过了。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (r-&gt;pending_index_entry) &#123;</span><br><span class="line">  assert(r-&gt;data_block.empty());</span><br><span class="line">  r-&gt;options.comparator-&gt;FindShortestSeparator(&amp;r-&gt;last_key, key);</span><br><span class="line">  <span class="built_in">std</span>::<span class="built_in">string</span> handle_encoding;</span><br><span class="line">  r-&gt;pending_handle.EncodeTo(&amp;handle_encoding);</span><br><span class="line">  r-&gt;index_block.Add(r-&gt;last_key, Slice(handle_encoding));</span><br><span class="line">  r-&gt;pending_index_entry = <span class="literal">false</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>下面是添加的逻辑，先处理filter block。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (r-&gt;filter_block != <span class="literal">nullptr</span>) &#123;</span><br><span class="line">  r-&gt;filter_block-&gt;AddKey(key);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>然后设置<code>last_key</code>，并向当前的data block中添加KV。<br>估算当前data block的大小，如果超过配置的阈值<code>options.block_size</code>就进行dump。这个估算实际上就是统计所有entry以及restart的总大小。相比<a href="/2019/08/06/spark-sql/">Spark里面的</a>大小估计，感觉LevelDB/Redis里面的大小估计要简单很多，感觉得益于C/C++能自己管理内存。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">  r-&gt;last_key.assign(key.data(), key.size());</span><br><span class="line">  r-&gt;num_entries++;</span><br><span class="line">  r-&gt;data_block.Add(key, value);</span><br><span class="line"></span><br><span class="line">  <span class="keyword">const</span> <span class="keyword">size_t</span> estimated_block_size = r-&gt;data_block.CurrentSizeEstimate();</span><br><span class="line">  <span class="keyword">if</span> (estimated_block_size &gt;= r-&gt;options.block_size) &#123;</span><br><span class="line">    Flush();</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<h3 id="TableBuilder-WriteBlock"><a href="#TableBuilder-WriteBlock" class="headerlink" title="TableBuilder::WriteBlock"></a>TableBuilder::WriteBlock</h3><h4 id="WriteBlock"><a href="#WriteBlock" class="headerlink" title="WriteBlock"></a>WriteBlock</h4><p>Table要写某个Block，首先Finish这个block，也就是说把所有restart都写到文件里面。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">void</span> TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) &#123;</span><br><span class="line">  assert(ok());</span><br><span class="line">  Rep* r = rep_;</span><br><span class="line">  Slice raw = block-&gt;Finish();</span><br></pre></td></tr></table></figure></p>
+<p>接着，是写data block。实际写入的<code>block_contents</code>可能是被压缩了的，也可能是没有被压缩的。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line">Slice block_contents;</span><br><span class="line">CompressionType type = r-&gt;options.compression;</span><br><span class="line"><span class="comment">// TODO(postrelease): Support more compression options: zlib?</span></span><br><span class="line"><span class="keyword">switch</span> (type) &#123;</span><br><span class="line">  <span class="keyword">case</span> kNoCompression:</span><br><span class="line">    block_contents = raw;</span><br><span class="line">    <span class="keyword">break</span>;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">case</span> kSnappyCompression: &#123;</span><br><span class="line">    <span class="built_in">std</span>::<span class="built_in">string</span>* compressed = &amp;r-&gt;compressed_output;</span><br><span class="line">    <span class="keyword">if</span> (port::Snappy_Compress(raw.data(), raw.size(), compressed) &amp;&amp;</span><br><span class="line">        compressed-&gt;size() &lt; raw.size() - (raw.size() / <span class="number">8u</span>)) &#123;</span><br><span class="line">      block_contents = *compressed;</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">      <span class="comment">// Snappy not supported, or compressed less than 12.5%, so just</span></span><br><span class="line">      <span class="comment">// store uncompressed form</span></span><br><span class="line">      block_contents = raw;</span><br><span class="line">      type = kNoCompression;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">break</span>;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br><span class="line">WriteRawBlock(block_contents, type, handle);</span><br><span class="line">r-&gt;compressed_output.clear();</span><br></pre></td></tr></table></figure></p>
+<p>清空这个block里面<code>buffer_</code>、<code>restarts_</code>等状态。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">  block-&gt;Reset();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<h4 id="TableBuilder-WriteRawBlock"><a href="#TableBuilder-WriteRawBlock" class="headerlink" title="TableBuilder::WriteRawBlock"></a>TableBuilder::WriteRawBlock</h4><p>每一个block包含：</p>
+<ol>
+<li>data</li>
+<li>type 表示有没有压缩</li>
+<li>crc32<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">void</span> TableBuilder::WriteRawBlock(<span class="keyword">const</span> Slice&amp; block_contents,</span><br><span class="line">                                 CompressionType type, BlockHandle* handle) &#123;</span><br><span class="line">  Rep* r = rep_;</span><br><span class="line">  handle-&gt;set_offset(r-&gt;offset);</span><br><span class="line">  handle-&gt;set_size(block_contents.size());</span><br><span class="line">  r-&gt;status = r-&gt;file-&gt;Append(block_contents);</span><br><span class="line">  <span class="keyword">if</span> (r-&gt;status.ok()) &#123;</span><br><span class="line">    <span class="keyword">char</span> trailer[kBlockTrailerSize];</span><br><span class="line">    trailer[<span class="number">0</span>] = type;</span><br><span class="line">    <span class="keyword">uint32_t</span> crc = crc32c::Value(block_contents.data(), block_contents.size());</span><br><span class="line">    crc = crc32c::Extend(crc, trailer, <span class="number">1</span>);  <span class="comment">// Extend crc to cover block type</span></span><br><span class="line">    EncodeFixed32(trailer + <span class="number">1</span>, crc32c::Mask(crc));</span><br><span class="line">    r-&gt;status = r-&gt;file-&gt;Append(Slice(trailer, kBlockTrailerSize));</span><br><span class="line">    <span class="keyword">if</span> (r-&gt;status.ok()) &#123;</span><br><span class="line">      r-&gt;offset += block_contents.size() + kBlockTrailerSize;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+</li>
+</ol>
+<h3 id="TableBuilder-Flush"><a href="#TableBuilder-Flush" class="headerlink" title="TableBuilder::Flush"></a>TableBuilder::Flush</h3><p>前面是判断一些条件。如果说data block是空的，那么就直接返回。接着断言<code>pending_index_entry</code>这个是true，这个是之前提到的不变量。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">void</span> TableBuilder::Flush() &#123;</span><br><span class="line">  Rep* r = rep_;</span><br><span class="line">  assert(!r-&gt;closed);</span><br><span class="line">  <span class="keyword">if</span> (!ok()) <span class="keyword">return</span>;</span><br><span class="line">  <span class="keyword">if</span> (r-&gt;data_block.empty()) <span class="keyword">return</span>;</span><br><span class="line">  assert(!r-&gt;pending_index_entry);</span><br></pre></td></tr></table></figure></p>
+<p>根据<code>pending_handle</code>的说明，它的值会被写到index block里面。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">  WriteBlock(&amp;r-&gt;data_block, &amp;r-&gt;pending_handle);</span><br><span class="line">  <span class="keyword">if</span> (ok()) &#123;</span><br><span class="line">    r-&gt;pending_index_entry = <span class="literal">true</span>;</span><br><span class="line">    r-&gt;status = r-&gt;file-&gt;Flush();</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">if</span> (r-&gt;filter_block != <span class="literal">nullptr</span>) &#123;</span><br><span class="line">    r-&gt;filter_block-&gt;StartBlock(r-&gt;offset);</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<h3 id="TableBuilder-Finish"><a href="#TableBuilder-Finish" class="headerlink" title="TableBuilder::Finish"></a>TableBuilder::Finish</h3><p>Finish操作用来生成一个SSTable。<br>首先先Flush，也就是把<code>data_block</code>写盘。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Status TableBuilder::Finish() &#123;</span><br><span class="line">  Rep* r = rep_;</span><br><span class="line">  Flush();</span><br><span class="line">  assert(!r-&gt;closed);</span><br><span class="line">  r-&gt;closed = <span class="literal">true</span>;</span><br></pre></td></tr></table></figure></p>
+<p>什么时候不ok呢？也就是发生错误的情况。<br>下面，写入filter block。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">BlockHandle filter_block_handle, metaindex_block_handle, index_block_handle;</span><br><span class="line"><span class="comment">// Write filter block</span></span><br><span class="line"><span class="keyword">if</span> (ok() &amp;&amp; r-&gt;filter_block != <span class="literal">nullptr</span>) &#123;</span><br><span class="line">  WriteRawBlock(r-&gt;filter_block-&gt;Finish(), kNoCompression,</span><br><span class="line">                &amp;filter_block_handle);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>如果上面的写入是成功的，接着写入meta index block。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// Write metaindex block</span></span><br><span class="line"><span class="keyword">if</span> (ok()) &#123;</span><br><span class="line">  <span class="function">BlockBuilder <span class="title">meta_index_block</span><span class="params">(&amp;r-&gt;options)</span></span>;</span><br><span class="line">  <span class="keyword">if</span> (r-&gt;filter_block != <span class="literal">nullptr</span>) &#123;</span><br><span class="line">    <span class="comment">// Add mapping from "filter.Name" to location of filter data</span></span><br><span class="line">    <span class="built_in">std</span>::<span class="built_in">string</span> key = <span class="string">"filter."</span>;</span><br><span class="line">    key.append(r-&gt;options.filter_policy-&gt;Name());</span><br><span class="line">    <span class="built_in">std</span>::<span class="built_in">string</span> handle_encoding;</span><br><span class="line">    filter_block_handle.EncodeTo(&amp;handle_encoding);</span><br><span class="line">    meta_index_block.Add(key, handle_encoding);</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="comment">// TODO(postrelease): Add stats and other meta blocks</span></span><br><span class="line">  WriteBlock(&amp;meta_index_block, &amp;metaindex_block_handle);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>如果上面的写入是成功的，接着写入index block。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// Write index block</span></span><br><span class="line"><span class="keyword">if</span> (ok()) &#123;</span><br><span class="line">  <span class="keyword">if</span> (r-&gt;pending_index_entry) &#123;</span><br><span class="line">    r-&gt;options.comparator-&gt;FindShortSuccessor(&amp;r-&gt;last_key);</span><br><span class="line">    <span class="built_in">std</span>::<span class="built_in">string</span> handle_encoding;</span><br><span class="line">    r-&gt;pending_handle.EncodeTo(&amp;handle_encoding);</span><br><span class="line">    r-&gt;index_block.Add(r-&gt;last_key, Slice(handle_encoding));</span><br><span class="line">    r-&gt;pending_index_entry = <span class="literal">false</span>;</span><br><span class="line">  &#125;</span><br><span class="line">  WriteBlock(&amp;r-&gt;index_block, &amp;index_block_handle);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>如果上面的写入是成功的，接着写入footer。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">  <span class="comment">// Write footer</span></span><br><span class="line">  <span class="keyword">if</span> (ok()) &#123;</span><br><span class="line">    Footer footer;</span><br><span class="line">    footer.set_metaindex_handle(metaindex_block_handle);</span><br><span class="line">    footer.set_index_handle(index_block_handle);</span><br><span class="line">    <span class="built_in">std</span>::<span class="built_in">string</span> footer_encoding;</span><br><span class="line">    footer.EncodeTo(&amp;footer_encoding);</span><br><span class="line">    r-&gt;status = r-&gt;file-&gt;Append(footer_encoding);</span><br><span class="line">    <span class="keyword">if</span> (r-&gt;status.ok()) &#123;</span><br><span class="line">      r-&gt;offset += footer_encoding.size();</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">return</span> r-&gt;status;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<h2 id="Table"><a href="#Table" class="headerlink" title="Table"></a>Table</h2><p>下面介绍Table类，它的作用是负责读取SSTable。</p>
+<ol>
+<li><code>static Status Open(const Options&amp; options, RandomAccessFile* file, uint64_t file_size, Table** table);</code><br> 解析传入的<code>file</code>。<br> 如果成功，返回ok，并且设置<code>*table</code>，这是一个指针，由调用方释放。<br> 如果失败，返回一个非ok，并且设置<code>*table</code>为nullptr。<br> Does not take ownership of “*source”, but the client must ensure that “source” remains live for the duration of the returned table’s lifetime.</li>
+<li><code>Iterator* NewIterator(const ReadOptions&amp;) const;</code></li>
+<li><code>uint64_t ApproximateOffsetOf(const Slice&amp; key) const;</code><br> 传入一个key，返回它在文件中的大概位置。对不存在的key，返回如果存在，那么大概在的位置。</li>
+<li><code>static Iterator* BlockReader(void*, const ReadOptions&amp;, const Slice&amp;);</code><br> TwoLevelIterator需要这个函数，通过它来构建一个<code>data_iter_</code></li>
+<li><code>Status InternalGet(const ReadOptions&amp;, const Slice&amp; key, void* arg, void (*handle_result)(void* arg, const Slice&amp; k, const Slice&amp; v));</code></li>
+<li><code>void ReadMeta(const Footer&amp; footer);</code></li>
+<li><code>void ReadFilter(const Slice&amp; filter_handle_value);</code></li>
+</ol>
+<h3 id="Table-Rep"><a href="#Table-Rep" class="headerlink" title="Table::Rep"></a>Table::Rep</h3><ol>
+<li><code>Options options;</code></li>
+<li><code>Status status;</code></li>
+<li><code>RandomAccessFile* file;</code></li>
+<li><code>uint64_t cache_id;</code></li>
+<li><code>FilterBlockReader* filter;</code></li>
+<li><code>const char* filter_data;</code></li>
+<li><code>BlockHandle metaindex_handle;</code></li>
+<li><code>Block* index_block;</code></li>
+</ol>
+<h3 id="Table-Open"><a href="#Table-Open" class="headerlink" title="Table::Open"></a>Table::Open</h3><p>首先解析出footer。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">Status Table::Open(<span class="keyword">const</span> Options&amp; options, RandomAccessFile* file,</span><br><span class="line">                   <span class="keyword">uint64_t</span> size, Table** table) &#123;</span><br><span class="line">  *table = <span class="literal">nullptr</span>;</span><br><span class="line">  <span class="keyword">if</span> (size &lt; Footer::kEncodedLength) &#123;</span><br><span class="line">    <span class="keyword">return</span> Status::Corruption(<span class="string">"file is too short to be an sstable"</span>);</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">char</span> footer_space[Footer::kEncodedLength];</span><br><span class="line">  Slice footer_input;</span><br><span class="line">  Status s = file-&gt;Read(size - Footer::kEncodedLength, Footer::kEncodedLength,</span><br><span class="line">                        &amp;footer_input, footer_space);</span><br><span class="line">  <span class="keyword">if</span> (!s.ok()) <span class="keyword">return</span> s;</span><br><span class="line"></span><br><span class="line">  Footer footer;</span><br><span class="line">  s = footer.DecodeFrom(&amp;footer_input);</span><br><span class="line">  <span class="keyword">if</span> (!s.ok()) <span class="keyword">return</span> s;</span><br></pre></td></tr></table></figure></p>
+<p>接下来，解析index block。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// Read the index block</span></span><br><span class="line">BlockContents index_block_contents;</span><br><span class="line">ReadOptions opt;</span><br><span class="line"><span class="keyword">if</span> (options.paranoid_checks) &#123;</span><br><span class="line">  opt.verify_checksums = <span class="literal">true</span>;</span><br><span class="line">&#125;</span><br><span class="line">s = ReadBlock(file, opt, footer.index_handle(), &amp;index_block_contents);</span><br></pre></td></tr></table></figure></p>
+<p>初始化<code>rep_</code>字段。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">  <span class="keyword">if</span> (s.ok()) &#123;</span><br><span class="line">    <span class="comment">// We've successfully read the footer and the index block: we're</span></span><br><span class="line">    <span class="comment">// ready to serve requests.</span></span><br><span class="line">    Block* index_block = <span class="keyword">new</span> Block(index_block_contents);</span><br><span class="line">    Rep* rep = <span class="keyword">new</span> Table::Rep;</span><br><span class="line">    rep-&gt;options = options;</span><br><span class="line">    rep-&gt;file = file;</span><br><span class="line">    rep-&gt;metaindex_handle = footer.metaindex_handle();</span><br><span class="line">    rep-&gt;index_block = index_block;</span><br><span class="line">    rep-&gt;cache_id = (options.block_cache ? options.block_cache-&gt;NewId() : <span class="number">0</span>);</span><br><span class="line">    rep-&gt;filter_data = <span class="literal">nullptr</span>;</span><br><span class="line">    rep-&gt;filter = <span class="literal">nullptr</span>;</span><br><span class="line">    *table = <span class="keyword">new</span> Table(rep);</span><br><span class="line">    (*table)-&gt;ReadMeta(footer);</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">return</span> s;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<h2 id="Table-NewIterator"><a href="#Table-NewIterator" class="headerlink" title="Table::NewIterator"></a>Table::NewIterator</h2><p>实际上调用<code>NewTwoLevelIterator</code>得到一个<code>TwoLevelIterator</code>。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">Iterator* Table::NewIterator(<span class="keyword">const</span> ReadOptions&amp; options) <span class="keyword">const</span> &#123;</span><br><span class="line">  <span class="keyword">return</span> NewTwoLevelIterator(</span><br><span class="line">      rep_-&gt;index_block-&gt;NewIterator(rep_-&gt;options.comparator),</span><br><span class="line">      &amp;Table::BlockReader, <span class="keyword">const_cast</span>&lt;Table*&gt;(<span class="keyword">this</span>), options);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function">Iterator* <span class="title">NewTwoLevelIterator</span><span class="params">(Iterator* index_iter,</span></span></span><br><span class="line"><span class="function"><span class="params">                              BlockFunction block_function, <span class="keyword">void</span>* arg,</span></span></span><br><span class="line"><span class="function"><span class="params">                              <span class="keyword">const</span> ReadOptions&amp; options)</span></span>;</span><br></pre></td></tr></table></figure></p>
+<p>方法<code>NewIterator</code>的实现如下。如果没有restart点，那么就创建一个空的迭代器，否则创建一个<code>Block::Iter</code>。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">Iterator* Block::NewIterator(<span class="keyword">const</span> Comparator* comparator) &#123;</span><br><span class="line">  <span class="keyword">if</span> (size_ &lt; <span class="keyword">sizeof</span>(<span class="keyword">uint32_t</span>)) &#123;</span><br><span class="line">    <span class="keyword">return</span> NewErrorIterator(Status::Corruption(<span class="string">"bad block contents"</span>));</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">const</span> <span class="keyword">uint32_t</span> num_restarts = NumRestarts();</span><br><span class="line">  <span class="keyword">if</span> (num_restarts == <span class="number">0</span>) &#123;</span><br><span class="line">    <span class="keyword">return</span> NewEmptyIterator();</span><br><span class="line">  &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="keyword">new</span> Iter(comparator, data_, restart_offset_, num_restarts);</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>两个Level的含义是：</p>
+<ol>
+<li><code>IteratorWrapper index_iter_</code>负责查询index block，找到key所在的data block。<br> <code>IteratorWrapper</code>封装了<code>Iterator</code>，可以理解为一层对<code>valid()</code>和<code>key()</code>的cache。<code>Iterator</code>是个接口，实际类型应该是<code>Block::Iter</code>【待确认】。</li>
+<li><code>IteratorWrapper data_iter_</code>负责在这个block里面查找。</li>
+</ol>
+<h3 id="TwoLevelIterator"><a href="#TwoLevelIterator" class="headerlink" title="TwoLevelIterator"></a>TwoLevelIterator</h3><ol>
+<li><code>BlockFunction block_function_;</code><br> 由<code>block_function_</code>可以从一个<code>index_iter_</code>创建一个<code>data_iter_</code>。<br> 在Table的实现中，是<code>Table::BlockReader</code>这个函数。我们将在后面详细分析这个函数。</li>
+<li><code>void* arg_;</code><br> 在Table的实现中，传入了<code>Table* this</code>。</li>
+<li><code>const ReadOptions options_;</code></li>
+<li><code>Status status_;</code></li>
+<li><code>IteratorWrapper index_iter_;</code></li>
+<li><code>IteratorWrapper data_iter_;</code></li>
+<li><code>std::string data_block_handle_;</code><br> 如果<code>data_iter_</code>不是null，那么<code>data_block_handle_</code>持有传给<code>block_function_</code>的那个<code>index_iter_</code>的值。</li>
+</ol>
+<h4 id="TwoLevelIterator-Next"><a href="#TwoLevelIterator-Next" class="headerlink" title="TwoLevelIterator::Next"></a>TwoLevelIterator::Next</h4><p>存在一个问题，如果我们一直<code>data_iter_.Next()</code>，我们迟早会碰到一个Block的右边界，这样后面迭代器就Invalid了。因此需要检查如果<code>data_iter_</code>当前已经失效了，那么就递增<code>index_iter_</code>，获取下一个<code>data_iter_</code>，具体实现见下面。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">void</span> TwoLevelIterator::Next() &#123;</span><br><span class="line">  assert(Valid());</span><br><span class="line">  data_iter_.Next();</span><br><span class="line">  SkipEmptyDataBlocksForward();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<h4 id="TwoLevelIterator-SkipEmptyDataBlocksForward"><a href="#TwoLevelIterator-SkipEmptyDataBlocksForward" class="headerlink" title="TwoLevelIterator::SkipEmptyDataBlocksForward"></a>TwoLevelIterator::SkipEmptyDataBlocksForward</h4><p>【Q】在上面说过这个函数的作用了，但是为啥这里实现是<code>while</code>而不是<code>if</code>呢？<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">void</span> TwoLevelIterator::SkipEmptyDataBlocksForward() &#123;</span><br><span class="line">  <span class="keyword">while</span> (data_iter_.iter() == <span class="literal">nullptr</span> || !data_iter_.Valid()) &#123;</span><br><span class="line">    <span class="comment">// Move to next block</span></span><br><span class="line">...</span><br></pre></td></tr></table></figure></p>
+<p><code>SetDataIterator</code>函数接受一个迭代器作为参数，如果迭代器不是空，那么就设置为<code>data_iter_</code>，并且释放掉原来的<code>iter_</code>内存。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">...</span><br><span class="line">    <span class="keyword">if</span> (!index_iter_.Valid()) &#123;</span><br><span class="line">      SetDataIterator(<span class="literal">nullptr</span>);</span><br><span class="line">      <span class="keyword">return</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    index_iter_.Next();</span><br><span class="line">    InitDataBlock();</span><br><span class="line">...</span><br></pre></td></tr></table></figure></p>
+<p>需要注意，这里需要显式将<code>data_iter_</code>移动到当前data block的开头。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">...</span><br><span class="line">    <span class="keyword">if</span> (data_iter_.iter() != <span class="literal">nullptr</span>) data_iter_.SeekToFirst();</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<h4 id="TwoLevelIterator-InitDataBlock"><a href="#TwoLevelIterator-InitDataBlock" class="headerlink" title="TwoLevelIterator::InitDataBlock"></a>TwoLevelIterator::InitDataBlock</h4><p><code>InitDataBlock</code>作用是从<code>index_iter_</code>构建（解析）出一个data block。<br>如果<code>index_iter_</code>无效，那么设置<code>data_iter_</code>也无效。<br>如果<code>data_iter_</code>不为空，并且等于之前的<code>data_block_handle_</code>，说明<code>data_iter_</code>现在就指向的这个data block，那么就跳过。<br>否则，以<code>index_iter_</code>为参数，通过<code>block_function_</code>生成一个新的<code>data_iter_</code>。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">void</span> TwoLevelIterator::InitDataBlock() &#123;</span><br><span class="line">  <span class="keyword">if</span> (!index_iter_.Valid()) &#123;</span><br><span class="line">    SetDataIterator(<span class="literal">nullptr</span>);</span><br><span class="line">  &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    Slice handle = index_iter_.value();</span><br><span class="line">    <span class="keyword">if</span> (data_iter_.iter() != <span class="literal">nullptr</span> &amp;&amp;</span><br><span class="line">        handle.compare(data_block_handle_) == <span class="number">0</span>) &#123;</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">      Iterator* iter = (*block_function_)(arg_, options_, handle);</span><br><span class="line">      data_block_handle_.assign(handle.data(), handle.size());</span><br><span class="line">      SetDataIterator(iter);</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<h4 id="TwoLevelIterator-Seek"><a href="#TwoLevelIterator-Seek" class="headerlink" title="TwoLevelIterator::Seek"></a>TwoLevelIterator::Seek</h4><p>首先，在index block层Seek。下面证明只要找这个<code>index_iter_</code>指向的data block就行，也就是说，target不会出现在<code>(index_iter_ - 1)</code>和<code>(index_iter_ + 1)</code>指向的data block里面。</p>
+<ol>
+<li>因为LevelDB中的性质，Seek得到的是第一个大于等于target的指针。此时，<code>(index_iter_ - 1)</code>中的<code>.key()</code>是<strong>严格</strong>小于target的。而根据index block的【性质1】，这个index block entry指向的data block中的所有K都<strong>小于等于</strong><code>(index_iter_ - 1).key()</code>。因此，<code>(index_iter_ - 1)</code>指向的data block里面所有的K，都小于target。</li>
+<li>此外，<code>index_iter_.key()</code>是大于等于target的。</li>
+<li>下面，还要证明<code>(index_iter_ + 1).key()</code>指向的data block里面的所有K都大于target。根据【性质2】我们知道<code>index_iter_.key()</code>会严格小于它指向的下一个data block中的所有K，根据我们上一条结论可以知道target严格小于下一个data block中的所有K，所以target如果存在的话，一定是当前data block上的。<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">void</span> TwoLevelIterator::Seek(<span class="keyword">const</span> Slice&amp; target) &#123;</span><br><span class="line">  index_iter_.Seek(target);</span><br></pre></td></tr></table></figure>
+</li>
+</ol>
+<p>接着初始化<code>data_iter_</code>。接着在data block层Seek。<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">  InitDataBlock();</span><br><span class="line">  <span class="keyword">if</span> (data_iter_.iter() != <span class="literal">nullptr</span>) data_iter_.Seek(target);</span><br><span class="line">  SkipEmptyDataBlocksForward();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<h3 id="Table-BlockReader"><a href="#Table-BlockReader" class="headerlink" title="Table::BlockReader"></a>Table::BlockReader</h3><p>接受三个参数：</p>
+<ol>
+<li><code>arg</code><br> 这个类型设置就很奇怪，实际上是一个<code>Table*</code>，表示我们现在读的那个Table的上下文。</li>
+<li><code>index_value</code></li>
+</ol>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// Convert an index iterator value (i.e., an encoded BlockHandle)</span></span><br><span class="line"><span class="comment">// into an iterator over the contents of the corresponding block.</span></span><br><span class="line">Iterator* Table::BlockReader(<span class="keyword">void</span>* arg, <span class="keyword">const</span> ReadOptions&amp; options,</span><br><span class="line">                             <span class="keyword">const</span> Slice&amp; index_value) &#123;</span><br><span class="line">  Table* table = <span class="keyword">reinterpret_cast</span>&lt;Table*&gt;(arg);</span><br><span class="line">  Cache* block_cache = table-&gt;rep_-&gt;options.block_cache;</span><br><span class="line">  Block* block = <span class="literal">nullptr</span>;</span><br><span class="line">  Cache::Handle* cache_handle = <span class="literal">nullptr</span>;</span><br><span class="line"></span><br><span class="line">  BlockHandle handle;</span><br><span class="line">  Slice input = index_value;</span><br><span class="line">  Status s = handle.DecodeFrom(&amp;input);</span><br><span class="line">  <span class="comment">// We intentionally allow extra stuff in index_value so that we</span></span><br><span class="line">  <span class="comment">// can add more features in the future.</span></span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> (s.ok()) &#123;</span><br><span class="line">    BlockContents contents;</span><br><span class="line">    <span class="keyword">if</span> (block_cache != <span class="literal">nullptr</span>) &#123;</span><br><span class="line">      <span class="keyword">char</span> cache_key_buffer[<span class="number">16</span>];</span><br><span class="line">      EncodeFixed64(cache_key_buffer, table-&gt;rep_-&gt;cache_id);</span><br><span class="line">      EncodeFixed64(cache_key_buffer + <span class="number">8</span>, handle.offset());</span><br><span class="line">      Slice key(cache_key_buffer, sizeof(cache_key_buffer));</span><br><span class="line">      cache_handle = block_cache-&gt;Lookup(key);</span><br><span class="line">      <span class="keyword">if</span> (cache_handle != <span class="literal">nullptr</span>) &#123;</span><br><span class="line">        block = <span class="keyword">reinterpret_cast</span>&lt;Block*&gt;(block_cache-&gt;Value(cache_handle));</span><br><span class="line">      &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        s = ReadBlock(table-&gt;rep_-&gt;file, options, handle, &amp;contents);</span><br><span class="line">        <span class="keyword">if</span> (s.ok()) &#123;</span><br><span class="line">          block = <span class="keyword">new</span> Block(contents);</span><br><span class="line">          <span class="keyword">if</span> (contents.cachable &amp;&amp; options.fill_cache) &#123;</span><br><span class="line">            cache_handle = block_cache-&gt;Insert(key, block, block-&gt;size(),</span><br><span class="line">                                               &amp;DeleteCachedBlock);</span><br><span class="line">          &#125;</span><br><span class="line">        &#125;</span><br><span class="line">      &#125;</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">      s = ReadBlock(table-&gt;rep_-&gt;file, options, handle, &amp;contents);</span><br><span class="line">      <span class="keyword">if</span> (s.ok()) &#123;</span><br><span class="line">        block = <span class="keyword">new</span> Block(contents);</span><br><span class="line">      &#125;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">  Iterator* iter;</span><br><span class="line">  <span class="keyword">if</span> (block != <span class="literal">nullptr</span>) &#123;</span><br><span class="line">    iter = block-&gt;NewIterator(table-&gt;rep_-&gt;options.comparator);</span><br><span class="line">    <span class="keyword">if</span> (cache_handle == <span class="literal">nullptr</span>) &#123;</span><br><span class="line">      iter-&gt;RegisterCleanup(&amp;DeleteBlock, block, <span class="literal">nullptr</span>);</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">      iter-&gt;RegisterCleanup(&amp;ReleaseBlock, block_cache, cache_handle);</span><br><span class="line">    &#125;</span><br><span class="line">  &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    iter = NewErrorIterator(s);</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">return</span> iter;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
+<li><a href="https://izualzhy.cn/leveldb-block" target="_blank" rel="noopener">https://izualzhy.cn/leveldb-block</a></li>
+<li><a href="https://izualzhy.cn/leveldb-sstable" target="_blank" rel="noopener">https://izualzhy.cn/leveldb-sstable</a></li>
+</ol>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/leveldb/" rel="tag"># leveldb</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2021/04/09/leveldb-memtable/" rel="next" title="LevelDB之Memtable实现">
+                <i class="fa fa-chevron-left"></i> LevelDB之Memtable实现
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2021/04/18/leveldb-compaction/" rel="prev" title="LevelDB之Compaction实现">
+                LevelDB之Compaction实现 <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">161</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">154</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#SSTable格式"><span class="nav-number">1.</span> <span class="nav-text">SSTable格式</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Block实现"><span class="nav-number">2.</span> <span class="nav-text">Block实现</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#BlockBuilder-Block原理"><span class="nav-number">2.1.</span> <span class="nav-text">BlockBuilder/Block原理</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#共享前缀"><span class="nav-number">2.1.1.</span> <span class="nav-text">共享前缀</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#restart"><span class="nav-number">2.1.2.</span> <span class="nav-text">restart</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#filter-block"><span class="nav-number">2.1.3.</span> <span class="nav-text">filter block</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#BlockBuilder实现"><span class="nav-number">2.2.</span> <span class="nav-text">BlockBuilder实现</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#方法"><span class="nav-number">2.2.1.</span> <span class="nav-text">方法</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#BlockBuilder-Add"><span class="nav-number">2.2.2.</span> <span class="nav-text">BlockBuilder::Add</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#BlockBuilder-Finish"><span class="nav-number">2.2.3.</span> <span class="nav-text">BlockBuilder::Finish</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Block实现-1"><span class="nav-number">2.3.</span> <span class="nav-text">Block实现</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Block-Iter"><span class="nav-number">2.3.1.</span> <span class="nav-text">Block::Iter</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#Seek"><span class="nav-number">2.3.1.1.</span> <span class="nav-text">Seek</span></a></li></ol></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Table实现"><span class="nav-number">3.</span> <span class="nav-text">Table实现</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#TableBuilder"><span class="nav-number">3.1.</span> <span class="nav-text">TableBuilder</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#TableBuilder-Rep"><span class="nav-number">3.2.</span> <span class="nav-text">TableBuilder::Rep</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#TableBuilder-Add"><span class="nav-number">3.2.1.</span> <span class="nav-text">TableBuilder::Add</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#TableBuilder-WriteBlock"><span class="nav-number">3.2.2.</span> <span class="nav-text">TableBuilder::WriteBlock</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#WriteBlock"><span class="nav-number">3.2.2.1.</span> <span class="nav-text">WriteBlock</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#TableBuilder-WriteRawBlock"><span class="nav-number">3.2.2.2.</span> <span class="nav-text">TableBuilder::WriteRawBlock</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#TableBuilder-Flush"><span class="nav-number">3.2.3.</span> <span class="nav-text">TableBuilder::Flush</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#TableBuilder-Finish"><span class="nav-number">3.2.4.</span> <span class="nav-text">TableBuilder::Finish</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Table"><span class="nav-number">3.3.</span> <span class="nav-text">Table</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Table-Rep"><span class="nav-number">3.3.1.</span> <span class="nav-text">Table::Rep</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Table-Open"><span class="nav-number">3.3.2.</span> <span class="nav-text">Table::Open</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Table-NewIterator"><span class="nav-number">3.4.</span> <span class="nav-text">Table::NewIterator</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#TwoLevelIterator"><span class="nav-number">3.4.1.</span> <span class="nav-text">TwoLevelIterator</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#TwoLevelIterator-Next"><span class="nav-number">3.4.1.1.</span> <span class="nav-text">TwoLevelIterator::Next</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#TwoLevelIterator-SkipEmptyDataBlocksForward"><span class="nav-number">3.4.1.2.</span> <span class="nav-text">TwoLevelIterator::SkipEmptyDataBlocksForward</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#TwoLevelIterator-InitDataBlock"><span class="nav-number">3.4.1.3.</span> <span class="nav-text">TwoLevelIterator::InitDataBlock</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#TwoLevelIterator-Seek"><span class="nav-number">3.4.1.4.</span> <span class="nav-text">TwoLevelIterator::Seek</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Table-BlockReader"><span class="nav-number">3.4.2.</span> <span class="nav-text">Table::BlockReader</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">4.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2021</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2021/04/12/leveldb-sstable/';
+          this.page.identifier = '2021/04/12/leveldb-sstable/';
+          this.page.title = 'LevelDB之SSTable实现';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+  
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Config({
+        tex2jax: {
+          inlineMath: [ ['$','$'], ["\\(","\\)"]  ],
+          processEscapes: true,
+          skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+        }
+      });
+    </script>
+
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax(), i;
+        for (i=0; i < all.length; i += 1) {
+          all[i].SourceElement().parentNode.className += ' has-jax';
+        }
+      });
+    </script>
+    <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+  
+
+
+  
+
+  
+
+</body>
+</html>

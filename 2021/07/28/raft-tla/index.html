@@ -1,0 +1,1220 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="raft,TLA," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="介绍使用TLA+对Raft的验证工作。 Ongaro等已经在Github上提供了一版TLA+的实现">
+<meta name="keywords" content="raft,TLA">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Raft的TLA+验证介绍">
+<meta property="og:url" content="http://www.calvinneo.com/2021/07/28/raft-tla/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="介绍使用TLA+对Raft的验证工作。 Ongaro等已经在Github上提供了一版TLA+的实现">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2021-07-29T16:05:08.926Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Raft的TLA+验证介绍">
+<meta name="twitter:description" content="介绍使用TLA+对Raft的验证工作。 Ongaro等已经在Github上提供了一版TLA+的实现">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2021/07/28/raft-tla/"/>
+
+
+
+
+
+  <title>Raft的TLA+验证介绍 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2021/07/28/raft-tla/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                Raft的TLA+验证介绍
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2021-07-28T23:20:37+08:00">
+                2021-07-28
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>介绍使用TLA+对Raft的验证工作。</p>
+<p><a href="https://github.com/ongardie/raft.tla/blob/master/raft.tla" target="_blank" rel="noopener">Ongaro等已经在Github上提供了一版TLA+的实现</a></p>
+<a id="more"></a>
+<h1 id="运行"><a href="#运行" class="headerlink" title="运行"></a>运行</h1><p>容易发现，源码里面不包含TLC的Config，但是我们在<a href="https://github.com/ongardie/raft.tla/issues/1" target="_blank" rel="noopener">Issue 1</a>里面能找到一个。<br><figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line">CONSTANTS<span class="built_in"> Server </span>= &#123;r1,r2,r3&#125;</span><br><span class="line">          Value = &#123;v1,v2&#125;</span><br><span class="line">          Follower = Follower</span><br><span class="line">          Candidate = Candidate</span><br><span class="line">          Leader = Leader</span><br><span class="line">          <span class="literal">Nil</span> = <span class="literal">Nil</span></span><br><span class="line">          RequestVoteRequest = RequestVoteRequest</span><br><span class="line">          RequestVoteResponse = RequestVoteResponse</span><br><span class="line">          AppendEntriesRequest = AppendEntriesRequest</span><br><span class="line">          AppendEntriesResponse = AppendEntriesResponse</span><br><span class="line">          TLC_MAX_TERM = 3</span><br><span class="line">          TLC_MAX_ENTRY = 1</span><br><span class="line">          TLC_MAX_MESSAGE = 1</span><br><span class="line">\*          PNat = &#123;1,2,3,4,5&#125;</span><br><span class="line">\*         <span class="built_in"> Nat </span>= &#123;0,1,2,3,4,5&#125;</span><br><span class="line">\*SYMMETRY Perms</span><br><span class="line">SPECIFICATION Spec</span><br><span class="line">\<span class="number">*C</span>ONSTRAINT TermConstraint</span><br><span class="line">\<span class="number">*C</span>ONSTRAINT LogConstraint</span><br><span class="line">\<span class="number">*C</span>ONSTRAINT MessageConstraint</span><br><span class="line">\*INVARIANT AtMostOneLeaderPerTerm</span><br><span class="line">\*INVARIANT TermAndIndexDeterminesLogPrefix</span><br><span class="line">\*INVARIANT StateMachineSafety</span><br><span class="line">\*INVARIANT NewLeaderHasCompleteLog</span><br><span class="line">\*INVARIANT CommitInOrder</span><br><span class="line"></span><br><span class="line">\*INVARIANT MessageTypeInv</span><br><span class="line">\*INVARIANT TypeInv</span><br></pre></td></tr></table></figure></p>
+<p>需要限制一下Model<br><figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">/\ \A i \<span class="keyword">in</span><span class="built_in"> Server </span>: Len(log[i]) =&lt; maxLength</span><br><span class="line">/\ \A i \<span class="keyword">in</span><span class="built_in"> Server </span>: currentTerm[i] =&lt; maxTerm</span><br><span class="line">/\ Cardinality(DOMAIN messages) =&lt; maxMessage</span><br><span class="line">/\ restartNum =&lt; maxRestartNum</span><br><span class="line">/\ timeoutNum =&lt; maxTimeoutNum</span><br><span class="line">/\ actionNum =&lt; maxActionNum</span><br></pre></td></tr></table></figure></p>
+<p>timeoutNum必须至少为1，不然不能触发选举</p>
+<p>列出一下Safety条件<br><figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">OneLeader == Cardinality( &#123;i \<span class="keyword">in</span><span class="built_in"> Server </span>: state[i] = Leader&#125; ) &lt;= 1</span><br></pre></td></tr></table></figure></p>
+<p>注意如下错误<br><figure class="highlight livecodeserver"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">The subscript <span class="keyword">of</span> <span class="keyword">the</span> next-state relation specified <span class="keyword">by</span> <span class="keyword">the</span> specification</span><br><span class="line">does <span class="keyword">not</span> seem <span class="built_in">to</span> contain <span class="keyword">the</span> state <span class="built_in">variable</span> xxx</span><br></pre></td></tr></table></figure></p>
+<p>看看xxx是不是在vars里面<br><figure class="highlight tex"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Spec == Init /<span class="tag">\<span class="name"> </span><span class="string">[]</span><span class="string">[Next]</span></span>_vars</span><br></pre></td></tr></table></figure></p>
+<p>打印语句<br><figure class="highlight stylus"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="title">Print</span><span class="params">(内容, Print语句的值)</span></span></span><br></pre></td></tr></table></figure></p>
+<p>发现maxMessage必须为1，其他都可以变。</p>
+<h1 id="总体模型"><a href="#总体模型" class="headerlink" title="总体模型"></a>总体模型</h1><h2 id="变量介绍"><a href="#变量介绍" class="headerlink" title="变量介绍"></a>变量介绍</h2><p>下面的变量是全局的：</p>
+<ol>
+<li><p>messages<br> 表示从一个Server发送到另一个Server的消息。因为TLAPS不支持Bags模块(也就是所谓的multiset)，所以这是一个将消息映射为Nat的<strong>函数</strong>。<br> 通过<code>WithMessage(m, msgs)</code>往<code>messages</code>添加一条消息，其中<code>m</code>是我们需要发送的消息，<code>msgs</code>就是<code>messages</code>这个变量。</p>
+ <figure class="highlight delphi"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">WithMessage(m, msgs) ==</span><br><span class="line"><span class="keyword">IF</span> m \<span class="keyword">in</span> DOMAIN msgs <span class="keyword">THEN</span></span><br><span class="line">    [msgs <span class="keyword">EXCEPT</span> ![m] = msgs[m] + <span class="number">1</span>]</span><br><span class="line"><span class="keyword">ELSE</span></span><br><span class="line">    msgs @@ (m :&gt; <span class="number">1</span>)</span><br></pre></td></tr></table></figure>
+<p> 消息的格式如下图所示</p>
+ <figure class="highlight scheme"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">[<span class="name">mtype</span>         |-&gt; RequestVoteRequest,</span><br><span class="line"> mterm         |-&gt; currentTerm[<span class="name">i</span>],</span><br><span class="line"> mlastLogTerm  |-&gt; LastTerm(<span class="name"><span class="builtin-name">log</span></span>[<span class="name">i</span>]),</span><br><span class="line"> mlastLogIndex |-&gt; Len(<span class="name"><span class="builtin-name">log</span></span>[<span class="name">i</span>]),</span><br><span class="line"> msource       |-&gt; i,</span><br><span class="line"> mdest         |-&gt; j]</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>elections<br> 仅在证明(proof)中需要，实现(implementation)并不需要。<br> 这个用来记录所有成功的选举。包括Leader和Voter的日志。其中一个元素类似下面。</p>
+ <figure class="highlight xl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">&#123;[ <span class="function"><span class="title">eterm</span>     |-&gt;</span> currentTerm[i],</span><br><span class="line">   <span class="function"><span class="title">eleader</span>   |-&gt;</span> i,</span><br><span class="line">   <span class="function"><span class="title">elog</span>      |-&gt;</span> <span class="built_in">log</span>[i],</span><br><span class="line">   <span class="function"><span class="title">evotes</span>    |-&gt;</span> votesGranted[i],</span><br><span class="line">   <span class="function"><span class="title">evoterLog</span> |-&gt;</span> voterLog[i]]&#125;</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>allLogs<br> 同样仅在证明中需要。<br> 集合了每个Server上的日志</p>
+ <figure class="highlight pf"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">/\ <span class="literal">all</span>Logs' = <span class="literal">all</span>Logs \cup &#123;<span class="keyword">log</span>[i] : i \<span class="keyword">in</span> Server&#125;</span><br></pre></td></tr></table></figure>
+</li>
+</ol>
+<p>下面的变量是Per Server的：</p>
+<ol>
+<li>serverVars<br> 为<code>&lt;&lt;currentTerm, state, votedFor&gt;&gt;</code><br> 在Init中，currentTerm初始化为1，state初始化为Follower，voteFor初始化为Nil。</li>
+<li><p>logVars<br> 为<code>&lt;&lt;log, commitIndex&gt;&gt;</code><br> 其中log是A Sequence of log entries，<code>log[i]</code>表示Server i上的日志。<br> 在Init中，log初始化为</p>
+ <figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">log = [i \<span class="keyword">in</span><span class="built_in"> Server </span>|-&gt; &lt;&lt; &gt;&gt;]</span><br></pre></td></tr></table></figure>
+<p> 每个Log Entry的格式是</p>
+ <figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">[term  |-&gt; currentTerm[i],</span><br><span class="line"> value |-&gt; v]</span><br></pre></td></tr></table></figure>
+<p> commitIndex初始化为0。</p>
+</li>
+<li>candidateVars<br> 为<code>&lt;&lt;votesResponded, votesGranted, voterLog&gt;&gt;</code></li>
+<li>leaderVars<br> 为<code>&lt;&lt;nextIndex, matchIndex, elections&gt;&gt;</code><br> 在Init中，nextIndex全部被初始化为1，matchIndex全部被初始化为0。</li>
+</ol>
+<h2 id="Helper"><a href="#Helper" class="headerlink" title="Helper"></a>Helper</h2><p>Quorum实际上是一个集合的集合。表示Server中所有可以形成Quorum的子集。<br><figure class="highlight vbscript"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Quorum == &#123;i \<span class="keyword">in</span> SUBSET(<span class="built_in">Server</span>) : Cardinality(i) * <span class="number">2</span> &gt; Cardinality(<span class="built_in">Server</span>)&#125;</span><br></pre></td></tr></table></figure></p>
+<h1 id="周边Action"><a href="#周边Action" class="headerlink" title="周边Action"></a>周边Action</h1><h2 id="Spec"><a href="#Spec" class="headerlink" title="Spec"></a>Spec</h2><figure class="highlight taggerscript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">Next == /<span class="symbol">\ </span><span class="symbol">\/</span> <span class="symbol">\E</span> i <span class="symbol">\i</span>n Server : Restart(i)</span><br><span class="line">           <span class="symbol">\/</span> <span class="symbol">\E</span> i <span class="symbol">\i</span>n Server : Timeout(i)</span><br><span class="line">           <span class="symbol">\/</span> <span class="symbol">\E</span> i,j <span class="symbol">\i</span>n Server : RequestVote(i, j)</span><br><span class="line">           <span class="symbol">\/</span> <span class="symbol">\E</span> i <span class="symbol">\i</span>n Server : BecomeLeader(i)</span><br><span class="line">           <span class="symbol">\/</span> <span class="symbol">\E</span> i <span class="symbol">\i</span>n Server, v <span class="symbol">\i</span>n Value : ClientRequest(i, v)</span><br><span class="line">           <span class="symbol">\/</span> <span class="symbol">\E</span> i <span class="symbol">\i</span>n Server : AdvanceCommitIndex(i)</span><br><span class="line">           <span class="symbol">\/</span> <span class="symbol">\E</span> i,j <span class="symbol">\i</span>n Server : AppendEntries(i, j)</span><br><span class="line">           <span class="symbol">\/</span> <span class="symbol">\E</span> m <span class="symbol">\i</span>n DOMAIN messages : Receive(m)</span><br><span class="line">           <span class="symbol">\/</span> <span class="symbol">\E</span> m <span class="symbol">\i</span>n DOMAIN messages : DuplicateMessage(m)</span><br><span class="line">           <span class="symbol">\/</span> <span class="symbol">\E</span> m <span class="symbol">\i</span>n DOMAIN messages : DropMessage(m)</span><br><span class="line">           <span class="symbol">\*</span> History variable that tracks every log ever:</span><br><span class="line">        /<span class="symbol">\ </span>allLogs' = allLogs <span class="symbol">\c</span>up &#123;log[i] : i <span class="symbol">\i</span>n Server&#125;</span><br></pre></td></tr></table></figure>
+<h1 id="主要Acttion"><a href="#主要Acttion" class="headerlink" title="主要Acttion"></a>主要Acttion</h1><h2 id="AppendEntries"><a href="#AppendEntries" class="headerlink" title="AppendEntries"></a>AppendEntries</h2><p>Enabling条件，就是自己是Leader，并且不能自己给自己发消息。<br><code>SubSeq(s,m,n)</code>表示<code>&lt;&lt; s[m], s[m+1], ..., s[n] &gt;&gt;</code><br><figure class="highlight xl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line">AppendEntries(i, j) ==</span><br><span class="line">    /\ i /= j</span><br><span class="line">    /\ state[i] = Leader</span><br><span class="line">    /\ LET prevLogIndex == nextIndex[i][j] - <span class="number">1</span></span><br><span class="line">           prevLogTerm == IF prevLogIndex &gt; <span class="number">0</span> THEN</span><br><span class="line">                              <span class="built_in">log</span>[i][prevLogIndex].term</span><br><span class="line">                          ELSE</span><br><span class="line">                              <span class="number">0</span></span><br><span class="line">           \* Send up to <span class="number">1</span> entry, constrained <span class="keyword">by</span> the end of the <span class="built_in">log</span>.</span><br><span class="line">           lastEntry == Min(&#123;Len(<span class="built_in">log</span>[i]), nextIndex[i][j]&#125;)</span><br><span class="line">           entries == SubSeq(<span class="built_in">log</span>[i], nextIndex[i][j], lastEntry)</span><br><span class="line">       IN S<span class="function"><span class="title">end</span>([mtype          |-&gt;</span> AppendEntriesRequest,</span><br><span class="line">                <span class="function"><span class="title">mterm</span>          |-&gt;</span> currentTerm[i],</span><br><span class="line">                <span class="function"><span class="title">mprevLogIndex</span>  |-&gt;</span> prevLogIndex,</span><br><span class="line">                <span class="function"><span class="title">mprevLogTerm</span>   |-&gt;</span> prevLogTerm,</span><br><span class="line">                <span class="function"><span class="title">mentries</span>       |-&gt;</span> entries,</span><br><span class="line">                \* mlog <span class="keyword">is</span> used <span class="keyword">as</span> a history variable <span class="keyword">for</span> the proof.</span><br><span class="line">                \* It would <span class="built_in">not</span> exist <span class="built_in">in</span> a <span class="keyword">real</span> implementation.</span><br><span class="line">                <span class="function"><span class="title">mlog</span>           |-&gt;</span> <span class="built_in">log</span>[i],</span><br><span class="line">                <span class="function"><span class="title">mcommitIndex</span>   |-&gt;</span> Min(&#123;commitIndex[i], lastEntry&#125;),</span><br><span class="line">                <span class="function"><span class="title">msource</span>        |-&gt;</span> i,</span><br><span class="line">                <span class="function"><span class="title">mdest</span>          |-&gt;</span> j])</span><br><span class="line">    /\ UNCHANGED <span class="string">&lt;&lt;serverVars, candidateVars, leaderVars, logVars&gt;&gt;</span></span><br></pre></td></tr></table></figure></p>
+<h2 id="对端处理AppendEntries"><a href="#对端处理AppendEntries" class="headerlink" title="对端处理AppendEntries"></a>对端处理AppendEntries</h2><figure class="highlight stylus"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="title">HandleAppendEntriesRequest</span><span class="params">(i, j, m)</span></span> ==</span><br><span class="line">    LET logOk == \/ m<span class="selector-class">.mprevLogIndex</span> = <span class="number">0</span></span><br><span class="line">                 \/ /\ m<span class="selector-class">.mprevLogIndex</span> &gt; <span class="number">0</span></span><br><span class="line">                    /\ m<span class="selector-class">.mprevLogIndex</span> &lt;= Len(log[i])</span><br><span class="line">                    /\ m<span class="selector-class">.mprevLogTerm</span> = log[i][m.mprevLogIndex].term</span><br><span class="line">    IN /\ m<span class="selector-class">.mterm</span> &lt;= currentTerm[i]</span><br></pre></td></tr></table></figure>
+<p>下面处理分为三个部分：<br>拒绝<br><figure class="highlight livescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">...</span><br><span class="line">       <span class="regexp">/\ \/ /</span><span class="string">\</span> <span class="string">\*</span> reject request</span><br><span class="line">                <span class="string">\/</span> m.mterm &lt; currentTerm[i]</span><br><span class="line">                <span class="string">\/</span> /<span class="string">\</span> m.mterm = currentTerm[i]</span><br><span class="line">                   /<span class="string">\</span> state[i] = Follower</span><br><span class="line">                   /<span class="string">\</span> <span class="string">\lnot</span> logOk</span><br><span class="line">             /<span class="string">\</span> Reply([mtype           |<span class="function">-&gt;</span> AppendEntriesResponse,</span><br><span class="line">                       mterm           |<span class="function">-&gt;</span> currentTerm[i],</span><br><span class="line">                       msuccess        |<span class="function">-&gt;</span> FALSE,</span><br><span class="line">                       mmatchIndex     |<span class="function">-&gt;</span> <span class="number">0</span>,</span><br><span class="line">                       msource         |<span class="function">-&gt;</span> i,</span><br><span class="line">                       mdest           |<span class="function">-&gt;</span> j],</span><br><span class="line">                       m)</span><br><span class="line">             /<span class="string">\</span> UNCHANGED &lt;&lt;serverVars, logVars&gt;&gt;</span><br></pre></td></tr></table></figure></p>
+<p>切换为Follower<br><figure class="highlight pf"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">...</span><br><span class="line">          \/ \* return <span class="keyword">to</span> follower <span class="keyword">state</span></span><br><span class="line">             /\ m.mterm = currentTerm[i]</span><br><span class="line">             /\ <span class="keyword">state</span>[i] = Candidate</span><br><span class="line">             /\ <span class="keyword">state</span>' = [<span class="keyword">state</span> EXCEPT ![i] = Follower]</span><br><span class="line">             /\ UNCHANGED <span class="variable">&lt;&lt;currentTerm, votedFor, logVars, messages&gt;</span>&gt;</span><br></pre></td></tr></table></figure></p>
+<p>接受<br><figure class="highlight livescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br></pre></td><td class="code"><pre><span class="line">...</span><br><span class="line">          <span class="string">\/</span> <span class="string">\*</span> accept request</span><br><span class="line">             /<span class="string">\</span> m.mterm = currentTerm[i]</span><br><span class="line">             /<span class="string">\</span> state[i] = Follower</span><br><span class="line">             /<span class="string">\</span> logOk</span><br><span class="line">             /<span class="string">\</span> LET index == m.mprevLogIndex + <span class="number">1</span></span><br><span class="line">                IN <span class="string">\/</span> <span class="string">\*</span> already done <span class="keyword">with</span> request</span><br><span class="line">                       <span class="regexp">/\ \/</span> m.mentries = &lt;&lt; &gt;&gt;</span><br><span class="line">                          <span class="string">\/</span> <span class="regexp">/\ m.mentries /</span>= &lt;&lt; &gt;&gt;</span><br><span class="line">                             /<span class="string">\</span> Len(log[i]) &gt;= index</span><br><span class="line">                             /<span class="string">\</span> log[i][index].term = m.mentries[<span class="number">1</span>].term</span><br><span class="line">                          <span class="string">\*</span> This could make our commitIndex decrease (<span class="keyword">for</span></span><br><span class="line">                          <span class="string">\*</span> example <span class="keyword">if</span> we process an old, duplicated request),</span><br><span class="line">                          <span class="string">\*</span> but <span class="literal">that</span> doesn<span class="string">'t really affect anything.</span></span><br><span class="line"><span class="string">                       /\ commitIndex'</span> = [commitIndex EXCEPT ![i] =</span><br><span class="line">                                              m.mcommitIndex]</span><br><span class="line">                       /<span class="string">\</span> Reply([mtype           |<span class="function">-&gt;</span> AppendEntriesResponse,</span><br><span class="line">                                 mterm           |<span class="function">-&gt;</span> currentTerm[i],</span><br><span class="line">                                 msuccess        |<span class="function">-&gt;</span> TRUE,</span><br><span class="line">                                 mmatchIndex     |<span class="function">-&gt;</span> m.mprevLogIndex +</span><br><span class="line">                                                     Len(m.mentries),</span><br><span class="line">                                 msource         |<span class="function">-&gt;</span> i,</span><br><span class="line">                                 mdest           |<span class="function">-&gt;</span> j],</span><br><span class="line">                                 m)</span><br><span class="line">                       /<span class="string">\</span> UNCHANGED &lt;&lt;serverVars, log&gt;&gt;</span><br><span class="line">                   <span class="string">\/</span> <span class="string">\*</span> conflict: remove <span class="number">1</span> entry</span><br><span class="line">                       <span class="regexp">/\ m.mentries /</span>= &lt;&lt; &gt;&gt;</span><br><span class="line">                       /<span class="string">\</span> Len(log[i]) &gt;= index</span><br><span class="line">                       <span class="regexp">/\ log[i][index].term /</span>= m.mentries[<span class="number">1</span>].term</span><br><span class="line">                       /<span class="string">\</span> LET <span class="keyword">new</span> == [index2 <span class="string">\in</span> <span class="number">1.</span>.(Len(log[i]) - <span class="number">1</span>) |<span class="function">-&gt;</span></span><br><span class="line">                                          log[i][index2]]</span><br><span class="line">                          IN log<span class="string">' = [log EXCEPT ![i] = new]</span></span><br><span class="line"><span class="string">                       /\ UNCHANGED &lt;&lt;serverVars, commitIndex, messages&gt;&gt;</span></span><br><span class="line"><span class="string">                   \/ \* no conflict: append entry</span></span><br><span class="line"><span class="string">                       /\ m.mentries /= &lt;&lt; &gt;&gt;</span></span><br><span class="line"><span class="string">                       /\ Len(log[i]) = m.mprevLogIndex</span></span><br><span class="line"><span class="string">                       /\ log'</span> = [log EXCEPT ![i] =</span><br><span class="line">                                      Append(log[i], m.mentries[<span class="number">1</span>])]</span><br><span class="line">                       /<span class="string">\</span> UNCHANGED &lt;&lt;serverVars, commitIndex, messages&gt;&gt;</span><br><span class="line">       /<span class="string">\</span> UNCHANGED &lt;&lt;candidateVars, leaderVars&gt;&gt;</span><br></pre></td></tr></table></figure></p>
+<h2 id="AppendEntries处理对端返回"><a href="#AppendEntries处理对端返回" class="headerlink" title="AppendEntries处理对端返回"></a>AppendEntries处理对端返回</h2><h2 id="RequestVote"><a href="#RequestVote" class="headerlink" title="RequestVote"></a>RequestVote</h2><h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
+<li><a href="https://github.com/dranov/raft-tla/blob/master/thirdparty/raft_membership.tla" target="_blank" rel="noopener">https://github.com/dranov/raft-tla/blob/master/thirdparty/raft_membership.tla</a><br> Raft的Membership Change证明</li>
+<li><a href="https://github.com/dranov/raft-tla/blob/master/thirdparty/raft_dricketts.tla" target="_blank" rel="noopener">https://github.com/dranov/raft-tla/blob/master/thirdparty/raft_dricketts.tla</a><br> 一个带有很多Inv的Raft的TLA+</li>
+<li><a href="https://github.com/tlaplus/CommunityModules/blob/master/modules/SequencesExt.tla" target="_blank" rel="noopener">https://github.com/tlaplus/CommunityModules/blob/master/modules/SequencesExt.tla</a><br> Sequences扩展</li>
+</ol>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/raft/" rel="tag"># raft</a>
+          
+            <a href="/tags/TLA/" rel="tag"># TLA</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2021/06/26/tla/" rel="next" title="TLA用法">
+                <i class="fa fa-chevron-left"></i> TLA用法
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">161</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">154</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#运行"><span class="nav-number">1.</span> <span class="nav-text">运行</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#总体模型"><span class="nav-number">2.</span> <span class="nav-text">总体模型</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#变量介绍"><span class="nav-number">2.1.</span> <span class="nav-text">变量介绍</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Helper"><span class="nav-number">2.2.</span> <span class="nav-text">Helper</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#周边Action"><span class="nav-number">3.</span> <span class="nav-text">周边Action</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Spec"><span class="nav-number">3.1.</span> <span class="nav-text">Spec</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#主要Acttion"><span class="nav-number">4.</span> <span class="nav-text">主要Acttion</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#AppendEntries"><span class="nav-number">4.1.</span> <span class="nav-text">AppendEntries</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#对端处理AppendEntries"><span class="nav-number">4.2.</span> <span class="nav-text">对端处理AppendEntries</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#AppendEntries处理对端返回"><span class="nav-number">4.3.</span> <span class="nav-text">AppendEntries处理对端返回</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#RequestVote"><span class="nav-number">4.4.</span> <span class="nav-text">RequestVote</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">5.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2021</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2021/07/28/raft-tla/';
+          this.page.identifier = '2021/07/28/raft-tla/';
+          this.page.title = 'Raft的TLA+验证介绍';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+  
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Config({
+        tex2jax: {
+          inlineMath: [ ['$','$'], ["\\(","\\)"]  ],
+          processEscapes: true,
+          skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+        }
+      });
+    </script>
+
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax(), i;
+        for (i=0; i < all.length; i += 1) {
+          all[i].SourceElement().parentNode.className += ' has-jax';
+        }
+      });
+    </script>
+    <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+  
+
+
+  
+
+  
+
+</body>
+</html>
