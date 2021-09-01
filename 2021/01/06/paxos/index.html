@@ -74,7 +74,7 @@
 <link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="分布式,raft,paxos," />
+  <meta name="keywords" content="分布式,paxos,raft," />
 
 
 
@@ -93,7 +93,7 @@
 
 
 <meta name="description" content="本文介绍Paxos算法，包含Basic Paxos，以及Raft作者提出的一个Multi Paxos的工程化实现方案。此外，我们还就Raft作者给出的Paxos习题进行探讨。">
-<meta name="keywords" content="分布式,raft,paxos">
+<meta name="keywords" content="分布式,paxos,raft">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Paxos算法">
 <meta property="og:url" content="http://www.calvinneo.com/2021/01/06/paxos/index.html">
@@ -387,7 +387,9 @@
       
         <p>本文介绍Paxos算法，包含Basic Paxos，以及Raft作者提出的一个Multi Paxos的工程化实现方案。此外，我们还就Raft作者给出的Paxos习题进行探讨。</p>
 <a id="more"></a>
-<h1 id="Basic-Paxos"><a href="#Basic-Paxos" class="headerlink" title="Basic Paxos"></a>Basic Paxos</h1><p>Paxos允许消息被任意延迟、丢包、重复，但不允许消息被损坏。<br>Basic Paxos弱化了Leader的概念，而使用了Proposer的概念。<br>Basic Paxos只对一个Value决议。这个Value实际上<a href="https://stackoverflow.com/questions/65175880/how-can-i-understand-value-in-bacis-paxos" target="_blank" rel="noopener">类似于Raft里面的一个Log Entry</a>，即<code>x=1</code>或者<code>y=42</code>之类的。根据原版论文<em>The part-time parliament</em>，这里的Value即法令，类似于禁止画画或者允许自由艺术等。<br>注意，一个Value被决定是chosen而不是accepted，即决议的过程是<br><figure class="highlight livescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">propose<span class="function"><span class="params">(issue)</span> -&gt;</span> Accept<span class="function"> -&gt;</span> chosen</span><br></pre></td></tr></table></figure></p>
+<h1 id="Basic-Paxos"><a href="#Basic-Paxos" class="headerlink" title="Basic Paxos"></a>Basic Paxos</h1><p>Paxos允许消息被任意延迟、丢包、重复，但不允许消息被损坏。<br>Basic Paxos弱化了Leader的概念，而使用了Proposer的概念。<br>Basic Paxos只对一个Value决议。这个Value实际上<a href="https://stackoverflow.com/questions/65175880/how-can-i-understand-value-in-bacis-paxos" target="_blank" rel="noopener">类似于Raft里面的一个Log Entry</a>，即<code>x=1</code>或者<code>y=42</code>之类的。根据原版论文<em>The part-time parliament</em>，这里的Value即法令，类似于禁止画画或者允许自由艺术等。<br>注意，一个Value被决定是chosen而不是accepted，即决议的过程是</p>
+<figure class="highlight livescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">propose<span class="function"><span class="params">(issue)</span> -&gt;</span> Accept<span class="function"> -&gt;</span> chosen</span><br></pre></td></tr></table></figure>
+
 <h2 id="论证1"><a href="#论证1" class="headerlink" title="论证1"></a>论证1</h2><p>在论证1的部分，我们从原始要求倒推出我们需要维护的不变量P2b</p>
 <h3 id="P1"><a href="#P1" class="headerlink" title="P1"></a>P1</h3><p>我们考虑没有丢包和机器故障，并且我们假设只有一个proposer。对于这样的一个平凡情况，我们可以得到下面的要求：<br>一个acceptor必须接受它收到的第一个proposal。</p>
 <p>显然这个方案存在一个问题，不同的proposer可能提出不同的value，这会导致每个acceptor收到了不同的value，但其中没有一个value是占majority的。<br>这个问题导致我们需要让acceptor去accept多于一个proposal。为了区分这些proposal，就要引入proposal number。<br>一个Value被chosen，当具有这个Value的proposal已经被大部分的acceptor accept了。</p>
@@ -465,12 +467,12 @@
 <h2 id="实现"><a href="#实现" class="headerlink" title="实现"></a>实现</h2><p>acceptor的回复需要带上对应的proposal number。acceptor先持久化自己的回复，再发送给对方。<br>下面讨论如何保证没有两个proposal的number是相同的。方法很简单，不同的proposer从不同的不相交集中取这些序号即可。每个proposer持久化自己所选取的最大的proposal number。</p>
 <h2 id="实现状态机"><a href="#实现状态机" class="headerlink" title="实现状态机"></a>实现状态机</h2><p>使用多个服务器组成集群，每个服务器构成一个单独的状态机。因为状态机都是确定的，所以每个服务器对应的状态机的状态和输出始终是一致的。<br>为了保证每个状态机都能执行相同的状态机命令，实现了</p>
 <h1 id="Basic-Paxos-Ongaro"><a href="#Basic-Paxos-Ongaro" class="headerlink" title="Basic Paxos(Ongaro)"></a>Basic Paxos(Ongaro)</h1><p>在Ongaro等的视频里面，进一步理清了Basic Paxos的相关概念。<br>首先是Basic Paxos Instance、Server、Proposer和Acceptor的关系。一个Instance指的是Basic Paxos决定一个Value的过程。因此Basic Paxos被称为是Single decree的，因为它只决定一个值。一般一个Server同时是一个Proposer和Acceptor，Acceptor是完全被动地，处理来自Proposer的请求。一个Acceptor可能Accept不同的Value，也就是可能变票。<br>接着，Ongaro提出一种实现Proposal Number的方案，也就是高位的Round Number和低位的Server ID。这些Round Number需要被持久化到磁盘上，以保证proposal number不会被重复使用。</p>
-<p>下面的图表示了Basic Paxos的消息通信过程<br><img src="/img/paxos/12.png" alt=""></p>
+<p>下面的图表示了Basic Paxos的消息通信过程<br><img src="/img/paxos/12.png"></p>
 <p>需要注意的是，只有提出某个proposal的proposer才能知道是否已经被chosen；对于其他的proposer，必须用自己的proposal执行一遍basic paxos才行。</p>
 <h2 id="三种Prepare顺序讨论"><a href="#三种Prepare顺序讨论" class="headerlink" title="三种Prepare顺序讨论"></a>三种Prepare顺序讨论</h2><p>下面讨论Paxos中三种常见的Prepare顺序，和对应的结果。<br>框框中的<code>P 3.1</code>表示<strong>收到</strong>来自Server1的Round Number为3的proposal，<code>A 3.1 X</code>表示<strong>收到</strong>（而不是接受）这个proposal，它的值为<code>X</code>。<br>有两个proposer试图propose，分别是S1要propose值X，且S5要propose值Y。</p>
-<h3 id="1-当值X已经被chosen"><a href="#1-当值X已经被chosen" class="headerlink" title="1. 当值X已经被chosen"></a>1. 当值X已经被chosen</h3><p>如下图所示，当<code>P 4.5</code>到来时，值<code>X</code>已经被chosen了。<br><img src="/img/paxos/13.png" alt=""></p>
-<h3 id="2-当值X没有被chosen，但新的proposer能够看到"><a href="#2-当值X没有被chosen，但新的proposer能够看到" class="headerlink" title="2. 当值X没有被chosen，但新的proposer能够看到"></a>2. 当值X没有被chosen，但新的proposer能够看到</h3><p>我们注意S3上的<code>A 3.1 X</code>请求已经被Accept了，所以当S5发出<code>P 4.5</code>后，它会知道值已经被Accept为<code>X</code>了，所以它不再坚持自己要Accept的值<code>Y</code>，而是转而Accept值<code>X</code>。<br><img src="/img/paxos/14.png" alt=""></p>
-<h3 id="3-当值X没有被chosen，新的proposer也看不到"><a href="#3-当值X没有被chosen，新的proposer也看不到" class="headerlink" title="3. 当值X没有被chosen，新的proposer也看不到"></a>3. 当值X没有被chosen，新的proposer也看不到</h3><p>注意此时S3上的<code>A 3.1 X</code>请求实际上不会被Accept，因为<code>Prepare 4.5</code>已经捷足先登了。<br><img src="/img/paxos/15.png" alt=""></p>
+<h3 id="1-当值X已经被chosen"><a href="#1-当值X已经被chosen" class="headerlink" title="1. 当值X已经被chosen"></a>1. 当值X已经被chosen</h3><p>如下图所示，当<code>P 4.5</code>到来时，值<code>X</code>已经被chosen了。<br><img src="/img/paxos/13.png"></p>
+<h3 id="2-当值X没有被chosen，但新的proposer能够看到"><a href="#2-当值X没有被chosen，但新的proposer能够看到" class="headerlink" title="2. 当值X没有被chosen，但新的proposer能够看到"></a>2. 当值X没有被chosen，但新的proposer能够看到</h3><p>我们注意S3上的<code>A 3.1 X</code>请求已经被Accept了，所以当S5发出<code>P 4.5</code>后，它会知道值已经被Accept为<code>X</code>了，所以它不再坚持自己要Accept的值<code>Y</code>，而是转而Accept值<code>X</code>。<br><img src="/img/paxos/14.png"></p>
+<h3 id="3-当值X没有被chosen，新的proposer也看不到"><a href="#3-当值X没有被chosen，新的proposer也看不到" class="headerlink" title="3. 当值X没有被chosen，新的proposer也看不到"></a>3. 当值X没有被chosen，新的proposer也看不到</h3><p>注意此时S3上的<code>A 3.1 X</code>请求实际上不会被Accept，因为<code>Prepare 4.5</code>已经捷足先登了。<br><img src="/img/paxos/15.png"></p>
 <h1 id="Multi-Paxos-Ongaro"><a href="#Multi-Paxos-Ongaro" class="headerlink" title="Multi Paxos(Ongaro)"></a>Multi Paxos(Ongaro)</h1><p>主要讲了几件事情：</p>
 <ol>
 <li>如何维护一个Log（一系列Entry）而不是某一个Entry。</li>
@@ -493,7 +495,7 @@
 <li>根据Basic Paxos算法，对这个entry去propose一个Value为jmp的proposal。显然，这个Value是不能被accept的，因为已经有一个Acceptor接受了cmp这个值了。所以这一个Basic Paxos Instance跑完，实际上会导致cmp在Entry3中被chosen。</li>
 <li>接着，我们回到第1步，检查下一个尚未被发现已经chosen的entry，即Entry4，并尝试propose。显然，这次jmp还是不能被accept，因为sub已经被S2上的acceptor接受了。</li>
 </ol>
-<p><img src="/img/paxos/20.png" alt=""></p>
+<p><img src="/img/paxos/20.png"></p>
 <p>通过这种方式，Server可以并发处理多条来自client的请求。演讲者提到，例如第一个请求用到了Entry3，那么下一个请求可能会尝试Entry4或者Entry5等等。在这一点上我还有点疑惑，就是我们能保证client的请求在Paxos log层面是in order的么？</p>
 <p>但是最后这些命令需要按照log中的顺序来放到复制自动机中执行。</p>
 <h2 id="Leader"><a href="#Leader" class="headerlink" title="Leader"></a>Leader</h2><h3 id="选举"><a href="#选举" class="headerlink" title="选举"></a>选举</h3><p>需要注意的是，Paxos在有多个Leader的时候依旧能够正常运作，只是效率会受到影响；但是Raft等就必须要求有唯一的Leader。<br>Lamport提出一种简单的办法，就是令具有最大的Server ID的proposer为Leader。接着所有的Server互相向其他Server以间隔<code>T</code>发送心跳包，心跳包中包含自己的Server ID。如果一个Server在<code>2T</code>的时间内没有收到一个具有更高的Server ID的心跳包，那么它就以Leader的方式行动，即开始处理来自client的请求，且同时执行proposer和acceptor的角色。相对应地，如果一个Server不是Leader，那么它不处理client的请求，并且只执行acceptor的角色。</p>
@@ -516,22 +518,27 @@
 </ol>
 <p>下面是解决方案，一共有四个措施，但其实大部分措施都是为了处理就Leader宕机的情况。</p>
 <ol>
-<li>Proposer需要不断地重复Accept请求（可以在后台完成），直到所有的acceptor都回复<br> 但这个策略是不充分的，原因是考虑当Proposer宕掉时，他未必能够将所有的Entry都进行复制。</li>
-<li>跟踪所有被chosen的Entry<br> 每个Server对所有已经被chosen的Entry设置<code>acceptedProposal[i]=INF</code>，INF也是能够无缝适配协议的，因为不可能存在一个更大的proposal number了。<br> 每个Server维护一个<code>firstUnchosenIndex</code>（已经在前面介绍过了）。</li>
+<li><p>Proposer需要不断地重复Accept请求（可以在后台完成），直到所有的acceptor都回复<br> 但这个策略是不充分的，原因是考虑当Proposer宕掉时，他未必能够将所有的Entry都进行复制。</p>
+</li>
+<li><p>跟踪所有被chosen的Entry<br> 每个Server对所有已经被chosen的Entry设置<code>acceptedProposal[i]=INF</code>，INF也是能够无缝适配协议的，因为不可能存在一个更大的proposal number了。<br> 每个Server维护一个<code>firstUnchosenIndex</code>（已经在前面介绍过了）。</p>
+</li>
 <li><p>Proposer将自己的<code>firstUnchosenIndex</code>附加在Accept请求中发送<br> 这样，一个Accept请求会类似下面</p>
  <figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">request = Accept(<span class="attribute">proposal</span>=3.4, <span class="attribute">index</span>=8, <span class="attribute">value</span>=v, <span class="attribute">firstUnchosenIndex</span>=7)</span><br></pre></td></tr></table></figure>
+
 <p> 而acceptor会对每个<code>Entry[i]</code>进行如下的检查，如果下面两个条件被满足，那么就将<code>Entry[i]</code>标记为chosen。</p>
 <ul>
 <li><code>i &lt; request.firstUnchosenIndex</code></li>
-<li><p><code>acceptedProposal[i] == request.proposal</code></p>
-<p>为了解释这种情况，我们查看下面的这个例子。下图中，每个格子里面的数字指的是proposal number。容易看到，在这个acceptor处理Accept请求前，这台Server上的Entry 1/2/3/5已经被chosen了。<br><img src="/img/paxos/26.a.png" alt=""><br>现在，来自Leader Proposer的一个Accept请求告知<code>firstUnchosenIndex=7</code>，这也就意味着在这个Proposer上，Entry 1到6都被chosen了。此时，我们就可以将Entry 6标记为chosen。<br><img src="/img/paxos/26.b.png" alt=""><br>然后我们有几个疑问：</p>
-</li>
+<li><code>acceptedProposal[i] == request.proposal</code></li>
+</ul>
+<p> 为了解释这种情况，我们查看下面的这个例子。下图中，每个格子里面的数字指的是proposal number。容易看到，在这个acceptor处理Accept请求前，这台Server上的Entry 1/2/3/5已经被chosen了。<br> <img src="/img/paxos/26.a.png"><br> 现在，来自Leader Proposer的一个Accept请求告知<code>firstUnchosenIndex=7</code>，这也就意味着在这个Proposer上，Entry 1到6都被chosen了。此时，我们就可以将Entry 6标记为chosen。<br> <img src="/img/paxos/26.b.png"><br> 然后我们有几个疑问：</p>
+<ul>
 <li>Entry 6为什么可以被标记为chosen？<br>  这是因为首先这个acceptor知道Entry 6也是来自于发送这个Accept的Proposer，并且它在这个Proposer上已经被chosen了。<br>  但这还不够，有没有可能这个Proposer后面发送了关于Entry 6的具有另外一个值的Accept请求呢？我想这样的话，proposal number一定会变得更大。但既然在<code>3.4</code>的时候，我们就知道Entry 6已经被chosen了，那么被chosen的这个值一定就是acceptor日志里面的这个值。</li>
 <li>Entry 4为什么不能被标记为chosen？<br>  因为Entry 4的值来自于另外Round的另外一个Proposer，因此我们没办法像Entry 6一样确定这个不是一个陈旧的数据。也就是说，这个accpetor知道Entry 4被chosen了，但是并不知道这个被chosen的Value是不是自己Log里面的那个Value。因为很可能这个值又被改了。</li>
 <li>Entry 7是怎么回事？</li>
 </ul>
 </li>
-<li>Success RPC<br> acceptor会在对Accept消息的返回中附带上自己的<code>firstUnchosenIndex</code>，当Proposer收到该acceptor返回后会将该值和自己的<code>firstUnchosenIndex</code>进行比较。如果acceptor的<code>firstUnchosenIndex</code>小于自己的，说明这个acceptor落后了，此时需要在后台发送Success RPC。<br> 这个RPC需要包含index以告知是那个Entry被chosen了，并且附带上一个<code>v</code>表示被chosen的值。当Acceptor收到这个消息后，将：<ol>
+<li><p>Success RPC<br> acceptor会在对Accept消息的返回中附带上自己的<code>firstUnchosenIndex</code>，当Proposer收到该acceptor返回后会将该值和自己的<code>firstUnchosenIndex</code>进行比较。如果acceptor的<code>firstUnchosenIndex</code>小于自己的，说明这个acceptor落后了，此时需要在后台发送Success RPC。<br> 这个RPC需要包含index以告知是那个Entry被chosen了，并且附带上一个<code>v</code>表示被chosen的值。当Acceptor收到这个消息后，将：</p>
+<ol>
 <li><code>acceptedValue[index]=v</code></li>
 <li><code>acceptedProposal[index]=INF</code></li>
 <li>返回新的<code>firstUnchosenIndex</code>给Proposer，Proposer会根据这个值判断是否需要再次发送Success RPC</li>
@@ -542,7 +549,7 @@
 <h3 id="如何保证Exact-once语义"><a href="#如何保证Exact-once语义" class="headerlink" title="如何保证Exact once语义"></a>如何保证Exact once语义</h3><p>这个问题通常发生在当老Leader在执行完自己的状态机后、返回给Client前宕机。根据上面的论述，Client实际上会通过另一个Leader重试，在这种情况下，可能同样的命令就会被执行两次。</p>
 <p>其实这种情况在我实现Raft协议的时候也遇到过。对此，演讲者建议Client对每个命令设置一个唯一的ID。每个Server上的RSM都会自己记录一下自己执行过的最新的ID。那么当RSM在执行每个命令的时候，会首先检查这个命令是否被执行过，如果被执行过了，就忽略，并且返回当时的结果。这种策略的要求是Client不挂，因为ID是由Client设置的。</p>
 <h2 id="配置切换"><a href="#配置切换" class="headerlink" title="配置切换"></a>配置切换</h2><h1 id="习题"><a href="#习题" class="headerlink" title="习题"></a>习题</h1><h2 id="官方习题"><a href="#官方习题" class="headerlink" title="官方习题"></a>官方习题</h2><p>来自于Raft作者的博客。</p>
-<h3 id="1"><a href="#1" class="headerlink" title="1"></a>1</h3><p>下面哪些日志是可能存在的？<br><img src="/img/paxos/q1.png" alt=""></p>
+<h3 id="1"><a href="#1" class="headerlink" title="1"></a>1</h3><p>下面哪些日志是可能存在的？<br><img src="/img/paxos/q1.png"></p>
 <ol>
 <li>这个应该是个标准情况，肯定是可以的。</li>
 <li>也是可以的</li>
@@ -641,9 +648,9 @@
           
             <a href="/tags/分布式/" rel="tag"># 分布式</a>
           
-            <a href="/tags/raft/" rel="tag"># raft</a>
-          
             <a href="/tags/paxos/" rel="tag"># paxos</a>
+          
+            <a href="/tags/raft/" rel="tag"># raft</a>
           
         </div>
       
@@ -747,7 +754,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">161</span>
+                <span class="site-state-item-count">164</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -760,7 +767,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">155</span>
+                <span class="site-state-item-count">157</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

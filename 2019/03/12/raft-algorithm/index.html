@@ -393,6 +393,7 @@
 <li>Raft的独特之处还在于其在Leader election的过程中Raft使用了随机计时器进行超时。此外，Raft还提供了一个joint consensus的算法处理Membership changes的问题。</li>
 </ol>
 <a id="more"></a>
+
 <h1 id="Raft基础概念"><a href="#Raft基础概念" class="headerlink" title="Raft基础概念"></a>Raft基础概念</h1><h2 id="状态"><a href="#状态" class="headerlink" title="状态"></a>状态</h2><p>Raft协议要求在每个节点上维护以下的状态：</p>
 <h3 id="共有状态"><a href="#共有状态" class="headerlink" title="共有状态"></a>共有状态</h3><p>注意<code>currentTerm</code>、<code>votedFor</code>、<code>log[]</code>这三个状态是持久化的，其他的则是volatile的。</p>
 <ol>
@@ -426,7 +427,7 @@
 <h2 id="RPC"><a href="#RPC" class="headerlink" title="RPC"></a>RPC</h2><p>Raft中定义了两种主要的RPC包，<code>AppendEntriesRPC</code>和<code>RequestVoteRPC</code>。</p>
 <h3 id="AppendEntriesRPC"><a href="#AppendEntriesRPC" class="headerlink" title="AppendEntriesRPC"></a>AppendEntriesRPC</h3><p><code>AppendEntriesRPC</code>具有心跳包和推送日志的作用。此外，通过<code>AppendEntriesRPC</code>我们还可以发现选举产生的新Leader，可以参考先前讨论任期时提到的有趣的问题。这个RPC包含以下部分</p>
 <ol>
-<li><code>term</code><br> 表示<strong>Leader</strong>的当前任期号。为了表示区别，<strong>下面写作<code>rpc_term_id</code></strong>。</li>
+<li><code>term</code><br> 表示<strong>Leader</strong>的当前任期号。为了表示区别，**下面写作<code>rpc_term_id</code>**。</li>
 <li><code>leaderId</code><br> 表示当前领导人的id，这样来自客户端的请求能被Follower转发给Leader。</li>
 <li><code>prevLogIndex</code>和<code>prevLogTerm</code><br> 表示新日志条目之前的index和其对应的term，这个是为了保障先前提到的日志匹配原则。Leader在构造这两个字段时实际上是根据自己维护的<code>nextIndex[]</code>和<code>matchIndex[]</code>来计算的。</li>
 <li><code>entries</code><br> <code>entries</code>就是我们要维护的日志条目。</li>
@@ -435,17 +436,14 @@
 <h3 id="AppendEntriesRPC-Response"><a href="#AppendEntriesRPC-Response" class="headerlink" title="AppendEntriesRPC Response"></a>AppendEntriesRPC Response</h3><p>Follower在接受到该RPC后会发送回执：</p>
 <ol>
 <li><code>term</code>表示当前的任期号</li>
-<li><p><code>success</code><br> 表示这次添加是否成功，它的判定规则如下：</p>
-<ol>
+<li><code>success</code><br> 表示这次添加是否成功，它的判定规则如下：<ol>
 <li>当<code>rpc_term_id &lt; term</code>时返回false，显然我们不接受一个较老的Leader。</li>
 <li>当我们不存在满足<code>prevLogIndex</code>的条目时返回false。这个暗示Leader要发靠前一点的Log。</li>
 <li>即使存在<code>prevLogIndex</code>的条目，但这个条目的<code>term</code><strong>不同于</strong><code>prevLogTerm</code>时，删除从<code>prevLogIndex</code>开始的所有项目。<br> 这里的“不同于”是非常重要的，<strong>如果Follower拥有Leader发来的所有的Entries（也就是Leader的更短），他也是不能删除自己后面的Entry的</strong>。当Follower收到RPC时，<code>prevLogIndex</code>肯定是可能大于等于Follower的log大小的，例如Leader收到了Client的新Log。但<code>prevLogIndex</code><strong>也是可能小于Follower的</strong>，最普遍的一种情况是Leader刚选举出来，还在试探Log。还有一种情况是Follower拥有了先前某个Leader复制的一些Log，而当前的Leader没有。还有一些情况是<a href="(https://thesquareplanet.com/blog/students-guide-to-raft/">我们收到了经历了时延的RPC</a>，这曾经导致我希望对RPC编号来解决这个问题，但实际上没必要。在我的代码中，会列举这些情况，以及相关日志。</li>
 <li>添加所有我们log中没有的条目。</li>
-<li><p>同步<code>leaderCommit</code>。</p>
-<p>特别地，对于心跳包，我们<a href="https://thesquareplanet.com/blog/students-guide-to-raft/" target="_blank" rel="noopener">同样应当进行这样的检测</a>。</p>
-</li>
+<li>同步<code>leaderCommit</code>。</li>
 </ol>
-</li>
+ 特别地，对于心跳包，我们<a href="https://thesquareplanet.com/blog/students-guide-to-raft/" target="_blank" rel="noopener">同样应当进行这样的检测</a>。</li>
 </ol>
 <h3 id="RequestVoteRPC"><a href="#RequestVoteRPC" class="headerlink" title="RequestVoteRPC"></a>RequestVoteRPC</h3><ol>
 <li><code>term</code><br> 表示Candidate的任期号</li>
@@ -472,15 +470,15 @@
 <h2 id="投票原则"><a href="#投票原则" class="headerlink" title="投票原则"></a>投票原则</h2><p>在上一节中我们提到收到<code>RequestVoteRPC</code>请求的节点会根据一定规则进行投票，事实上这是非常重要的，因为我们需要维护领导人完全性的原则。在Raft原论文中，这一部分是放到Safety章节来说明的，因此有必要在阅读此部分时首先查看Log replication章节。<br>首先，我们已经知道在投票的时候一个Candidate必须得到过半数的节点的支持，这是因为每一个<strong>已经提交</strong>的日志条目必然存在在至少一个这样的节点上。我们上面断言的正确性来自在下面Log replication部分的一个规则：当Leader创建的某日志条目被成功复制到过半数的服务器上时，Leader可以提交该条目。<br><strong>【如何比较日志新旧】</strong>下面我们进行另一个断言：如果两份日志最后的条目的term不同，那么<strong>term大的日志新</strong>。如果两份日志最后的条目term相同，那么<strong>日志长</strong>的那个就新。如果一个Candidate的日志和大多数的节点一样新，那么它一定持有了所有已经提交的日志条目。<br>具体原因我们在稍后讨论，我们现在要看的是这个断言描述了给VoteFor某个<code>RequestVoteRPC</code>的条件：</p>
 <ol>
 <li>远端的<code>term</code>（也就是在<code>RequestVoteRPC</code>传递的）不能小于自己的<code>term</code></li>
-<li>远端的<code>lastLogTerm</code>不能小于自己的<code>lastLogTerm</code><br> 注意这个条件不能省略，因为脑裂的节点可以<strong>无限增加自己的<code>currentTerm</code></strong>，所以实际上仍然需要<strong>通过比较日志来决定谁是最新的</strong>。</li>
+<li>远端的<code>lastLogTerm</code>不能小于自己的<code>lastLogTerm</code><br> 注意这个条件不能省略，因为脑裂的节点可以<strong>无限增加自己的<code>currentTerm</code><strong>，所以实际上仍然需要</strong>通过比较日志来决定谁是最新的</strong>。</li>
 <li>如果远端和自己的<code>lastLogTerm</code>相等，那么远端的<code>lastLogIndex</code>不能小于自己的<code>lastLogIndex</code></li>
 </ol>
-<p>注意，有时候一个刚竞选成功的Leader会收到同term的Candidate的Vote请求，而它会给一个Candidate投票。<a href="https://paste.ubuntu.com/p/zrz29bgFPk/" target="_blank" rel="noopener">参考下面的log</a>。这应该是一个错误的实现导致的，<strong>当Leader竞选成功时，我们不需要重置其<code>vote_for</code></strong>。</p>
+<p>注意，有时候一个刚竞选成功的Leader会收到同term的Candidate的Vote请求，而它会给一个Candidate投票。<a href="https://paste.ubuntu.com/p/zrz29bgFPk/" target="_blank" rel="noopener">参考下面的log</a>。这应该是一个错误的实现导致的，**当Leader竞选成功时，我们不需要重置其<code>vote_for</code>**。</p>
 <h1 id="Log-replication"><a href="#Log-replication" class="headerlink" title="Log replication"></a>Log replication</h1><p>一旦由<strong>当前Leader</strong>创建的某日志条目被成功复制到<strong>过半数</strong>的服务器上时，这个Leader可以Commit<strong>该条目</strong>及自己日志中<strong>该条目之前的所有条目</strong>（论文5.4.2节会提到一些细节证明）。这里要求至少过半数实际上为前面的选举投票顺利进行提供了保障，剩余的节点（可能因为宕机或者脑裂没收到）可以在后面慢慢AppendEntries。不需要全部成功复制的原因会在Safety中进行论证。有意思的是即使先前的条目可能是由其他Leader创建的，但这也不影响提交，事实上在下面可以看到，这种方式实际上是唯一的可以提交较旧的term的日志条目的方法。<br>在<code>AppendEntriesRPC</code>中，Leader还通过<code>leaderCommit</code>字段来告知所有的Follower自己当前的提交位置，每个服务器会试图在本地提交直到<code>commitIndex</code>的日志。注意到有的服务器可能在本地并没有这个<code>commitIndex</code>的日志，因此它只能提交到自己最新日志条目的index位置。在更新完后，每个节点会更新<code>lastApplied</code>，从而将新的<code>commitIndex</code>后面的日志条目应用到复制状态机上。在apply之后，Leader便可以向客户返回结果。</p>
 <p><a href="https://www.zhihu.com/question/357207584" target="_blank" rel="noopener">leader在commit了一条日志后，立刻宕机会怎么样呢？</a>，我认为领导人完全性(Leader Completeness)要求如果某个日志条目在某个term中已经被提交，那么这个条目必然出现在所有具有更大的term的Leader中。因此不具备该entry的节点不可能被选举为新leader。但是注意新Leader，不能提交来自较旧任期的日志条目。另外，我们还需要注意commitIndex是volatile的。在紧随其后的一节中，我们将看到个已经被存储到大多数节点中的较旧的日志条目也可能被未来的Leader所覆盖掉。但这并不影响本章的论述，因为在这个情形中，并不允许Commit。所以集群中确实可能出现有被超过半数节点拥有的log被新Leader覆盖掉的情况（Figure8），但在这种情况下，c阶段是不能Commit的，因此自然也不会出现Commit的日志被覆盖的情况了。</p>
 <h2 id="不能提交来自较旧任期的日志条目-论文5-4-2节"><a href="#不能提交来自较旧任期的日志条目-论文5-4-2节" class="headerlink" title="不能提交来自较旧任期的日志条目(论文5.4.2节)"></a>不能提交来自较旧任期的日志条目(论文5.4.2节)</h2><p>我们将论文中的5.4.2节放到这里来讨论。</p>
 <p>首先我们来思考一个问题，如果一个LogEntry已经出现在多数节点上，那么可以认为它已经被Commit了么？<br>答案不是的，因为<strong>已经被persist</strong>到<strong>majority</strong>节点中的<strong>较旧term</strong>的LogEntry也可能被未来的Leader所覆盖掉。因此，我们不能告诉客户端我们已经成功Commit了。<br>我们来看这个经典的对Figure8的讨论。</p>
-<p>下面的一张图（也就是原论文的Figure8）展示了当前Leader对具有较旧的term的日志条目进行提交时的一种情况，其中一个已经被存储到大多数节点中的较旧的日志条目（c阶段中的<code>term 2 index 2</code>）也会被未来的Leader（d <code>term 3 index 2</code>）覆盖掉。这也是在提到领导人完全性原则时我们强调了<strong>已提交</strong>三个字的原因。<br><img src="/img/fbs/rzfg.png" alt=""></p>
+<p>下面的一张图（也就是原论文的Figure8）展示了当前Leader对具有较旧的term的日志条目进行提交时的一种情况，其中一个已经被存储到大多数节点中的较旧的日志条目（c阶段中的<code>term 2 index 2</code>）也会被未来的Leader（d <code>term 3 index 2</code>）覆盖掉。这也是在提到领导人完全性原则时我们强调了<strong>已提交</strong>三个字的原因。<br><img src="/img/fbs/rzfg.png"></p>
 <ol>
 <li>(a)<br> 我们首先查看a阶段，此时S1是Leader（被粗黑框框中），生成一个黄色块的条目并复制给S2，此时由于未超过半数，所以S1不能进行提交。</li>
 <li>(b)<br> S1未能继续复制黄色条目而崩溃了，此时S5透过S3、S4和S5的选票成为Leader（此时S1已挂，而S2的<code>lastLogIndex</code>和<code>lastLogTerm</code>会让它反对S5）。S5紧接着创建了一个蓝色块条目放到了索引2处，此时如果S5继续复制它的蓝色方块，那么S1和S2的黄色方块肯定会被覆盖掉，不过在这个例子中S5都没来得及复制就挂掉了。</li>
@@ -498,10 +496,10 @@
 <li>如果一个新Leader“接盘”了，如何确定哪些log已经被提交了呢？<br> 很简单，添加一个no-op操作就行。</li>
 <li>其他节点可以读取leaderCommit来确定commit到的log位置<br> 注意某些Follower可能没有到<code>leaderCommit</code>的所有日志。</li>
 </ol>
-<p>再次强调，<strong><code>commitIndex</code>是不可能倒退的</strong>。</p>
+<p>再次强调，**<code>commitIndex</code>是不可能倒退的**。</p>
 <p>当然，在<a href="https://issues.apache.org/jira/browse/RATIS-352" target="_blank" rel="noopener">一些issue</a>中可以看到，保存<code>commitIndex</code>可以实现快速的恢复。</p>
 <h2 id="对日志不一致问题的处理"><a href="#对日志不一致问题的处理" class="headerlink" title="对日志不一致问题的处理"></a>对日志不一致问题的处理</h2><p>下面我们关注Leader的复制请求的结果。其实通过前文已经知道，在正常情况下，Leader的日志始终是和Follower的一致的，所以来自Leader的<code>AppendEntriesRPC</code>始终会是成功的。但一旦Leader或者Follower出现崩溃或者网络发生脑裂，日志就会处于不一致状态。例如有些Follower会比Leader少条目或多条目，这时候就违背了日志匹配原则，导致失败，我们稍后看到这个失败实际上会被用来进行恢复一致性的工作。多条目看起来不可思议，但如下图所示，f就是一种情况，多出来的三个term为2的条目，这是可能是由于它是term为2时的Leader，并且添加了一些日志，但是在提交前崩溃了。</p>
-<p><img src="/img/fbs/byzzt.png" alt=""></p>
+<p><img src="/img/fbs/byzzt.png"></p>
 <p>对于这种不一致的状态，Raft有简单粗暴的方法来处理，就是强制Follower直接复制自己的日志，这同时也是领导人只附加原则的要求。而这么做的保证则来自于根据领导人完全性原则，我们的Leader能选举出来就意味着是具有完全的日志的。因此现在的思路就是把Follower一直删到满足日志匹配原则的点为止<br>在这个同步过程中，<code>nextIndex[]</code>和<code>matchIndex[]</code>就派上了用场。<code>nextIndex[]</code>维护了Leader下一个需要发送给Follower的日志序号，当Leader刚选举成功时，它是不知道各个Follower的日志相对于自己的情况的，因此默认<code>nextIndex[]</code>都为自己最后一条日志加一。但这样发出去的日志可能不会被接受，原因是根据之前提到过的日志匹配原则，如果Follower没有Leader的最后一条日志，那么它必然不能匹配Leader发送的<code>AppendEntriesRPC</code>中的<code>prevLogIndex</code>和<code>prevLogTerm</code>所标记，因此它会返回给Leader一个拒绝，此时Leader就会减小对应的<code>nextIndex</code>并重试。我们需要特别注意的是在这个过程中Follower的日志是有可能被Leader<strong>覆盖</strong>的。Raft论文指出这里其实是可以进行优化的（论文5.3节旁注），但这个优化并不是很必要的，因为现实中失败很少发生，而且也不大可能会造成很多的日志不一致的问题。<br>容易看出，这种算法是非常优雅的，因为它把<strong>恢复一致性</strong>的过程和正常增加日志的过程统一起来了，我们不需要对恢复一致性过程额外进行设计，可想而知这个额外设计是相当麻烦的，因为我们还要考虑在回复一致性过程中出现失败的情况。</p>
 <h2 id="有关强制复制日志的细节"><a href="#有关强制复制日志的细节" class="headerlink" title="有关强制复制日志的细节"></a>有关强制复制日志的细节</h2><p>由于实现细节的问题，可能会导致<a href="https://pdos.csail.mit.edu/6.824/labs/lab-raft.html" target="_blank" rel="noopener">MIT 6.824 Lab2</a>的TestFigure8Unreliable2C过不了，可以查看<a href="https://github.com/CalvinNeo/Nuft/commit/c77e09149458072769a7278a402c167fb972015c" target="_blank" rel="noopener">代码的<code>on_append_entries_request</code>函数的847-881行(node.h)，对比下一个commit</a>。</p>
 <h1 id="Safety"><a href="#Safety" class="headerlink" title="Safety"></a>Safety</h1><p>这一部分的论述对应了原论文安全性论证部分，证明了上面的Leader election和Log replication的算法是可靠的。</p>
@@ -522,13 +520,13 @@
 </ol>
 <h2 id="有关可用性的讨论（论文5-6节）"><a href="#有关可用性的讨论（论文5-6节）" class="headerlink" title="有关可用性的讨论（论文5.6节）"></a>有关可用性的讨论（论文5.6节）</h2><h2 id="有关脑裂（网络分区）的讨论"><a href="#有关脑裂（网络分区）的讨论" class="headerlink" title="有关脑裂（网络分区）的讨论"></a>有关脑裂（网络分区）的讨论</h2><p>由于某些节点的失效，部分节点的网络连接会断开，并形成一个与原集群一样名字的集群，这种情况称为集群脑裂(split-brain)现象。这个问题非常危险，因为两个新形成的集群会同时索引和修改集群的数据。Raft协议能够解决由于网络分区导致的脑裂，我们从脑裂过程中和脑裂恢复后两个阶段来讨论。</p>
 <p>在脑裂过程中，Raft仍然保证了至少$N/2+1$的共识。特别地，当网络分区多于两块的时候，会不会存在有两个分区中都选出了新的term相同的Leader呢？我认为应该是不可能的，因为成为Leader必须达到全局的多数$N/2+1$张票，最多只能有一个。所以当分区较多的时候，很可能无法选出新Leader。另外某节点也不容易去“获得当前分区的多数票”，因为它也无法界定当前分区的范围。</p>
-<h1 id="Membership-changes"><a href="#Membership-changes" class="headerlink" title="Membership changes"></a>Membership changes</h1><p>相比整体下线集群在重新启动的方法，Raft提供另一个方案。为了保障安全性，我们需要在新旧配置的过渡期间确保四个基本原则的基石之一，Leader与term一一对应不会被打破。论文指出直接做切换时不现实的，如下图所示，当集群规模从3变为5时，存在时间点使得集群分划为两个部分，其中绿色部分使用旧配置$C_{old}$进行选举，蓝色部分使用新配置$C_{new}$进行选举。因此Raft使用两个阶段实现配置转换。<br><img src="/img/fbs/f10.png" alt=""><br>两阶段的转换有很多种方法，例如可以在第一阶段禁用旧配置，然后在新阶段启用新配置，这样在两个阶段之间系统不能响应客户请求。Raft的解决方案是第一阶段切换到一个过渡的称为joint consensus的配置上，当joint consensus被提交之后，系统再转换到新配置上，这样就不会存在新老配置共存的问题。joint consensus阶段要求如下：</p>
+<h1 id="Membership-changes"><a href="#Membership-changes" class="headerlink" title="Membership changes"></a>Membership changes</h1><p>相比整体下线集群在重新启动的方法，Raft提供另一个方案。为了保障安全性，我们需要在新旧配置的过渡期间确保四个基本原则的基石之一，Leader与term一一对应不会被打破。论文指出直接做切换时不现实的，如下图所示，当集群规模从3变为5时，存在时间点使得集群分划为两个部分，其中绿色部分使用旧配置$C_{old}$进行选举，蓝色部分使用新配置$C_{new}$进行选举。因此Raft使用两个阶段实现配置转换。<br><img src="/img/fbs/f10.png"><br>两阶段的转换有很多种方法，例如可以在第一阶段禁用旧配置，然后在新阶段启用新配置，这样在两个阶段之间系统不能响应客户请求。Raft的解决方案是第一阶段切换到一个过渡的称为joint consensus的配置上，当joint consensus被提交之后，系统再转换到新配置上，这样就不会存在新老配置共存的问题。joint consensus阶段要求如下：</p>
 <ol>
 <li>日志条目应当被复制到对应到新旧两种配置的所有机器上。</li>
 <li>两种配置中的任意服务器都可以作为Leader。</li>
 <li>选举和提交日志的共识必须同时经由两种配置的多数同意。也就是说要得到两种配置下各自的过半票数。</li>
 </ol>
-<p>在下图中，虚线部分表示已创建未提交的日志配置条目，实现部分表示被提交的配置条目。可以看到配置转换过程被分为三个阶段：<br><img src="/img/fbs/f11.png" alt=""></p>
+<p>在下图中，虚线部分表示已创建未提交的日志配置条目，实现部分表示被提交的配置条目。可以看到配置转换过程被分为三个阶段：<br><img src="/img/fbs/f11.png"></p>
 <ol>
 <li>从Leader收到配置变更请求到在$C_{old, new}$被提交前<br> 此时单独根据$C_{old}$决议。<br> 首先，Leader在收到配置变更请求后，生成一个表示$C_{old, new}$这个配置的日志条目，并按照通常的方式AppendEntry。一旦这个日志提交成功，集群进入joint consensus状态。特别地，节点<strong>只要收到新配置的AppendEntry就会切换到新配置</strong>，无论这个AppendEntry有没有被提交。因此提交成功只是说明进入了joint consensus状态，此时很多节点已经切换到了配置$C_{old, new}$。<br> 当Leader提交了配置$C_{old, new}$对应的日志条目时，它一定是使用的这个配置进行的决议。当Leader在这一阶段崩溃时，新选举的Leader可能是$C_{old, new}$，也可能是$C_{old}$。</li>
 <li>在$C_{new}$被提交后到配置变更完成<br> 此时单独根据$C_{new}$决议。<br> 特别地，如果Leader使用$C_{new}$配置的话，这个时间节点可以提前到$C_{new}$被创建。</li>
@@ -576,13 +574,15 @@
 <h2 id="Batch"><a href="#Batch" class="headerlink" title="Batch"></a>Batch</h2><p>Batch策略指将多个来自客户端的请求打包到一个Raft Log中。这有点类似于我们在LevelDB中看到的WriteBatch。</p>
 <h2 id="成员变更的一阶段办法"><a href="#成员变更的一阶段办法" class="headerlink" title="成员变更的一阶段办法"></a>成员变更的一阶段办法</h2><h1 id="Raft习题讲解"><a href="#Raft习题讲解" class="headerlink" title="Raft习题讲解"></a>Raft习题讲解</h1><h2 id="MIT6-824"><a href="#MIT6-824" class="headerlink" title="MIT6.824"></a>MIT6.824</h2><p>见<a href="/2018/12/29/MIT6.824note/">MIT 6.824做题笔记</a>。</p>
 <h2 id="官方习题"><a href="#官方习题" class="headerlink" title="官方习题"></a>官方习题</h2><p>本习题来自于<a href="https://ongardie.net/static/raft/userstudy/quizzes.html" target="_blank" rel="noopener">作者的博客</a>，知乎<a href="https://zhuanlan.zhihu.com/p/268571088" target="_blank" rel="noopener">提供了中文版</a>。</p>
-<h3 id="1"><a href="#1" class="headerlink" title="1"></a>1</h3><p>下面四幅图中，哪些Server Configuation在Raft中是合法的呢？<br><img src="/img/fbs/raft_exam/1.png" alt=""><br>a是不合法的，这是因为term应该是递增的。创建index=4的Leader一定是从一个term大于等于3的Leader中获得index=3的条目的，我认为，AppendEntriesRPC附有当前Leader的term，当index=4的Leader在添加index=3的条目时候，它的term必然不会小于当前Leader的term，即3。<br>d是不合法的，Raft日志不允许空洞，但Paxos允许。</p>
-<h3 id="2"><a href="#2" class="headerlink" title="2"></a>2</h3><p>下面哪些日志是可能被安全地<strong>apply</strong>的？我们把机器从上到小编号为S1到S5。<br><img src="/img/fbs/raft_exam/2.png" alt=""></p>
-<p>首先，我们现在的term是4。在这个任期中，Leader创建了一个&lt;7,4&gt;，没有达到quorum，这个肯定是提交不了的。<br>用类似的办法，通过比较quorum，我们可以排除到只剩下面5个条目，用<code>&lt;Index,Term&gt;</code>表示如下。<br><figure class="highlight lsl"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">&lt;<span class="number">1</span>,<span class="number">1</span>&gt;, &lt;<span class="number">2</span>,<span class="number">1</span>&gt;, &lt;<span class="number">3</span>,<span class="number">2</span>&gt;, &lt;<span class="number">4</span>,<span class="number">2</span>&gt;, &lt;<span class="number">5</span>,<span class="number">2</span>&gt;</span><br></pre></td></tr></table></figure></p>
+<h3 id="1"><a href="#1" class="headerlink" title="1"></a>1</h3><p>下面四幅图中，哪些Server Configuation在Raft中是合法的呢？<br><img src="/img/fbs/raft_exam/1.png"><br>a是不合法的，这是因为term应该是递增的。创建index=4的Leader一定是从一个term大于等于3的Leader中获得index=3的条目的，我认为，AppendEntriesRPC附有当前Leader的term，当index=4的Leader在添加index=3的条目时候，它的term必然不会小于当前Leader的term，即3。<br>d是不合法的，Raft日志不允许空洞，但Paxos允许。</p>
+<h3 id="2"><a href="#2" class="headerlink" title="2"></a>2</h3><p>下面哪些日志是可能被安全地<strong>apply</strong>的？我们把机器从上到小编号为S1到S5。<br><img src="/img/fbs/raft_exam/2.png"></p>
+<p>首先，我们现在的term是4。在这个任期中，Leader创建了一个&lt;7,4&gt;，没有达到quorum，这个肯定是提交不了的。<br>用类似的办法，通过比较quorum，我们可以排除到只剩下面5个条目，用<code>&lt;Index,Term&gt;</code>表示如下。</p>
+<figure class="highlight lsl"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">&lt;<span class="number">1</span>,<span class="number">1</span>&gt;, &lt;<span class="number">2</span>,<span class="number">1</span>&gt;, &lt;<span class="number">3</span>,<span class="number">2</span>&gt;, &lt;<span class="number">4</span>,<span class="number">2</span>&gt;, &lt;<span class="number">5</span>,<span class="number">2</span>&gt;</span><br></pre></td></tr></table></figure>
+
 <p>我们知道，“当Leader创建的某日志条目被成功复制到过半数的服务器上时，Leader可以提交该条目”，但我们不能忽略Figure8的情况，即“不能提交来自较旧任期的日志条目”，所以要等到&lt;7,4&gt;被提交之后，才能安全提交S1的1到5的日志。<br>后来看答案发现，题目不是这个意思，比如说<strong>commitIndex是volatile的</strong>，没啥讨论的意义。所以题目的意思是，从一个全局的视野，<strong>根据Log判断哪些Entry是可以被安全地commit的</strong>。实际上，虽然我们有了Leader for term 4，但由于这个Leader可能没来得及提交&lt;7,4&gt;就Fail，导致重新选举，到时候新Leader可能就不是它了。所以这个问题等价于<strong>从日志判断讨论Leader可能是谁</strong>，然后我们假设这些节点分别成为了Leader，可能移除掉哪些Entry。<br>S1：LastLogTerm为4，秒杀所有，足够quorum。<br>S2：LastLogTerm秒杀除S1外所有，足够quorum。<br>S3：它的LastLogTerm比S4要大，有1票；它的LastLogTerm和S5一样，此时需要比较LastLogIndex，这个比不过S5，因此总共2票，不够quorum。<br>S4：它的LastLogTerm比S1/S2/S3/S4要小，只有1票，不够quorum。<br>S5：它的LastLogTerm比S4要大，有1票；它的LastLogTerm和S3一样，但是LastLogIndex比S3大，因此总共3票，足够quorum。</p>
 <p>下面，我们就要在S1、S2和S5中间取一个交集。特别地，如果S2当选，可能会移除掉S1现有的从index=3开始的所有条目。这也对应了我们“已经被存储到大多数节点中的较旧的日志条目也可能被未来的Leader所覆盖掉”的论述。<br>综上，只有1和2是可以safely applied的。</p>
 <h3 id="3"><a href="#3" class="headerlink" title="3"></a>3</h3><p>下图显示了一个6台服务器集群中的日志，此时刚刚选出term为7的新Leader。对于图中每一个Follower，给定的日志是否可能在一个正常运行的Raft系统中存在？<br>首先，我们确定一点，就是index=1和2的日志条目是已经被提交了的。<br>a是不合法的，因为违背了日志匹配原则。事实上因为a的&lt;5,3&gt;和选出的Leader是Match的，因此它前面index=3和4的term也应该和Leader是Match的，即都是3。<br>b是不合法的，原因类似于a。<br>我认为c是不合法的，因为此时Leader的term才是5，怎么可能会出现一个term为6的条目呢？但是我这里做错了，c是合法的，而且我看错了，现在Leader的term是7。例如，当大家都只具有日志<code>&lt;1,1&gt;, &lt;2,1&gt;</code>的时候（但不一定就是这个条件），其实c可能自己是term为6的Server，它在还没有来得及复制自己任期内的日志的情况下就挂掉了。<br>d是不合法的，因为term没有单调递增，可以参考第一条。<br>e是合法的，原因类似于c，其实它可以看做是最一开始的Leader，然后被分区了。</p>
-<p><img src="/img/fbs/raft_exam/3.png" alt=""></p>
+<p><img src="/img/fbs/raft_exam/3.png"></p>
 <h3 id="4"><a href="#4" class="headerlink" title="4"></a>4</h3><p>假设硬件或软件错误破坏了 Leader 为某个特定 Follower 存储的<code>nextIndex</code>值。这是否会影响系统的安全？<br>我认为是不会的，因为<code>nextIndex</code>的设计就是volatile的。<br>事实上，如果<code>nextIndex</code>太小，相当于Leader发送了多余的日志，AppendEntriesRPC会返回一个成功，此时Leader就会增加<code>nextIndex</code>，这样通过有限次AppendEntriesRPC，<code>nextIndex</code>就会重新收敛到准确值。<br>如果<code>nextIndex</code>太大，AppendEntriesRPC会返回一个失败，此时Leader会减小<code>nextIndex</code>。<br>事实上，当一个Leader新被选举出时，他就是通过这种机制得知每个Follower的<code>nextIndex</code>的。<br>当然，我们也没必要每次逐一递增或者递减，我们在正文部分提到过一些优化点。</p>
 <h3 id="5"><a href="#5" class="headerlink" title="5"></a>5</h3><p>假设你实现了Raft，并将它部署在同一个数据中心的所有服务器上。现在假设你要将系统部署到分布在世界各地的不同数据中心的每台服务器，与单数据中心版本相比，多数据中心的Raft需要做哪些更改？为什么？<br>这个题目我还真不知道怎么回答，贴一下标准答案。<br>We’d need to set the election timeouts higher: my expected broadcast time is higher, and the election timeout should be much higher than the broadcast time so that candidates have a chance to complete an election before timing out again. The rest of the algorithm does not require any changes, since it does not depend on timing.</p>
 <h3 id="6"><a href="#6" class="headerlink" title="6"></a>6</h3><p>【这一条主要考察Raft三个持久化项目的原因】</p>
@@ -595,7 +595,7 @@
 <h3 id="7"><a href="#7" class="headerlink" title="7"></a>7</h3><p>即使其它服务器认为Leader 崩溃并选出了新Leader后，老Leader依然可能继续运行。新的 Leader 将与集群中的多数派联系并更新它们的term，因此，老的Leader将在与多数派中的任何一台服务器通信后立即下台。<br>然而在此期间，它也可以继续充当Leader，并向尚未被新Leader联系到的Follower发出请求；此外，客户端可以继续向老的Leader发送请求。<br>我们知道，在选举结束后，老的Leader不能commit任何新的Log Entry，因为这样做获得多数派中的至少一台服务器的认可。但是，老的Leader是否有可能执行一个成功AppendEntries RPC，从而完成对<strong>选举开始前</strong>收到的旧日志记录的提交？如果可以，这是否会给Raft协议带来问题？</p>
 <p>这个题目描述的场景我没有真实遇到过，所以只能分析。首先老Leader的RPC只能发给少数派Follower，这些Follower也并未知晓新Leader的产生。但是如果新选出的Leader有包含老Leader的旧日志的话，那么其实这些旧日志是能够达到Majority的要求的。但对于是否会被覆盖这一点，我并没有什么结论。</p>
 <p>看答案，实际上是可能存在这种情况的，这也发生在新Leader包含了老Leader这一部分的日志。<br>在答案中给了一个具体的例子，涉及到一个5个节点的集群。<br>S1，日志为空，通过S1、S2和S3的票成为了term2的Leader。稍后，它添加日志&lt;1,2,X&gt;，并且复制到S2。<br>此后，这个S2通过S2、S4、S5的票成为了Leader。这里按照投票原则，S3也应该会投票的啊？其实S3和S1被分区了。<br>在这之后，S1完成发送&lt;1,2,X&gt;到S3，在此时，S1完成了&lt;1,2,X&gt;的提交，即使它不再是这个term的Leader了。这个论述其实和我上面的论述是一致的，而下面给出了为啥不会被覆盖的论证。</p>
-<p>这个是安全的，因为新Leader也具有老Leader提交的Entry，这会导致这个Entry被持久化，这是因为：<br>这Entry肯定也在一些给新Leader L投票的机器S上存在，并且必须在S投票之前就存在。log completeness check要求在投票时检查对端的lastLogTerm和lastLogIndex必须至少都大于等于自己的。下面我们分类讨论：<br>如果L是S之后的第一个Leader，那么必然有<code>L.lastLogTerm == S.lastLogTerm &amp;&amp; L.lastLogIndex &gt;= S.lastLogIndex</code>，即L拥有S拥有的所有Entry，包括我们担心的那一条。<br>如果L是S之后的第二个Leader，那么如果他从前一个Leader M中收到了Entry，那么必然有<code>L.lastLogTerm &gt; S.lastLogTerm</code>，但是M肯定在复制自己的Entry之前，就已经将我们担心的那一条日志复制给了L，因此这也是安全的。由此扩展，我们可以推论到任何其他的Leader。</p>
+<p>这个是安全的，因为新Leader也具有老Leader提交的Entry，这会导致这个Entry被持久化，这是因为：<br>这Entry肯定也在一些给新Leader L投票的机器S上存在，并且必须在S投票之前就存在。log completeness check要求在投票时检查对端的lastLogTerm和lastLogIndex必须至少都大于等于自己的。下面我们分类讨论：<br>如果L是S之后的第一个Leader，那么必然有<code>L.lastLogTerm == S.lastLogTerm &amp;&amp; L.lastLogIndex &gt;= S.lastLogIndex</code>，即L拥有S拥有的所有Entry，包括我们担心的那一条。<br>如果L是S之后的第二个Leader，那么如果他从前一个Leader M中收到了Entry，那么必然有<code> L.lastLogTerm &gt; S.lastLogTerm</code>，但是M肯定在复制自己的Entry之前，就已经将我们担心的那一条日志复制给了L，因此这也是安全的。由此扩展，我们可以推论到任何其他的Leader。</p>
 <h3 id="8"><a href="#8" class="headerlink" title="8"></a>8</h3><p>在配置变更过程中，如果当前Leader不在C-new中，一旦C-new的日志记录被提交，它就会下台。然而，这意味着有一段时间，Leader不属于它所领导的集群（Leader上存储的当前配置条目是C-new，C-new不包括 Leader）。假设修改协议，如果C-new不包含Leader，则使Leader在其日志存储了C-new时就立即下台。这种方法可能发生的最坏情况是什么？</p>
 <p>首先，下台意味着什么呢？在C-new之前，C-old已经结束使命，配置C-joint已被提交，任何决议的提交都需要经过new和old的过半数的同意才行。那么下台意味着只要C-new日志被Leader存储，它就立即变成Follower，那么这个集群不再具有Leader，从而会发生选举，选举也是按照C-joint来选举的。考虑如果选出一个在C-old中的Leader，那么它会重复之前的流程，增加一个C-new，然后下台。这个流程会一直重复到C-old中的Majority都得到了C-new日志，这样剩余没有C-new日志的C-old机器也不能被选举为Leader了。这里注意，我们在讨论一个最坏的情况，就是每一次选举都是C-old中被选中，并且也不进行任何复制，因此所有C-new中的所有机器都没有收到C-new的日志。所以产生的结果就是最坏会有|C-old/2|次冗余选举。</p>
 <h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
@@ -762,7 +762,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">161</span>
+                <span class="site-state-item-count">164</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -775,7 +775,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">155</span>
+                <span class="site-state-item-count">157</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

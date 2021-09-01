@@ -404,29 +404,31 @@
 <li>MySQL服务器</li>
 </ol>
 <a id="more"></a>
+
 <h1 id="配置"><a href="#配置" class="headerlink" title="配置"></a>配置</h1><p>InnoDB的源码可以在<a href="https://github.com/mysql/mysql-server" target="_blank" rel="noopener">MySQL</a>项目中获取，具体是在storage/innobase下面。</p>
-<p>首先需要执行下面两行，以便创建服务<br><figure class="highlight brainfuck"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">mysqld</span> <span class="literal">-</span><span class="literal">-</span><span class="comment">initialize</span> <span class="literal">-</span><span class="literal">-</span><span class="comment">user=mysql</span> <span class="literal">-</span><span class="literal">-</span><span class="comment">console</span></span><br><span class="line"><span class="comment">mysqld</span> <span class="literal">-</span><span class="comment">install</span></span><br></pre></td></tr></table></figure></p>
-<p>然后<code>net start mysql</code>，如果出现下面的错误，表示mysql没有初始化，例如data文件夹就没有被正式创建，要使用<code>mysqld  --initialize-insecure</code>来初始化<br><figure class="highlight erlang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">MySQL 服务正在启动 .</span><br><span class="line">MySQL 服务无法启动。</span><br><span class="line"></span><br><span class="line">服务没有报告任何错误。</span><br></pre></td></tr></table></figure></p>
-<h1 id="MySQL体系结构与存储引擎"><a href="#MySQL体系结构与存储引擎" class="headerlink" title="MySQL体系结构与存储引擎"></a>MySQL体系结构与存储引擎</h1><h2 id="MySQL主要架构"><a href="#MySQL主要架构" class="headerlink" title="MySQL主要架构"></a>MySQL主要架构</h2><p>MySQL的架构如下图所示<br><img src="/img/innodb/mysql-arch.png" alt=""></p>
+<p>首先需要执行下面两行，以便创建服务</p>
+<figure class="highlight brainfuck"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">mysqld</span> <span class="literal">-</span><span class="literal">-</span><span class="comment">initialize</span> <span class="literal">-</span><span class="literal">-</span><span class="comment">user=mysql</span> <span class="literal">-</span><span class="literal">-</span><span class="comment">console</span></span><br><span class="line"><span class="comment">mysqld</span> <span class="literal">-</span><span class="comment">install</span></span><br></pre></td></tr></table></figure>
+
+<p>然后<code>net start mysql</code>，如果出现下面的错误，表示mysql没有初始化，例如data文件夹就没有被正式创建，要使用<code>mysqld  --initialize-insecure</code>来初始化</p>
+<figure class="highlight erlang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">MySQL 服务正在启动 .</span><br><span class="line">MySQL 服务无法启动。</span><br><span class="line"></span><br><span class="line">服务没有报告任何错误。</span><br></pre></td></tr></table></figure>
+
+<h1 id="MySQL体系结构与存储引擎"><a href="#MySQL体系结构与存储引擎" class="headerlink" title="MySQL体系结构与存储引擎"></a>MySQL体系结构与存储引擎</h1><h2 id="MySQL主要架构"><a href="#MySQL主要架构" class="headerlink" title="MySQL主要架构"></a>MySQL主要架构</h2><p>MySQL的架构如下图所示<br><img src="/img/innodb/mysql-arch.png"></p>
 <p>可以通过<code>SHOW ENGINES</code>命令来查看当前MySQL支持的存储引擎。也可以查找<code>information_schema</code>架构下的<code>ENGINE</code>表来实现。</p>
 <p>InnoDB的表存储于ibd文件中，通过MVCC实现高并发性，并实现了SQL标准规定的四种隔离级别，默认级别是RR。</p>
 <p>MyISAM不支持事务和表锁，但支持全文索引，主要面向OLAP。MyISAM在MYD中存储表数据，在MYI中存储表索引。</p>
-<h2 id="InnoDB主要架构"><a href="#InnoDB主要架构" class="headerlink" title="InnoDB主要架构"></a>InnoDB主要架构</h2><p>InnoDB的主要架构如下所示。<br><img src="/img/innodb/innodb-arch.png" alt=""></p>
+<h2 id="InnoDB主要架构"><a href="#InnoDB主要架构" class="headerlink" title="InnoDB主要架构"></a>InnoDB主要架构</h2><p>InnoDB的主要架构如下所示。<br><img src="/img/innodb/innodb-arch.png"></p>
 <p>其中主线程中主要根据数据库状态运行主循环(loop)、后台循环(backgroup loop)、刷新循环(flush loop)和暂停循环(suspend loop)四个循环。</p>
-<p><img src="/img/innodb/main_thread.png" alt=""></p>
+<p><img src="/img/innodb/main_thread.png"></p>
 <p>若干IO Thread主要分为四类：read、write、insert buffer和log IO，在当前版本下，可以通过<code>innodb_read_io_threads</code>等参数进行设置。<br>Purge Thread用来回收已经使用并分配的UNDO页，当设置<code>innodb_purge_threads</code>大于0时，该线程会启动，从而减轻主线程负担。<br>Page Cleaner Thread用来刷新脏页，它也是为了减轻主线程负担。</p>
 <h1 id="Log"><a href="#Log" class="headerlink" title="Log"></a>Log</h1><p>为了便于理解，先要介绍一些前置知识，这些知识在第3、4章等章节中。<br>MySQL中有binlog、slowlog、error log、查询日志等日志形式。具体到存储引擎层，InnoDB又有redo log和undo log。</p>
 <h2 id="Slow-log"><a href="#Slow-log" class="headerlink" title="Slow log"></a>Slow log</h2><p>通过<code>show variables like &#39;log_error&#39;\G</code>可以获得error log的存储位置，error log可以定位一些严重的错误，例如MySQL无法启动等问题。slowlog可以定位下面的一些问题:</p>
 <ol>
 <li><p>查询时间超过阈值</p>
- <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">show</span> <span class="keyword">variables</span> <span class="keyword">like</span> <span class="string">'long_query_time'</span>\G</span><br></pre></td></tr></table></figure>
-</li>
+ <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">show</span> <span class="keyword">variables</span> <span class="keyword">like</span> <span class="string">'long_query_time'</span>\G</span><br></pre></td></tr></table></figure></li>
 <li><p>没有通过索引的查询</p>
- <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">show</span> <span class="keyword">variables</span> <span class="keyword">like</span> <span class="string">'log_queries_not_using_indexes'</span>\G</span><br></pre></td></tr></table></figure>
-</li>
+ <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">show</span> <span class="keyword">variables</span> <span class="keyword">like</span> <span class="string">'log_queries_not_using_indexes'</span>\G</span><br></pre></td></tr></table></figure></li>
 <li><p>用来限制每分钟最大的2的数量</p>
- <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">show</span> <span class="keyword">variables</span> <span class="keyword">like</span> <span class="string">'log_throttle_queries_not_using_indexes'</span>\G</span><br></pre></td></tr></table></figure>
-</li>
+ <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">show</span> <span class="keyword">variables</span> <span class="keyword">like</span> <span class="string">'log_throttle_queries_not_using_indexes'</span>\G</span><br></pre></td></tr></table></figure></li>
 </ol>
 <p>slowlog的相关信息可以在<code>mysql</code>数据库的<code>slow_log</code>表下面看到，可以通过<code>mysqldumpslow</code>进行展示。</p>
 <h2 id="查询日志"><a href="#查询日志" class="headerlink" title="查询日志"></a>查询日志</h2><p>查询日志存储了所有对MySQL的请求信息。</p>
@@ -445,7 +447,7 @@
 <li>每个事务提交时</li>
 <li>redo log缓冲池剩余空间小于1/2</li>
 </ol>
-<p><img src="/img/innodb/innodb-mem.png" alt=""></p>
+<p><img src="/img/innodb/innodb-mem.png"></p>
 <h2 id="binlog和redo-undo-log的协同工作"><a href="#binlog和redo-undo-log的协同工作" class="headerlink" title="binlog和redo/undo log的协同工作"></a>binlog和redo/undo log的协同工作</h2><h3 id="两阶段提交2PC"><a href="#两阶段提交2PC" class="headerlink" title="两阶段提交2PC"></a>两阶段提交2PC</h3><p>需要特别注意，2PC不是2PL。其实我们在<a href="/2019/03/12/2pc-3pc/">专门的文章</a>中已经介绍过原始版本的2PC和3PC算法了，我们将研究这个算法在MySQL中的应用。</p>
 <p>在同时出现有binlog和redo log日志时，如何提交事务呢？是先写哪个log？在故障恢复时，以哪个log为准？此外，还要考虑到binlog还被用来进行MySQL的主从复制，这使得Master库的数据实际依赖于redo log，而Slave库的数据实际依赖于binlog，问题更加复杂。例如Master写了binlog，然后还没有写redo log就宕机了，但是这个binlog已经被传给Slave执行了，那主从不一致就会发生。</p>
 <p>因此，我们需要设计一套合适的提交流程，两阶段提交<code>innodb_support_xa</code>被用来解决这个问题。此时MySQL会把这个普通事务作为XA事务来处理，但是这个XA事务并不是分布式事务，而是作为<a href="https://www.jianshu.com/p/328ad87bde5e" target="_blank" rel="noopener">内部XA事务</a>。<a href="https://zhuanlan.zhihu.com/p/98948473" target="_blank" rel="noopener">内部XA事务用于同一实例下跨多引擎事务，<a href="http://mysql.taobao.org/monthly/2021/01/02/" target="_blank" rel="noopener">由Binlog作为协调者</a>，比如在一个存储引擎提交时，需要将提交信息写入二进制日志，这就是一个分布式内部XA事务，只不过二进制日志的参与者是MySQL本身</a>。而对外部XA而言，应用程序是协调者。</p>
@@ -475,7 +477,7 @@
 </ol>
 <h3 id="Group-Commit-Bug"><a href="#Group-Commit-Bug" class="headerlink" title="Group Commit Bug"></a>Group Commit Bug</h3><p>上面的过程中，“双1”的要求导致性能是下降的。然而，叫做<a href="https://bugs.mysql.com/bug.php?id=13669" target="_blank" rel="noopener">Group Commit Bug</a>的问题会加重这一点。</p>
 <p>首先介绍Group Commit呢。因为fsync的代价很大，所以InnoDB实现了Group Commit技术，也就是将多次事务提交通过一次fsync刷回磁盘。也就是将所有要fsync的事务加入一个队列，由队头的线程负责将队列中所有的事务都一次fsync掉。在这个过程完成之后，队伍中的所有线程都被唤醒，完成自己的事务提交工作。可以看出，通过Group Commit，可以实现“并发”提交多个事务。</p>
-<p>然后我们可以得到一个观察，在Group Commit时binlog和redo log日志的顺序未必是相同的。就如下面这张<a href="https://www.zhihu.com/question/413276827" target="_blank" rel="noopener">著名的图</a>一样，事务的执行顺序是1/2/3，binlog也是按照这个顺序提交的。但是因为2PC并没有约束不同事务的提交顺序，所以InnoDB可以按照2/3/1的顺序提交。在“On-line Backup Taken”后，Slave的备份中会没有T1的提交记录。<br><img src="/img/innodb/t1-t2-t3-commit.png" alt=""></p>
+<p>然后我们可以得到一个观察，在Group Commit时binlog和redo log日志的顺序未必是相同的。就如下面这张<a href="https://www.zhihu.com/question/413276827" target="_blank" rel="noopener">著名的图</a>一样，事务的执行顺序是1/2/3，binlog也是按照这个顺序提交的。但是因为2PC并没有约束不同事务的提交顺序，所以InnoDB可以按照2/3/1的顺序提交。在“On-line Backup Taken”后，Slave的备份中会没有T1的提交记录。<br><img src="/img/innodb/t1-t2-t3-commit.png"></p>
 <p>可以看出，二阶段提交能够保证同一个事务的redo log和binlog的顺序一致性问题，但是无法解决多个事务提交顺序一致性的问题。为此，在5.5之前版本的MySQL的做法是在prepare时就获取<code>prepare_commit_mutex</code>锁，并且在事务commit之后再释放。这就导致了prepare、写log、commit这个过程全部是串行的，Group Commit名存实亡。这也就是这个bug的核心内容。</p>
 <h3 id="Binary-Log-Group-Commit-BLGC-技术"><a href="#Binary-Log-Group-Commit-BLGC-技术" class="headerlink" title="Binary Log Group Commit(BLGC)技术"></a>Binary Log Group Commit(BLGC)技术</h3><h4 id="5-6方案"><a href="#5-6方案" class="headerlink" title="5.6方案"></a>5.6方案</h4><p>将原来2PC中的commit拆分为三个阶段：</p>
 <ol>
@@ -491,13 +493,19 @@
 <li>sync<br> binlog刷盘。<br> 通过<code>binlog_group_commit_sync_delay</code>和<code>binlog_group_commit_sync_no_delay_count</code>在时间和数量上控制刷盘。<br> 在这个阶段后，因为binlog已经刷盘，所以在宕机后要提交事务。</li>
 <li>commit<br> <strong>依次</strong>Commit该组事务。<br> 由于binlog已经刷盘，所以这个过程并不需要刷盘。</li>
 </ol>
-<p>得到如下图所示的2PC过程简图。<br><img src="http://img.blog.itpub.net/blog/2019/01/14/e14bfae3e4eeb53e.jpeg?x-oss-process=style/bb" alt=""></p>
-<h2 id="LSN"><a href="#LSN" class="headerlink" title="LSN"></a>LSN</h2><p>LSN(log sequence number)是InnoDB中的一个长度为8字节的数，表示每个redo log的编号，具体来说，表示事务写入到redo log的字节总量，有点类似于TCP里面的Sequence Number。<br>下面show status语句中的这些数字，就是LSN。<br><figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">&gt; show engine innodb status\G</span><br><span class="line">Log sequence number          19739600 表示当前最新的redo log（一般在缓冲区内）的LSN</span><br><span class="line">Log buffer assigned up to    19739600 </span><br><span class="line">Log buffer completed up to   19739600</span><br></pre></td></tr></table></figure></p>
-<p>下面written和flushed的差别，就是写了多少和刷新多少的区别，由于至少保证了每秒都fsync，所以两者差距应该不大。<br><figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Log written up to            19739600</span><br><span class="line">Log flushed up to            19739600 表示已经刷到磁盘上的redo log的LSN</span><br></pre></td></tr></table></figure></p>
-<p>下面的这些项目，描述了刷脏页和建立检查点的进度。<br><figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">Added dirty pages up to      19739600 </span><br><span class="line">Pages flushed up to          19739600 表示已经刷到磁盘上数据页的最高的LSN</span><br><span class="line">Last checkpoint at           19739600 表示Checkpoint上的最高LSN</span><br></pre></td></tr></table></figure></p>
+<p>得到如下图所示的2PC过程简图。<br><img src="http://img.blog.itpub.net/blog/2019/01/14/e14bfae3e4eeb53e.jpeg?x-oss-process=style/bb"></p>
+<h2 id="LSN"><a href="#LSN" class="headerlink" title="LSN"></a>LSN</h2><p>LSN(log sequence number)是InnoDB中的一个长度为8字节的数，表示每个redo log的编号，具体来说，表示事务写入到redo log的字节总量，有点类似于TCP里面的Sequence Number。<br>下面show status语句中的这些数字，就是LSN。</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">&gt; show engine innodb status\G</span><br><span class="line">Log sequence number          19739600 表示当前最新的redo log（一般在缓冲区内）的LSN</span><br><span class="line">Log buffer assigned up to    19739600 </span><br><span class="line">Log buffer completed up to   19739600</span><br></pre></td></tr></table></figure>
+
+<p>下面written和flushed的差别，就是写了多少和刷新多少的区别，由于至少保证了每秒都fsync，所以两者差距应该不大。</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Log written up to            19739600</span><br><span class="line">Log flushed up to            19739600 表示已经刷到磁盘上的redo log的LSN</span><br></pre></td></tr></table></figure>
+
+<p>下面的这些项目，描述了刷脏页和建立检查点的进度。</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">Added dirty pages up to      19739600 </span><br><span class="line">Pages flushed up to          19739600 表示已经刷到磁盘上数据页的最高的LSN</span><br><span class="line">Last checkpoint at           19739600 表示Checkpoint上的最高LSN</span><br></pre></td></tr></table></figure>
+
 <p>LSN存在于redo log、数据页和checkpoint中。在数据页中的LSN，即<code>FIL_PAGE_LSN</code>，表示该页最后刷新时的LSN。同理，checkpoint中也会存放目前已经刷新到的LSN。因为在数据库宕机后，会从checkpoint往后开始刷脏页，所以如果检查点LSN和redo log文件的LSN是相同的，表示所有的刷脏页工作都完成了，就不需要再刷脏页恢复了。</p>
 <h1 id="页"><a href="#页" class="headerlink" title="页"></a>页</h1><p>InnoDB将数据按层次划分为表空间、segment、extent、page。其中页作为磁盘和内存之间交互的基本单位，InnoDB中页的大小一般为16KB，但可以通过<code>innodb_page_size</code>进行设置。当16KB的页放不下时，就可能发生行溢出，此时数据放在未压缩BLOB页中。</p>
-<p><img src="/img/innodb/innodb-logical-storage.png" alt=""></p>
+<p><img src="/img/innodb/innodb-logical-storage.png"></p>
 <p>在InnoDB中，页包括</p>
 <ol>
 <li>索引页(B-tree Node)<br> 因为MySQL使用聚簇索引，所以实际上索引页就是数据页。</li>
@@ -508,7 +516,7 @@
 <li>未压缩BLOB页</li>
 <li>压缩BLOB页</li>
 </ol>
-<p>数据页的构成如下图所示<br><img src="/img/innodb/innodb-data-page.png" alt=""></p>
+<p>数据页的构成如下图所示<br><img src="/img/innodb/innodb-data-page.png"></p>
 <h2 id="缓冲池"><a href="#缓冲池" class="headerlink" title="缓冲池"></a>缓冲池</h2><p>InnoDB设有缓冲池，用来存放从磁盘中读到的页，在缓冲池中的页一般称为逻辑页(page)，在硬盘上的页一般称为物理页(block)。在读取页时，首先会尝试从缓冲池中查找，否则读磁盘上的页。<br>通常，缓冲池中的缓存页类型有索引页、数据页、undo页、insert buffer、adaptive hash index、锁信息lock info、数据字典信息。InnoDB将<code>innodb_buffer_pool_instances</code>设置为大于1，此时可以得到多个缓冲池实例。<br>缓冲池中的Database pages通过LRU算法进行管理（但adaptive hash index、lock信息、insert buffer等信息并没有放在缓冲池中），将最近使用的页放在最前面。InnoDB为LRU加入了midpoint位置，新读到的页会先放到midpoint，而不是LRU首部，在midpoint之前的称为new列表，之后的称为old列表。当数据库启动时，LRU是空的，这时候首先需要从Free列表中查找可用的空闲页，放到LRU中，否则使用LRU算法淘汰列表末尾的页。可以通过<code>SHOW ENGINE INNODB STATUS</code>观察LRU列表和Free列表的情况。例如，可以通过Buffer pool hit rate（实际没找到在哪里）缓冲池命中率，如果命中率较低的话，需要观察是不是因为全表扫描引起的LRU列表被污染的问题。还可以通过<code>information_schema.INNODB_BUFFER_POOL_STATS</code>观察缓冲池的运行状态。</p>
 <h2 id="插入缓冲-Insert-Buffer"><a href="#插入缓冲-Insert-Buffer" class="headerlink" title="插入缓冲(Insert Buffer)"></a>插入缓冲(Insert Buffer)</h2><p>我们知道，聚簇索引下，表中相邻行存储的物理顺序和逻辑顺序是一致的，因此一张表只能有一个聚簇索引，InnoDB的聚集索引按照主键进行聚集。<br>但是，辅助索引是非聚簇索引，对于它们的插入或更新操作，就可能会导致随机读写，从而产生性能问题。<br>因此，InnoDB引入了插入缓冲，此时不是将数据直接插入到索引页中，而是先判断要插入的索引页是否在缓冲池中，若在，则直接插入；若不在，则先放入到一个insert buffer对象中，这样就可以先返回了。在后台线程中将insert buffer更新(merge)到辅助索引上。<br>插入缓冲的好处是能将同索引页多个插入合并到一个操作中完成，类似这种多次写合并成一次写的操作，在InnoDB的实现中是非常常见的优化，例如Group Commit等功能实际上也是基于同样的优化思路。</p>
 <p>插入缓冲需要满足以下的条件：</p>
@@ -705,7 +713,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">161</span>
+                <span class="site-state-item-count">164</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -718,7 +726,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">155</span>
+                <span class="site-state-item-count">157</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

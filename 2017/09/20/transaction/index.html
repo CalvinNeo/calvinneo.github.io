@@ -100,14 +100,16 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="本文主要讲述数据库中事务的控制模型、事务隔离等级和事务并发控制。 本文从分布式一致性和分布式共识协议一文中分离。">
 <meta property="og:locale" content="zh-Hans">
+<meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/isolation.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/fbs/si_conflict.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/percolator3.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/cser.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/cser2.png">
-<meta property="og:updated_time" content="2021-06-19T16:33:38.778Z">
+<meta property="og:updated_time" content="2021-08-23T05:17:56.944Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="数据库系统中的事务">
 <meta name="twitter:description" content="本文主要讲述数据库中事务的控制模型、事务隔离等级和事务并发控制。 本文从分布式一致性和分布式共识协议一文中分离。">
-<meta name="twitter:image" content="http://www.calvinneo.com/img/dbtrans/percolator3.png">
+<meta name="twitter:image" content="http://www.calvinneo.com/img/dbtrans/isolation.png">
 
 
 
@@ -383,6 +385,7 @@
         <p>本文主要讲述数据库中事务的控制模型、事务隔离等级和事务并发控制。</p>
 <p>本文从<a href="/2017/09/20/distributed-system-consistency-and-consensus/">分布式一致性和分布式共识协议</a>一文中分离。</p>
 <a id="more"></a>
+
 <p>我们首先回顾一下非分布式系统上一致性的相关知识。</p>
 <h1 id="两种事务控制模型"><a href="#两种事务控制模型" class="headerlink" title="两种事务控制模型"></a>两种事务控制模型</h1><h2 id="ACID"><a href="#ACID" class="headerlink" title="ACID"></a>ACID</h2><p>对于关系型数据库，存在ACID事务控制模型维护事务的正确可靠性。</p>
 <ol>
@@ -399,36 +402,54 @@
 <h2 id="BASE"><a href="#BASE" class="headerlink" title="BASE"></a>BASE</h2><p>BASE理论，即Basically Available、Soft State和Eventually Consistent，是相对于ACID准则的另一种事务控制模型，<a href="https://www.epubit.com/selfpublish/article/737;jsessionid=83634E0880EC6456C20EEA2AC8FCA282" target="_blank" rel="noopener">常被用在一些非RDBMS的事务控制的NoSQL中</a>。</p>
 <p>在分布式系统的上下文下，BASE可以看做是对CAP理论做出的一种权衡，通常被以最终一致性的形式实现。我们将会在<a href="/2017/09/20/distributed-system-consistency-and-consensus/">分布式一致性和分布式共识协议</a>中进行讨论。</p>
 <h1 id="分布式事务"><a href="#分布式事务" class="headerlink" title="分布式事务"></a>分布式事务</h1><h2 id="单对象事务和多对象事务"><a href="#单对象事务和多对象事务" class="headerlink" title="单对象事务和多对象事务"></a>单对象事务和多对象事务</h2><h1 id="故障恢复"><a href="#故障恢复" class="headerlink" title="故障恢复"></a>故障恢复</h1><h2 id="WAL"><a href="#WAL" class="headerlink" title="WAL"></a>WAL</h2><p>在关系数据库中常使用预写式日志Write ahead log(WAL)算法，WAL要求在数据实际写入之前先写日志，这样能够保证在故障发生后能通过日志进行恢复。相比于将数据实际插入数据库，WAL由于是顺序读写，所以相对来说要快很多。<br>事务有只有两种完成方式，提交即全做事务中的操作，和回滚即全不做事务中的操作。在事务的中间过程中可能对数据块的值进行修改，但最终这些修改必须要通过提交和回滚来实现持久化。<br>AI（后像，After Image），指的是每次更新时数据块的新值。对于一个已提交的事务，当故障发生时应当REDO它的后像。注意一旦事务提交，就不能UNDO它的前像，会破坏完整性约束；但是事务提交前任意的删改都可以通过UNDO来撤销。事务提交和往数据库写值（执行事务）是两个不同概念。<br>BI（前像，Before Image），指的是每次更新时数据块的旧值。对于一个未提交的事务或提交进行到一半，当故障发生时应当UNDO它的前像。<br>UNDO和REDO操作具有幂等性，即对前像UNDO或对后像REDO任意多次，结果都是相同的。</p>
-<p>那么REDO操作和UNDO操作是不是缺一不可的呢？<a href="https://www.jianshu.com/p/57c510f4ec28" target="_blank" rel="noopener">通过undo和redo</a>的配合，能够提供更好的ACID特性。我们在<a href="/2020/02/13/innodb-learn/">有关innodb介绍</a>的这篇文章中会详细介绍。</p>
+<p>那么REDO操作和UNDO操作是不是缺一不可的呢？其实不然，需要和下面两个刷盘的策略组合起来看：</p>
+<ol>
+<li>Force<br> 表示事务在commit之后是否要立即刷盘。<br> 容易发现，如果不立即刷盘，则有丢失后像的风险，那么就必须要有REDO。</li>
+<li>Steal<br> 表示事务在uncommit时，是否可以刷盘。<br> 如果允许未提交就刷盘，那么磁盘上就可能存在脏数据，那么就必须要有UNDO。</li>
+</ol>
+<p><a href="https://www.jianshu.com/p/57c510f4ec28" target="_blank" rel="noopener">通过undo和redo</a>的配合，能够提供性能更好的ACID特性。如果事务是Force的，那么就必须保证在提交的同时刷脏完成，这样会拖累性能。如果事务是No Steal的，那么对于大事务而言，我们就不能异步刷脏。我们在<a href="/2020/02/13/innodb-learn/">有关innodb介绍</a>的这篇文章中会详细介绍。</p>
 <h2 id="Shadow-paging"><a href="#Shadow-paging" class="headerlink" title="Shadow paging"></a>Shadow paging</h2><h2 id="事务更新的两条规则"><a href="#事务更新的两条规则" class="headerlink" title="事务更新的两条规则"></a>事务更新的两条规则</h2><h3 id="提交规则"><a href="#提交规则" class="headerlink" title="提交规则"></a>提交规则</h3><p>后像必须在提交前写入非易失存储器（数据库或运行记录）中。当后像只写入日志而没写入数据库中也可以提交事务，因为出现故障之后可以REDO后像实现恢复。</p>
 <h3 id="先记后写规则"><a href="#先记后写规则" class="headerlink" title="先记后写规则"></a>先记后写规则</h3><p>数据库中有先记后写原则，如果在事务提交前将后像写入数据库，则必须首先把前像记入日志。这样做的好处是在事务提交完成前如果出现故障，可以通过日志文件中的该前像进行UNDO。此时即使数据库没有被修改，也只是进行一次多余的UNDO操作。</p>
-<h1 id="事务的隔离等级"><a href="#事务的隔离等级" class="headerlink" title="事务的隔离等级"></a>事务的隔离等级</h1><h2 id="常见并发问题"><a href="#常见并发问题" class="headerlink" title="常见并发问题"></a>常见并发问题</h2><h3 id="脏读-Dirty-Read"><a href="#脏读-Dirty-Read" class="headerlink" title="脏读(Dirty Read)"></a>脏读(Dirty Read)</h3><p>读到未提交的数据。考虑下面的序列</p>
+<h1 id="事务的隔离等级"><a href="#事务的隔离等级" class="headerlink" title="事务的隔离等级"></a>事务的隔离等级</h1><p>ANSI/ISO SQL-92定义了4个隔离级别，这个定义借助于三个禁止的操作子序列，被称作phenomena，也就是熟悉的脏读、不可重复读和幻读。</p>
+<h2 id="简写符号"><a href="#简写符号" class="headerlink" title="简写符号"></a>简写符号</h2><p>在A Critique of ANSI SQL Isolation Levels列出了一些简写符号，我们在后面也考虑复用</p>
+<ol>
+<li>w1[x]<br> 表示事务1对x的写</li>
+<li>r2[y]<br> 表示事务2对y的读</li>
+<li>c1<br> 表示事务1提交</li>
+<li>a1<br> 表示事务1中止</li>
+</ol>
+<h2 id="常见并发问题"><a href="#常见并发问题" class="headerlink" title="常见并发问题"></a>常见并发问题</h2><p>如下图所示P0…Pn列出了面临的一些并发问题。下图中的行为隔离等径，列为可能发生的phenomena。<br><img src="/img/dbtrans/isolation.png"></p>
+<h3 id="【P1】脏读-Dirty-Read"><a href="#【P1】脏读-Dirty-Read" class="headerlink" title="【P1】脏读(Dirty Read)"></a>【P1】脏读(Dirty Read)</h3><p>读到未提交的数据。考虑下面的序列</p>
 <ul>
 <li>A写入X值为x1</li>
 <li>B读出X值为x1</li>
 <li>A回滚</li>
 <li>B读出的X=x1是不合法的</li>
 </ul>
-<h3 id="脏写-Dirty-Write"><a href="#脏写-Dirty-Write" class="headerlink" title="脏写(Dirty Write)"></a>脏写(Dirty Write)</h3><p>如果两个事务同时写相同的对象，可以认为在无保护的情况下，后写入的会覆盖前写入的。但如果前写入的是尚未提交事务的一部分，那么后写入的会覆盖一个未提交事务的写，这就是所谓的脏写。解决脏写的方案就是延迟后面的写操作。</p>
-<h3 id="写丢失-丢失更新-lost-update"><a href="#写丢失-丢失更新-lost-update" class="headerlink" title="写丢失/丢失更新(lost update)"></a>写丢失/丢失更新(lost update)</h3><p>主要分为两种：</p>
+<p>避免脏读意味着避免下面的情况：</p>
+<ol>
+<li><code>w1 [x] ... r2 [x] ... (a1 and c2 in either order)</code></li>
+<li><code>w1[x] ... r2[x] ... ((c1 or a1) and (c2 or a2) in any order)</code><br> 相比上一个，更为宽松，因为它并不规定事务1一定中止，事务2一定提交了，所以禁止了4种可能的事务结束方式。</li>
+</ol>
+<h3 id="【P0】脏写-Dirty-Write"><a href="#【P0】脏写-Dirty-Write" class="headerlink" title="【P0】脏写(Dirty Write)"></a>【P0】脏写(Dirty Write)</h3><p>如果两个事务同时写相同的对象，可以认为在无保护的情况下，后写入的会覆盖前写入的。但如果前写入的是尚未提交事务的一部分，那么后写入的会覆盖一个未提交事务的写，这就是所谓的脏写。解决脏写的方案就是延迟后面的写操作。</p>
+<h3 id="【P4】写丢失-丢失更新-Lost-Update"><a href="#【P4】写丢失-丢失更新-Lost-Update" class="headerlink" title="【P4】写丢失/丢失更新(Lost Update)"></a>【P4】写丢失/丢失更新(Lost Update)</h3><p>主要分为两种：</p>
 <h4 id="回滚丢失"><a href="#回滚丢失" class="headerlink" title="回滚丢失"></a>回滚丢失</h4><p>SQL标准定义的所有隔离级别都不允许这种写丢失。</p>
 <h4 id="覆盖丢失-两次更新"><a href="#覆盖丢失-两次更新" class="headerlink" title="覆盖丢失/两次更新"></a>覆盖丢失/两次更新</h4><p>当一个事务写入的值被并发事务中的后续提交写入覆盖时，就会发生这种情况。事实上，我们可以把写丢失认为一种特殊的写偏斜问题。<br>我们需要区分脏写和丢失更新(lost update)两个概念。丢失更新强调的是事务提交后的更新丢失，实际上还是一个不一致的状态。例如DDIA中图7-5所示，两个事务分别尝试将自增计数器从41增加到42并提交，自增计数器的最终值是42而不是43，违背了一致性，这就是一个更新丢失现象。</p>
 <p>解决此类写丢失问题，通常有下面几种方案：</p>
 <ol>
 <li><p>原子写</p>
- <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">UPDATE</span> counters <span class="keyword">SET</span> <span class="keyword">value</span> = <span class="keyword">value</span> + <span class="number">1</span> <span class="keyword">where</span> <span class="keyword">key</span> = <span class="string">'foo'</span></span><br></pre></td></tr></table></figure>
-</li>
-<li><p>显式锁定<br> select for update会对select出来的每一行上加上排他锁。</p>
- <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">begin</span> <span class="keyword">transaction</span>;</span><br><span class="line"><span class="keyword">select</span> * <span class="keyword">from</span> figures <span class="keyword">where</span> <span class="keyword">name</span> = <span class="string">'robot'</span> <span class="keyword">for</span> <span class="keyword">update</span>;</span><br><span class="line"><span class="keyword">update</span> figures <span class="keyword">set</span> <span class="keyword">position</span> = <span class="string">'c4'</span> <span class="keyword">where</span> <span class="keyword">id</span> = <span class="number">1234</span>;</span><br><span class="line"><span class="keyword">commit</span>;</span><br></pre></td></tr></table></figure>
-</li>
+ <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">UPDATE</span> counters <span class="keyword">SET</span> <span class="keyword">value</span> = <span class="keyword">value</span> + <span class="number">1</span> <span class="keyword">where</span> <span class="keyword">key</span> = <span class="string">'foo'</span></span><br></pre></td></tr></table></figure></li>
+<li><p>显式锁定<br> select for update会对select出来的每一行上加上排他锁(X锁)。</p>
+ <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">begin</span> <span class="keyword">transaction</span>;</span><br><span class="line"><span class="keyword">select</span> * <span class="keyword">from</span> figures <span class="keyword">where</span> <span class="keyword">name</span> = <span class="string">'robot'</span> <span class="keyword">for</span> <span class="keyword">update</span>;</span><br><span class="line"><span class="keyword">update</span> figures <span class="keyword">set</span> <span class="keyword">position</span> = <span class="string">'c4'</span> <span class="keyword">where</span> <span class="keyword">id</span> = <span class="number">1234</span>;</span><br><span class="line"><span class="keyword">commit</span>;</span><br></pre></td></tr></table></figure></li>
 <li><p>由事务管理器进行检测，对造成写丢失的事务进行中止</p>
 </li>
 <li><p>CAS</p>
  <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">UPDATE</span> counters <span class="keyword">SET</span> <span class="keyword">value</span> = new_value <span class="keyword">where</span> <span class="keyword">key</span> = <span class="string">'foo'</span> <span class="keyword">and</span> <span class="keyword">value</span> = old_value;</span><br></pre></td></tr></table></figure>
+
 <p> 这种方案需要考虑数据库是否支持，例如数据如允许where子句从旧快照中读取的话，那么这个语句就未必有效。</p>
 </li>
 </ol>
-<h3 id="不可重复读-读偏差-Read-Skew"><a href="#不可重复读-读偏差-Read-Skew" class="headerlink" title="不可重复读/读偏差(Read Skew)"></a>不可重复读/读偏差(Read Skew)</h3><p>不可重复读会导致事务A中两次同样的查询得到不同的结果，一次是事务B提交前的数据，一次是事物B提交后的数据。可以考虑下面的序列：</p>
+<h3 id="【P4C】Cursor-Lost-Update"><a href="#【P4C】Cursor-Lost-Update" class="headerlink" title="【P4C】Cursor Lost Update"></a>【P4C】Cursor Lost Update</h3><h3 id="【P2】不可重复读-Fuzzy-Read"><a href="#【P2】不可重复读-Fuzzy-Read" class="headerlink" title="【P2】不可重复读(Fuzzy Read)"></a>【P2】不可重复读(Fuzzy Read)</h3><p>不可重复读(Fuzzy Read)会导致事务A中两次同样的查询得到不同的结果，一次是事务B提交前的数据，一次是事物B提交后的数据。可以考虑下面的序列：</p>
 <ul>
 <li>A读取X值为x1</li>
 <li>B写入X为x2</li>
@@ -436,9 +457,15 @@
 <li>A读取X值为x2!=x1</li>
 <li>A提交失败</li>
 </ul>
-<h3 id="写偏差-Write-Skew"><a href="#写偏差-Write-Skew" class="headerlink" title="写偏差(Write Skew)"></a>写偏差(Write Skew)</h3><p>此时，两个并行事务都基于自己读到的数据集去覆盖另一部分数据集，在串行化情况下两个事务无论何种先后顺序，最终将达到一致性状态，但SI隔离级别下无法实现。<br>考虑事务P和Q。P试图执行<code>x=y</code>，Q试图执行<code>y=x</code>。从事务隔离性的观点来说，事务P和Q都期望<strong>最终x等于y</strong>。但是SI可能存在下面这种情况：</p>
+<p>避免不可重复读意味着避免下面的情况(P2)：</p>
 <ol>
-<li>P读y<br> 因为使用了SI，此时读到的是y的原值，不妨令为2。</li>
+<li><code>r1[x] ... w2[x] ... c2 ... r1[x] ... c1</code></li>
+<li><code>r1[x] ... w2[x] ... ((c1 or a1) and (c2 or a2) in any order)</code></li>
+</ol>
+<h3 id="【A5A】读偏差"><a href="#【A5A】读偏差" class="headerlink" title="【A5A】读偏差"></a>【A5A】读偏差</h3><p>【Q】读偏差和不可重复读的区别是什么？</p>
+<h3 id="【A5B】写偏差-Write-Skew"><a href="#【A5B】写偏差-Write-Skew" class="headerlink" title="【A5B】写偏差(Write Skew)"></a>【A5B】写偏差(Write Skew)</h3><p>此时，两个并行事务都基于自己读到的数据集去覆盖另一部分数据集，在串行化情况下两个事务无论何种先后顺序，最终将达到一致性状态，但SI隔离级别下无法实现。<br>考虑事务P和Q。P试图执行<code>x=y</code>，Q试图执行<code>y=x</code>。从事务隔离性的观点来说，事务P和Q都期望<strong>最终x等于y</strong>。但是SI可能存在下面这种情况：</p>
+<ol>
+<li>P读y<br> 因为使用了SI，此时读到的是y的<strong>原值</strong>，不妨令为2。</li>
 <li>Q读x<br> 同理，读到x的原值1。</li>
 <li>P将读取的值2写入x<br> 现在x等于2了。</li>
 <li>Q将其读取的值1写入y<br> 现在y等于1了。</li>
@@ -453,8 +480,9 @@
 <li>违背了完整性约束：至少有一个医生on call</li>
 </ol>
 </li>
+<li>电影卖票<br> 如果使用SI，则可能一张电影票被卖两次。</li>
 </ol>
-<p>写偏差可以看作写丢失的一般化。如果两个事务读取相同的对象，然后<strong>各自更新一些对象（可能是不同的）</strong>，那么就可能发生写偏差。特别地，如果<strong>它们更新的对象是相同的</strong>，那么可能发生脏写或者写丢失。</p>
+<p>写偏差可以看作写丢失(Lose Update)的一般化。如果两个事务读取相同的对象，然后<strong>各自更新一些对象（可能是不同的）</strong>，那么就可能发生写偏差。特别地，如果<strong>它们更新的对象是相同的</strong>，那么可能发生脏写或者写丢失。</p>
 <p>现在我们考虑之前解决写丢失的一些方案是否还能适用于解决写偏差：</p>
 <ol>
 <li>原子写<br> 这个肯定不适用了，因为原子写只能涉及一个对象。</li>
@@ -463,13 +491,18 @@
 <li>配置约束<br> 可以通过触发器或者物化视图来实现。<br> 例如，我们约束至少有一个医生on call。</li>
 <li>更新隔离级别为S。</li>
 </ol>
-<h3 id="幻读"><a href="#幻读" class="headerlink" title="幻读"></a>幻读</h3><p>例如如果另一个事务在对其他的数据进行修改，例如在数据表中插入了一个新数据，在RR下会<strong>产生幻读现象</strong>，也就是一个事务的两次查询中数据笔数不一致。考虑下面的情况：</p>
+<h3 id="【P3】幻读"><a href="#【P3】幻读" class="headerlink" title="【P3】幻读"></a>【P3】幻读</h3><p>例如如果另一个事务在对其他的数据进行修改，例如在数据表中插入了一个新数据，在RR下会<strong>产生幻读现象</strong>，也就是一个事务的两次查询中数据笔数不一致。考虑下面的情况：</p>
 <ol>
 <li>P去insert一个id，但尚未提交</li>
 <li>Q去select这个id，发现没有</li>
 <li>Q去insert这个id，发现主键冲突，但是还是select不到，仿佛出现幻觉</li>
 </ol>
 <p><strong>幻读会引发写偏斜</strong>，并且会更加棘手，因为我们<strong>没办法通过显式锁定</strong>来解决这个问题：我们要锁的东西都不存在，该怎么加锁？</p>
+<p>避免幻读，意味着我们要避免下面的情况：</p>
+<ol>
+<li><code>r1[P] ... w2[y in P] ... c2 ... r1[P] ... c1</code></li>
+<li><code>r1[P] ... w2[y in P] ... ((c1 or a1) and (c2 or a2) any order)</code></li>
+</ol>
 <p>解决幻读可以从下面几个角度入手：</p>
 <ol>
 <li>物化冲突<br> 刚才我们提到了“我们要锁的东西都不存在，该怎么加锁？”这个问题。</li>
@@ -477,7 +510,7 @@
 <li>Next key lock<br> InnoDB可以通过间隙锁Next key lock解决了幻读的问题，<a href="https://zhuanlan.zhihu.com/p/91208953" target="_blank" rel="noopener">因此实际上实现了串行化级别的效果，而且保留了比较好的并发性能</a>。<br> 【Q】间隙锁可以理解为一种物化冲突的手段么？</li>
 <li>实现S隔离等级<br> 其实通过实现谓词锁，或者Next key lock等也能实现S隔离等级。当然也有诸如2PL直接加锁的办法。</li>
 </ol>
-<h2 id="介绍"><a href="#介绍" class="headerlink" title="介绍"></a>介绍</h2><p>在了解并发事务控制前，首先需要了解事务的隔离等级。<br>事务具有ACID的要求，隔离性I要求数据库能够支持<strong>并发事务</strong>。隔离性I的要求主要对应了四种隔离级别，分别是Read uncommitted、Read committed(Sql Server、Oracle等的默认隔离级别)、Repeatable read(MySQL的默认隔离级别)、Serializable，分别可以解决脏读、不可重复读(Nonrepeatable Read)、幻读(Phantom Read)几类问题。</p>
+<h2 id="介绍"><a href="#介绍" class="headerlink" title="介绍"></a>介绍</h2><p>在了解并发事务控制前，首先需要了解事务的隔离等级。<br>事务具有ACID的要求，隔离性I要求数据库能够支持<strong>并发事务</strong>。隔离性I的要求主要对应了四种隔离级别，分别是Read uncommitted、Read committed(Sql Server、Oracle等的默认隔离级别)、Repeatable read(MySQL的默认隔离级别)、Serializable，分别可以解决脏读、不可重复读(Nonrepeatable Read/Fuzzy Read)、幻读(Phantom Read)几类问题。</p>
 <h3 id="Read-uncommitted-RU"><a href="#Read-uncommitted-RU" class="headerlink" title="Read uncommitted(RU)"></a>Read uncommitted(RU)</h3><p>RU保证了不会脏写。</p>
 <p>事务A在访问数据时，如果另一个事务在并发修改了该数据且<strong>未</strong>提交，在Read Uncommitted隔离级别下可能产生脏读。</p>
 <h3 id="Read-committed-RC"><a href="#Read-committed-RC" class="headerlink" title="Read committed(RC)"></a>Read committed(RC)</h3><p>相比于RU，RC提供了两个保证：</p>
@@ -486,31 +519,32 @@
 <li>不会脏写<br>  写入数据库的时候，只会覆盖已写入的数据。<br>  这个其实RU也提供了。</li>
 </ul>
 <p><strong>如何预防脏写？</strong>很容易想到通过<strong>行锁</strong>。当要修改某个对象的时候，需要获得其所在行的行锁，并持有到事务提交或者中止。<br><strong>如何预防脏读？</strong>偷懒的办法是也用同一个行锁。这样同一个对象只会同时被一个事务访问。可是这个方案性能太不好啦！为了提高性能，可以尝试多版本的方案，例如对于写入的每个对象，数据库会记住<strong>旧版本的值，即上一次被提交的值</strong>。同时，数据库也会维护当前持有锁的事务设置的新值。</p>
-<p>事务A在访问数据时，如果另一个事务在并发修改了该数据且<strong>已</strong>提交，在Read committed隔离级别下可能产生<strong>不可重复读</strong>，或者称为读偏差(Read Skew)。我们在后面还会看到写偏差(Write Skew)，相比于Spark语境中的Skew，这里的Skew含义是异常的时机。<br>RC隔离级别下，一个事务开始到提交之前，做出的修改对其他事务是不可见的。</p>
-<h3 id="Repeatable-Read-RR"><a href="#Repeatable-Read-RR" class="headerlink" title="Repeatable Read(RR)"></a>Repeatable Read(RR)</h3><p>在Repeatable Read隔离等级之下，事务A在访问数据时，事务开始后其他事务就不能对该数据进行修改了，因此杜绝了不可重复读。</p>
+<p>事务A在访问数据时，如果另一个事务在并发修改了该数据且<strong>已</strong>提交，在Read committed隔离级别下可能产生<strong>不可重复读</strong>，或者称为读偏差(Read Skew)。同理还有写偏差(Write Skew)，相比于Spark语境中的Skew，这里的Skew含义是异常的时机。<br>RC隔离级别下，一个事务开始到提交之前，做出的修改对其他事务是不可见的。</p>
+<h3 id="Repeatable-Read-RR"><a href="#Repeatable-Read-RR" class="headerlink" title="Repeatable Read(RR)"></a>Repeatable Read(RR)</h3><p>在Repeatable Read隔离等级之下，事务A在访问数据时会加S锁，事务开始后其他事务就不能对该数据进行修改了，因此杜绝了不可重复读。</p>
 <h3 id="Snapshot-Isolation-SI"><a href="#Snapshot-Isolation-SI" class="headerlink" title="Snapshot Isolation(SI)"></a>Snapshot Isolation(SI)</h3><p>A Critique of ANSI SQL Isolation Levels这篇文章指出了ANSI SQL-92给出的四种隔离级别存在的问题，并提出了Snapshot Isolation。</p>
 <p>在这篇文章中，作者提出SERIALIZABLE被描述成不会发生脏读、不可重复读以及幻读的一种隔离级别。但这和“可串行”并不等价，因为它存在Write skew的问题。Write skew指的是两个并行事务都基于自己读到的数据去覆盖另一部分数据，这个问题违反了可串行化。</p>
 <p><a href="http://www.nosqlnotes.com/technotes/mvcc-snapshot-isolation/" target="_blank" rel="noopener">Snapshot Isolation也是来解决2PL系列算法带来的并发度低的问题的</a>：</p>
 <ol>
-<li>每一个数据有多个版本(MVCC)<br> 这相比RC是一个变化，因为RC只会维护两个版本。<br> 这是因为数据库需要维护某个对象的几个不同的提交版本，因此此时数据库中的并发事务可能看到数据库在不同时间点的状态。这也就是所谓的MVCC机制。<br> 容易看出，MVCC能够退化地实现RC隔离性。我们将在MVCC章节中看到基于MVCC对RC和RR的实现：即对RC，每个查询用独立的快照；对RR，整个事务用一个快照。</li>
-<li>每个事务相当于看到数据的一个快照<br> 记事务开始时间戳为ST，事务提交的时间戳是CT。<br> 如Percolator论文中Figure3所示。事务2看不见事务1的写，这是因为事务2的ST在事务1的CT之前。但是事务3能够看到事务1和2的修改。此时，我们成为事务1和事务2是并发事务，如果并发事务都往一个记录上面写，至少有一个会abort。这里abort的方式采用即First-write-wins(FWW)规则，可以保证不造成写丢失的情况。<br> 对应了FWW的还有LWW。<br> 当然，我们也可以前置这个判断过程到write的时候。<br> <img src="/img/dbtrans/percolator3.png" alt=""></li>
+<li>每一个数据有多个版本(MVCC)<br> 这相比RC是一个变化，因为RC只会维护两个版本，即上一次被提交的值，以及这次的性质。<br> 这是因为MVCC下，数据库需要维护某个对象的几个不同的提交版本，因此此时数据库中的并发事务可能看到数据库在不同时间点的状态。这也就是所谓的MVCC机制。<br> 容易看出，MVCC能够退化地实现RC隔离性。我们将在MVCC章节中看到基于MVCC对RC和RR的实现：即对RC，每个查询用独立的快照；对RR，整个事务用一个快照。</li>
+<li>每个事务相当于看到数据的一个快照<br> 记事务开始时间戳为ST，事务提交的时间戳是CT。事务在开始时获得ST，在准备提交时获得CT。此时，该事务CT应当大于所有现存的ST和CT。具体时间戳的获取可以借助于TSO。在提交时，需要进行<strong>冲突检测</strong>，也就是说如果发现有并发事务在写同一个记录，那么至少要abort一个事务，否则会导致Lose Update。当然，我们也可以前置这个判断过程到写而不是提交的时候【Q】这是不是对应了SSI。abort的方式主要有FWW、LWW、FCW、LCW。<br> 【Q】<strong>这是根据并发事务的ST还是CT来判断呢？根据论文，是根据CT</strong><br> <img src="/img/fbs/si_conflict.png"><br> 什么是冲突事务呢？如果有其他事务在[ST,CT]之间也写了我的WriteSet，那么这就是冲突事务了。如Percolator论文中Figure3所示。事务2看不见事务1的写，这是因为事务2的ST在事务1的CT之前。对应地，事务3能够看到事务1和2的修改。此时，我们称事务1和事务2是<strong>并发事务</strong>，如果并发事务都写同一个记录规则，可以保证不造成写丢失的情况。<br> <img src="/img/dbtrans/percolator3.png"><br> 【Q】如果一个事务在执行过程中，那么它的CT会被设置为多少呢？我想应该是inf，看Percolator的实现也是inf。</li>
 <li>WW冲突还是需要加锁的，但是RW冲突就不会产生任何锁定了。R和W不会相互阻塞。</li>
 <li>第一个得到行锁的事务可以进行，后面的写事务要么abort，要么block。</li>
 </ol>
-<p>Snapshot Isolation相对于SERIALIZABLE的隔离级别<a href="https://www.jdon.com/55452" target="_blank" rel="noopener">要低一些</a>，诸如Oracle宣称提供的SERIALIZABLE实际上也是Snapshot Isolation。</p>
-<p>Snapshot Isolation可能带来写偏斜(write skew)问题，从而不能满足SERIALIZABLE级别。</p>
+<p>Snapshot Isolation相对于SERIALIZABLE的隔离级别<a href="https://www.jdon.com/55452" target="_blank" rel="noopener">要低一些</a>，诸如Oracle宣称提供的SERIALIZABLE实际上也是Snapshot Isolation。降低了的隔离级别，带来了更好的读性能。这是显然的，想想S的实现方式吧，无论是真的串行（没有任何并行），还是2PL加锁（读和写都要加锁），都会导致读和写的竞争。</p>
+<p>Snapshot Isolation中不会存在Repeatable Read中的幻读问题了，这是显然的。我们始终读取某个历史版本的状态，那么每次读都是一样的。</p>
+<p>Snapshot Isolation可能带来写偏斜(write skew)问题，从而不能满足SERIALIZABLE级别。可是为啥会有这个问题呢？<br>我们回想上文讲述的<code>P</code>和<code>Q</code>分别运行<code>x=y</code>和<code>y=x</code>的例子。在这个例子中，我们发现Snapshot Isolation并没有管读和读之间的问题。</p>
+<p>为什么Repeatable Read不会有Write Skew问题呢？<a href="https://zhuanlan.zhihu.com/p/56868208" target="_blank" rel="noopener">根据这篇文章</a>，RR会在读取行的时候加读锁。</p>
 <h4 id="RR和SI的区别和联系"><a href="#RR和SI的区别和联系" class="headerlink" title="RR和SI的区别和联系"></a>RR和SI的区别和联系</h4><p>在1975年定义SQL的隔离级别的时候，尚未发明SI这个级别。</p>
 <h4 id="MVCC和SI的区别和联系"><a href="#MVCC和SI的区别和联系" class="headerlink" title="MVCC和SI的区别和联系"></a>MVCC和SI的区别和联系</h4><p><strong>MVCC和锁都是SI的实现手段</strong>，当然，也可以有一些方案完全无锁地实现SI。<br><a href="https://zhuanlan.zhihu.com/p/59115828" target="_blank" rel="noopener">数据行可见性的区别</a>：</p>
 <ol>
 <li>MVCC<br> 事务T1的快照记录是在生成快照时的活跃事务集合。这个集合的时间区间是[min, max]，其中所有比min小的事务都被<strong>提交</strong>了，所有比max大的事务都<strong>没有启动</strong>。如果落在这个区间内，我们还需要去真正比较是否在这个集合中。详见对MVCC的介绍。</li>
-<li>Percolator<br> 保证能够读到<code>R.start_ts &gt; W.commit_ts</code>。也就是说，当事务W提交完，才能被事务R读到。</li>
+<li>Percolator<br> 保证能够读到<code>R.start_ts &gt; W.commit_ts</code>。也就是说，当事务W提交完，才能被事务R读到。<br> 【Q】这个是不是和SI不太一样？SI貌似是CT2和[ST1,CT1]比较的。</li>
 </ol>
-<h4 id="Serial-Snapshot-Isolation-SSI"><a href="#Serial-Snapshot-Isolation-SSI" class="headerlink" title="Serial Snapshot Isolation(SSI)"></a>Serial Snapshot Isolation(SSI)</h4><p>该理论用来解决Write Skew问题。基本思想是冲突检测发生在<strong>事务运行阶段</strong>，而不是<strong>事务的交阶段</strong>。</p>
+<h4 id="Serial-Snapshot-Isolation-SSI"><a href="#Serial-Snapshot-Isolation-SSI" class="headerlink" title="Serial Snapshot Isolation(SSI)"></a>Serial Snapshot Isolation(SSI)</h4><p>该理论用来解决Write Skew问题。基本思想是冲突检测发生在<strong>事务运行阶段</strong>，而不是<strong>事务的提交阶段</strong>。</p>
 <p>Write Snapshot isolation需要保证一个事务读的数据的最近一个版本的提交时间要早于事务的开始时间。即下面的两个事务不能同时提交成功：</p>
 <ol>
 <li>读写在空间上的重叠<br> 事务A的写和事务B读属于同一行</li>
-<li>读写在时间上的重叠<br> 例如下面的顺序 <figure class="highlight lisp"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">start(<span class="name">A</span>) &lt; commit(<span class="name">j</span>) &lt; commit(<span class="name">i</span>)</span><br></pre></td></tr></table></figure>
-</li>
+<li>读写在时间上的重叠<br> 例如下面的顺序 <figure class="highlight lisp"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">start(<span class="name">A</span>) &lt; commit(<span class="name">j</span>) &lt; commit(<span class="name">i</span>)</span><br></pre></td></tr></table></figure></li>
 </ol>
 <p>但是Serial Snapshot Isolation还是没能解决全序问题。解决这个问题，可以依靠Lamport的逻辑时钟。</p>
 <h3 id="Serializable-S"><a href="#Serializable-S" class="headerlink" title="Serializable(S)"></a>Serializable(S)</h3><p>等同于在每个读的数据行上加S锁，从而解决了幻读的问题。但这种方法具有很差的并发性，会导致大量超时和锁竞争。<br>【Q】就我理解而言，RU/RC/RR这三个事务等级都是对于一个记录R而言的，但是S隔离等级涉及多个记录R。我们可以类比记录到变量？</p>
@@ -525,13 +559,17 @@
 <li>一些乐观并发技术，例如上面提到的SSI</li>
 </ol>
 <p>MySQL可以通过<code>SET TRANSACTION ISOLATION LEVEL</code>设置隔离级别。</p>
-<h2 id="Demo"><a href="#Demo" class="headerlink" title="Demo"></a>Demo</h2><p>考虑下面的代码Case1<br><figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">Ta                                  Tb</span><br><span class="line"><span class="keyword">begin</span></span><br><span class="line"><span class="keyword">select</span> x <span class="keyword">from</span> <span class="keyword">table</span>, x=<span class="number">10</span></span><br><span class="line">                                    <span class="keyword">begin</span></span><br><span class="line">                                    <span class="keyword">update</span> <span class="keyword">table</span> <span class="keyword">set</span> x = <span class="number">20</span></span><br><span class="line">                                    <span class="keyword">commit</span></span><br><span class="line"><span class="keyword">select</span> x <span class="keyword">from</span> <span class="keyword">table</span>, x=?</span><br></pre></td></tr></table></figure></p>
+<h2 id="Demo"><a href="#Demo" class="headerlink" title="Demo"></a>Demo</h2><p>考虑下面的代码Case1</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">Ta                                  Tb</span><br><span class="line"><span class="keyword">begin</span></span><br><span class="line"><span class="keyword">select</span> x <span class="keyword">from</span> <span class="keyword">table</span>, x=<span class="number">10</span></span><br><span class="line">                                    <span class="keyword">begin</span></span><br><span class="line">                                    <span class="keyword">update</span> <span class="keyword">table</span> <span class="keyword">set</span> x = <span class="number">20</span></span><br><span class="line">                                    <span class="keyword">commit</span></span><br><span class="line"><span class="keyword">select</span> x <span class="keyword">from</span> <span class="keyword">table</span>, x=?</span><br></pre></td></tr></table></figure>
+
 <p>对于：</p>
 <ol>
 <li>RU、RC<br> 读到的是20</li>
 <li>RR、S<br> 读到的是10</li>
 </ol>
-<p>再考虑下面的代码Case2<br><figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">Ta                                  Tb</span><br><span class="line"><span class="keyword">begin</span></span><br><span class="line"><span class="keyword">select</span> x <span class="keyword">from</span> <span class="keyword">table</span>, x=<span class="number">10</span></span><br><span class="line">                                    <span class="keyword">begin</span></span><br><span class="line">                                    <span class="keyword">update</span> <span class="keyword">table</span> <span class="keyword">set</span> x = <span class="number">20</span></span><br><span class="line"><span class="keyword">select</span> x <span class="keyword">from</span> <span class="keyword">table</span>, x=?</span><br><span class="line">                                    <span class="keyword">commit</span></span><br></pre></td></tr></table></figure></p>
+<p>再考虑下面的代码Case2</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">Ta                                  Tb</span><br><span class="line"><span class="keyword">begin</span></span><br><span class="line"><span class="keyword">select</span> x <span class="keyword">from</span> <span class="keyword">table</span>, x=<span class="number">10</span></span><br><span class="line">                                    <span class="keyword">begin</span></span><br><span class="line">                                    <span class="keyword">update</span> <span class="keyword">table</span> <span class="keyword">set</span> x = <span class="number">20</span></span><br><span class="line"><span class="keyword">select</span> x <span class="keyword">from</span> <span class="keyword">table</span>, x=?</span><br><span class="line">                                    <span class="keyword">commit</span></span><br></pre></td></tr></table></figure>
+
 <p>对于：</p>
 <ol>
 <li>RU<br> 读到的是20</li>
@@ -547,10 +585,10 @@
 <p>需要注意的是，以上的策略都有单版本和多版本的实现。这个应该是能比较容易理解的，对于MVCC，因为一次对数据库的修改都会生成一个新的版本，所以实际上在处理隔离性上会更加的灵活。因为我们成功把问题转化到了如何选取版本和管理版本上。</p>
 <h2 id="可串行性和冲突可串行性-Conflict-Serializability"><a href="#可串行性和冲突可串行性-Conflict-Serializability" class="headerlink" title="可串行性和冲突可串行性(Conflict Serializability)"></a>可串行性和冲突可串行性(Conflict Serializability)</h2><p>可串行性要求<a href="https://zhuanlan.zhihu.com/p/127274032" target="_blank" rel="noopener">事务并发执行的效果和事务单独执行的效果</a>是一样的。</p>
 <p>关于这一点，我们可以类比到CPU并行编程里面的内存模型。如下图所示，左边的是串行调度，因为事务和事务之间都是串行的了。右边的是不可串行调度，因为右边的结果和左图（先T1再T2）不一样，并且和先T2再T1也不一样。中间的图并<strong>不是串行调度</strong>，因为T1和T2是彼此交织的，但是它的<strong>结果和左边的图是一样的</strong>，所以<strong>是可串行调度</strong>。</p>
-<p><img src="/img/dbtrans/cser.png" alt=""></p>
+<p><img src="/img/dbtrans/cser.png"></p>
 <p>和并发编程里面一样，除了读读操作，诸如读写、写读、写写之类的操作都是<strong>冲突操作</strong>。</p>
 <p>一个调度S在保证冲突操作的次序不变的前提下，通过<strong>交换非冲突操作的次序</strong>得到另一个调度S’，同时如果S’是可串行的，那么我们就说S是一个冲突可串行化的调度。一个调度是冲突可串行化的，那么它一定是可串行化的调度。</p>
-<p>如下面这一组图所示。图1就是一个冲突可串行化的调度，因为它可以通过交换顺序得到图3。但是图4就不是一个可串行化。<br><img src="/img/dbtrans/cser2.png" alt=""></p>
+<p>如下面这一组图所示。图1就是一个冲突可串行化的调度，因为它可以通过交换顺序得到图3。但是图4就不是一个可串行化。<br><img src="/img/dbtrans/cser2.png"></p>
 <h2 id="2PL"><a href="#2PL" class="headerlink" title="2PL"></a>2PL</h2><p>2PL用户实现InnoDB和SQL Server中的S级别，以及DB2中的RR级别。这个方案的思路是通过为每个对象加锁来解决冲突。这些锁可以是共享的，也可以是排他的，具体来说：</p>
 <ol>
 <li>如果需要读取，那么可以使用共享锁</li>
@@ -558,10 +596,16 @@
 <li>如果先读后写，需要将共享锁升级为排它锁，升级过程如同重新获得排它锁</li>
 <li>获得锁之后，必须持有锁到事务提交或者中止<br> 这应该是S2PL和SS2PL的规定。</li>
 </ol>
-<p>我们知道死锁有四个条件：互斥、占有且申请、不可抢占和循环等待。而为了解决死锁问题，一个方案就是一次性获得所有的锁，这样实际上破坏了占有且申请的条件。如何避免死锁？我在<a href="/2017/12/28/Concurrency-Programming-Compare/">文章中</a>进行了较为详尽的讨论。避免死锁的一个可行的办法就是一次性请求所有锁（1PL），但这个对数据库来说很困难，因为我们很难知道我们具体要那些资源，并且这样一次性锁协议牺牲了并发性。<br>为此我们引入了2PL，2PL将加解锁过程分为两个阶段，在第一阶段只能加锁或者操作数据，不能解锁；在第二阶段只能解锁或者操作数据，不能加锁。<br><strong>2PL不能避免死锁</strong>，如下所示。两个事务按照2PL加锁，假定第一个事务1请求到了4，第二个事务请求到了3，那么1和2就会陷入死锁。那么我们就必须干掉其中一个事务。<br><figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">START</span> <span class="keyword">TRANSACTION</span>;</span><br><span class="line"><span class="keyword">UPDATE</span> StockPrice <span class="keyword">SET</span> <span class="keyword">close</span> = <span class="number">45</span> <span class="keyword">WHERE</span> stock_id = <span class="number">4</span>;</span><br><span class="line"><span class="keyword">UPDATE</span> StockPrice <span class="keyword">SET</span> <span class="keyword">close</span> = <span class="number">19</span> <span class="keyword">WHERE</span> stock_id = <span class="number">3</span>;</span><br><span class="line"><span class="keyword">COMMIT</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">START</span> <span class="keyword">TRANSACTION</span>;</span><br><span class="line"><span class="keyword">UPDATE</span> StockPrice <span class="keyword">SET</span> <span class="keyword">close</span> = <span class="number">22</span> <span class="keyword">WHERE</span> stock_id = <span class="number">3</span>;</span><br><span class="line"><span class="keyword">UPDATE</span> StockPrice <span class="keyword">SET</span> <span class="keyword">close</span> = <span class="number">44</span> <span class="keyword">WHERE</span> stock_id = <span class="number">4</span>;</span><br><span class="line"><span class="keyword">COMMIT</span>;</span><br></pre></td></tr></table></figure></p>
-<p>【Q】我们知道指定加锁顺序，可以避免死锁。例如我们在遍历链表的时候，始终沿着同一个方向遍历等。但是2PL这里的顺序并不是锁的顺序，例如我们先获取第一个锁，然后才能获取第二个锁，而是强调所有的加锁工作必须在解锁工作完成前完成，那么显然这里是不能避免死锁的。既然如此，为什么还需要引入2PL呢？<br>2PL的目的是为了保证<strong>可串行性</strong>，进而是为了保证隔离性。如果不满足2PL，那么可串行性就可能出问题。考虑下面的Case<br><figure class="highlight lisp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">Ta                                  Tb</span><br><span class="line">begin</span><br><span class="line">x-lock(<span class="name">A</span>)</span><br><span class="line">write(<span class="name">A</span>)</span><br><span class="line">release(<span class="name">A</span>)</span><br><span class="line">                                    x-lock(<span class="name">A</span>)</span><br><span class="line">                                    write(<span class="name">A</span>)</span><br><span class="line">                                    release(<span class="name">A</span>)</span><br><span class="line">s-lock(<span class="name">A</span>)</span><br><span class="line">read(<span class="name">A</span>)</span><br></pre></td></tr></table></figure></p>
+<p>我们知道死锁有四个条件：互斥、占有且申请、不可抢占和循环等待。而为了解决死锁问题，一个方案就是一次性获得所有的锁，这样实际上破坏了占有且申请的条件。如何避免死锁？我在<a href="/2017/12/28/Concurrency-Programming-Compare/">文章中</a>进行了较为详尽的讨论。避免死锁的一个可行的办法就是一次性请求所有锁（1PL），但这个对数据库来说很困难，因为我们很难知道我们具体要那些资源，并且这样一次性锁协议牺牲了并发性。<br>为此我们引入了2PL，2PL将加解锁过程分为两个阶段，在第一阶段只能加锁或者操作数据，不能解锁；在第二阶段只能解锁或者操作数据，不能加锁。<br><strong>2PL不能避免死锁</strong>，如下所示。两个事务按照2PL加锁，假定第一个事务1请求到了4，第二个事务请求到了3，那么1和2就会陷入死锁。那么我们就必须干掉其中一个事务。</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">START</span> <span class="keyword">TRANSACTION</span>;</span><br><span class="line"><span class="keyword">UPDATE</span> StockPrice <span class="keyword">SET</span> <span class="keyword">close</span> = <span class="number">45</span> <span class="keyword">WHERE</span> stock_id = <span class="number">4</span>;</span><br><span class="line"><span class="keyword">UPDATE</span> StockPrice <span class="keyword">SET</span> <span class="keyword">close</span> = <span class="number">19</span> <span class="keyword">WHERE</span> stock_id = <span class="number">3</span>;</span><br><span class="line"><span class="keyword">COMMIT</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">START</span> <span class="keyword">TRANSACTION</span>;</span><br><span class="line"><span class="keyword">UPDATE</span> StockPrice <span class="keyword">SET</span> <span class="keyword">close</span> = <span class="number">22</span> <span class="keyword">WHERE</span> stock_id = <span class="number">3</span>;</span><br><span class="line"><span class="keyword">UPDATE</span> StockPrice <span class="keyword">SET</span> <span class="keyword">close</span> = <span class="number">44</span> <span class="keyword">WHERE</span> stock_id = <span class="number">4</span>;</span><br><span class="line"><span class="keyword">COMMIT</span>;</span><br></pre></td></tr></table></figure>
+
+<p>【Q】我们知道指定加锁顺序，可以避免死锁。例如我们在遍历链表的时候，始终沿着同一个方向遍历等。但是2PL这里的顺序并不是锁的顺序，例如我们先获取第一个锁，然后才能获取第二个锁，而是强调所有的加锁工作必须在解锁工作完成前完成，那么显然这里是不能避免死锁的。既然如此，为什么还需要引入2PL呢？<br>2PL的目的是为了保证<strong>可串行性</strong>，进而是为了保证隔离性。如果不满足2PL，那么可串行性就可能出问题。考虑下面的Case</p>
+<figure class="highlight lisp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">Ta                                  Tb</span><br><span class="line">begin</span><br><span class="line">x-lock(<span class="name">A</span>)</span><br><span class="line">write(<span class="name">A</span>)</span><br><span class="line">release(<span class="name">A</span>)</span><br><span class="line">                                    x-lock(<span class="name">A</span>)</span><br><span class="line">                                    write(<span class="name">A</span>)</span><br><span class="line">                                    release(<span class="name">A</span>)</span><br><span class="line">s-lock(<span class="name">A</span>)</span><br><span class="line">read(<span class="name">A</span>)</span><br></pre></td></tr></table></figure>
+
 <p>容易看出，Ta先后申请并释放了两次A的锁，在这过程中，Tb修改了A的值，结果第二次对A的读取就是有问题的了。</p>
-<p>我们需要注意的是，即使遵守2PL，还可能会出现问题。考虑下面的Case<br><figure class="highlight lisp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">Ta                                  Tb</span><br><span class="line">begin</span><br><span class="line">x-lock(<span class="name">A</span>)</span><br><span class="line">write(<span class="name">A</span>)</span><br><span class="line">read(<span class="name">B</span>)</span><br><span class="line">release(<span class="name">A</span>)</span><br><span class="line">                                    x-lock(<span class="name">A</span>)</span><br><span class="line">                                    read(<span class="name">A</span>)</span><br><span class="line">                                    write(<span class="name">A</span>)</span><br><span class="line">write(<span class="name">B</span>)</span><br><span class="line">release(<span class="name">B</span>)</span><br><span class="line">commit</span><br></pre></td></tr></table></figure></p>
+<p>我们需要注意的是，即使遵守2PL，还可能会出现问题。考虑下面的Case</p>
+<figure class="highlight lisp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">Ta                                  Tb</span><br><span class="line">begin</span><br><span class="line">x-lock(<span class="name">A</span>)</span><br><span class="line">write(<span class="name">A</span>)</span><br><span class="line">read(<span class="name">B</span>)</span><br><span class="line">release(<span class="name">A</span>)</span><br><span class="line">                                    x-lock(<span class="name">A</span>)</span><br><span class="line">                                    read(<span class="name">A</span>)</span><br><span class="line">                                    write(<span class="name">A</span>)</span><br><span class="line">write(<span class="name">B</span>)</span><br><span class="line">release(<span class="name">B</span>)</span><br><span class="line">commit</span><br></pre></td></tr></table></figure>
+
 <p>Tb出现了RU的情况。如果此时Ta回滚，那么Tb也要回滚，这称为级联回滚。所以一般数据库会有S2PL和SS2PL，分别要求写锁和读写锁在事务Commit后再释放。</p>
 <p>数据库实现了死锁检测和死锁超时机制。以InnoDB为例，如果启动死锁检测(<code>innodb_lock_wait_timeout</code>)，那么会在死锁发生时会选择将持有最少行级X锁的事务进行回滚。当然也可以选择等待(<code>innodb_lock_wait_timeout</code>)超时。</p>
 <h2 id="意向锁"><a href="#意向锁" class="headerlink" title="意向锁"></a>意向锁</h2><p>数据库里面至少有表和行两个层级，我们考虑对某张表里面的一万行加锁，我们有锁表和分别锁一万行两个选择：</p>
@@ -655,6 +699,8 @@
 <li><a href="http://www.nosqlnotes.com/technotes/mvcc-snapshot-isolation/" target="_blank" rel="noopener">http://www.nosqlnotes.com/technotes/mvcc-snapshot-isolation/</a><br> 介绍Snapshot Isolation</li>
 <li><a href="https://pingcap.com/blog-cn/take-you-through-the-isolation-level-of-tidb-1/" target="_blank" rel="noopener">https://pingcap.com/blog-cn/take-you-through-the-isolation-level-of-tidb-1/</a><br> tidb对事务隔离等级的论述</li>
 <li>DDIA<br> DDIA对事务隔离的论述，在事务章节中</li>
+<li><a href="https://developer.aliyun.com/article/77965" target="_blank" rel="noopener">https://developer.aliyun.com/article/77965</a><br> 对A Critique of ANSI SQL Isolation Levels这篇论文的翻译</li>
+<li><a href="https://cloud.tencent.com/developer/news/330343" target="_blank" rel="noopener">https://cloud.tencent.com/developer/news/330343</a><br> 介绍了各个isolation 问题</li>
 </ol>
 
       
@@ -721,8 +767,8 @@
         <div class="post-nav">
           <div class="post-nav-next post-nav-item">
             
-              <a href="/2017/08/20/黄山游记/" rel="next" title="黄山游记">
-                <i class="fa fa-chevron-left"></i> 黄山游记
+              <a href="/2017/09/20/distributed-system-consistency-and-consensus/" rel="next" title="分布式一致性和分布式共识协议">
+                <i class="fa fa-chevron-left"></i> 分布式一致性和分布式共识协议
               </a>
             
           </div>
@@ -731,8 +777,8 @@
 
           <div class="post-nav-prev post-nav-item">
             
-              <a href="/2017/09/20/distributed-system-consistency-and-consensus/" rel="prev" title="分布式一致性和分布式共识协议">
-                分布式一致性和分布式共识协议 <i class="fa fa-chevron-right"></i>
+              <a href="/2017/09/23/HDU2089不要62/" rel="prev" title="HDU 2089 不要62 数位DP">
+                HDU 2089 不要62 数位DP <i class="fa fa-chevron-right"></i>
               </a>
             
           </div>
@@ -812,7 +858,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">161</span>
+                <span class="site-state-item-count">164</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -825,7 +871,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">155</span>
+                <span class="site-state-item-count">157</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -918,7 +964,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#两种事务控制模型"><span class="nav-number">1.</span> <span class="nav-text">两种事务控制模型</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#ACID"><span class="nav-number">1.1.</span> <span class="nav-text">ACID</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#BASE"><span class="nav-number">1.2.</span> <span class="nav-text">BASE</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#分布式事务"><span class="nav-number">2.</span> <span class="nav-text">分布式事务</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#单对象事务和多对象事务"><span class="nav-number">2.1.</span> <span class="nav-text">单对象事务和多对象事务</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#故障恢复"><span class="nav-number">3.</span> <span class="nav-text">故障恢复</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#WAL"><span class="nav-number">3.1.</span> <span class="nav-text">WAL</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Shadow-paging"><span class="nav-number">3.2.</span> <span class="nav-text">Shadow paging</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#事务更新的两条规则"><span class="nav-number">3.3.</span> <span class="nav-text">事务更新的两条规则</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#提交规则"><span class="nav-number">3.3.1.</span> <span class="nav-text">提交规则</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#先记后写规则"><span class="nav-number">3.3.2.</span> <span class="nav-text">先记后写规则</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#事务的隔离等级"><span class="nav-number">4.</span> <span class="nav-text">事务的隔离等级</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#常见并发问题"><span class="nav-number">4.1.</span> <span class="nav-text">常见并发问题</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#脏读-Dirty-Read"><span class="nav-number">4.1.1.</span> <span class="nav-text">脏读(Dirty Read)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#脏写-Dirty-Write"><span class="nav-number">4.1.2.</span> <span class="nav-text">脏写(Dirty Write)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#写丢失-丢失更新-lost-update"><span class="nav-number">4.1.3.</span> <span class="nav-text">写丢失/丢失更新(lost update)</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#回滚丢失"><span class="nav-number">4.1.3.1.</span> <span class="nav-text">回滚丢失</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#覆盖丢失-两次更新"><span class="nav-number">4.1.3.2.</span> <span class="nav-text">覆盖丢失/两次更新</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#不可重复读-读偏差-Read-Skew"><span class="nav-number">4.1.4.</span> <span class="nav-text">不可重复读/读偏差(Read Skew)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#写偏差-Write-Skew"><span class="nav-number">4.1.5.</span> <span class="nav-text">写偏差(Write Skew)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#幻读"><span class="nav-number">4.1.6.</span> <span class="nav-text">幻读</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#介绍"><span class="nav-number">4.2.</span> <span class="nav-text">介绍</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Read-uncommitted-RU"><span class="nav-number">4.2.1.</span> <span class="nav-text">Read uncommitted(RU)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Read-committed-RC"><span class="nav-number">4.2.2.</span> <span class="nav-text">Read committed(RC)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Repeatable-Read-RR"><span class="nav-number">4.2.3.</span> <span class="nav-text">Repeatable Read(RR)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Snapshot-Isolation-SI"><span class="nav-number">4.2.4.</span> <span class="nav-text">Snapshot Isolation(SI)</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#RR和SI的区别和联系"><span class="nav-number">4.2.4.1.</span> <span class="nav-text">RR和SI的区别和联系</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#MVCC和SI的区别和联系"><span class="nav-number">4.2.4.2.</span> <span class="nav-text">MVCC和SI的区别和联系</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Serial-Snapshot-Isolation-SSI"><span class="nav-number">4.2.4.3.</span> <span class="nav-text">Serial Snapshot Isolation(SSI)</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Serializable-S"><span class="nav-number">4.2.5.</span> <span class="nav-text">Serializable(S)</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Demo"><span class="nav-number">4.3.</span> <span class="nav-text">Demo</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#并发事务控制"><span class="nav-number">5.</span> <span class="nav-text">并发事务控制</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#可串行性和冲突可串行性-Conflict-Serializability"><span class="nav-number">5.1.</span> <span class="nav-text">可串行性和冲突可串行性(Conflict Serializability)</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2PL"><span class="nav-number">5.2.</span> <span class="nav-text">2PL</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#意向锁"><span class="nav-number">5.3.</span> <span class="nav-text">意向锁</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Wait-Die和Wound-Wait"><span class="nav-number">5.4.</span> <span class="nav-text">Wait-Die和Wound-Wait</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Timing-Order-T-O"><span class="nav-number">5.5.</span> <span class="nav-text">Timing Order(T/O)</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#OCC"><span class="nav-number">5.6.</span> <span class="nav-text">OCC</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#MVCC"><span class="nav-number">5.7.</span> <span class="nav-text">MVCC</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#MVCC实现-InnoDB"><span class="nav-number">5.7.1.</span> <span class="nav-text">MVCC实现(InnoDB)</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#记录结构"><span class="nav-number">5.7.1.1.</span> <span class="nav-text">记录结构</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#RC下的MVCC"><span class="nav-number">5.7.1.2.</span> <span class="nav-text">RC下的MVCC</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#RR下的MVCC"><span class="nav-number">5.7.1.3.</span> <span class="nav-text">RR下的MVCC</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#S下的MVCC"><span class="nav-number">5.7.1.4.</span> <span class="nav-text">S下的MVCC</span></a></li></ol></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">6.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#两种事务控制模型"><span class="nav-number">1.</span> <span class="nav-text">两种事务控制模型</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#ACID"><span class="nav-number">1.1.</span> <span class="nav-text">ACID</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#BASE"><span class="nav-number">1.2.</span> <span class="nav-text">BASE</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#分布式事务"><span class="nav-number">2.</span> <span class="nav-text">分布式事务</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#单对象事务和多对象事务"><span class="nav-number">2.1.</span> <span class="nav-text">单对象事务和多对象事务</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#故障恢复"><span class="nav-number">3.</span> <span class="nav-text">故障恢复</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#WAL"><span class="nav-number">3.1.</span> <span class="nav-text">WAL</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Shadow-paging"><span class="nav-number">3.2.</span> <span class="nav-text">Shadow paging</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#事务更新的两条规则"><span class="nav-number">3.3.</span> <span class="nav-text">事务更新的两条规则</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#提交规则"><span class="nav-number">3.3.1.</span> <span class="nav-text">提交规则</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#先记后写规则"><span class="nav-number">3.3.2.</span> <span class="nav-text">先记后写规则</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#事务的隔离等级"><span class="nav-number">4.</span> <span class="nav-text">事务的隔离等级</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#简写符号"><span class="nav-number">4.1.</span> <span class="nav-text">简写符号</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#常见并发问题"><span class="nav-number">4.2.</span> <span class="nav-text">常见并发问题</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#【P1】脏读-Dirty-Read"><span class="nav-number">4.2.1.</span> <span class="nav-text">【P1】脏读(Dirty Read)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#【P0】脏写-Dirty-Write"><span class="nav-number">4.2.2.</span> <span class="nav-text">【P0】脏写(Dirty Write)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#【P4】写丢失-丢失更新-Lost-Update"><span class="nav-number">4.2.3.</span> <span class="nav-text">【P4】写丢失/丢失更新(Lost Update)</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#回滚丢失"><span class="nav-number">4.2.3.1.</span> <span class="nav-text">回滚丢失</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#覆盖丢失-两次更新"><span class="nav-number">4.2.3.2.</span> <span class="nav-text">覆盖丢失/两次更新</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#【P4C】Cursor-Lost-Update"><span class="nav-number">4.2.4.</span> <span class="nav-text">【P4C】Cursor Lost Update</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#【P2】不可重复读-Fuzzy-Read"><span class="nav-number">4.2.5.</span> <span class="nav-text">【P2】不可重复读(Fuzzy Read)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#【A5A】读偏差"><span class="nav-number">4.2.6.</span> <span class="nav-text">【A5A】读偏差</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#【A5B】写偏差-Write-Skew"><span class="nav-number">4.2.7.</span> <span class="nav-text">【A5B】写偏差(Write Skew)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#【P3】幻读"><span class="nav-number">4.2.8.</span> <span class="nav-text">【P3】幻读</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#介绍"><span class="nav-number">4.3.</span> <span class="nav-text">介绍</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Read-uncommitted-RU"><span class="nav-number">4.3.1.</span> <span class="nav-text">Read uncommitted(RU)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Read-committed-RC"><span class="nav-number">4.3.2.</span> <span class="nav-text">Read committed(RC)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Repeatable-Read-RR"><span class="nav-number">4.3.3.</span> <span class="nav-text">Repeatable Read(RR)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Snapshot-Isolation-SI"><span class="nav-number">4.3.4.</span> <span class="nav-text">Snapshot Isolation(SI)</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#RR和SI的区别和联系"><span class="nav-number">4.3.4.1.</span> <span class="nav-text">RR和SI的区别和联系</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#MVCC和SI的区别和联系"><span class="nav-number">4.3.4.2.</span> <span class="nav-text">MVCC和SI的区别和联系</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Serial-Snapshot-Isolation-SSI"><span class="nav-number">4.3.4.3.</span> <span class="nav-text">Serial Snapshot Isolation(SSI)</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Serializable-S"><span class="nav-number">4.3.5.</span> <span class="nav-text">Serializable(S)</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Demo"><span class="nav-number">4.4.</span> <span class="nav-text">Demo</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#并发事务控制"><span class="nav-number">5.</span> <span class="nav-text">并发事务控制</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#可串行性和冲突可串行性-Conflict-Serializability"><span class="nav-number">5.1.</span> <span class="nav-text">可串行性和冲突可串行性(Conflict Serializability)</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2PL"><span class="nav-number">5.2.</span> <span class="nav-text">2PL</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#意向锁"><span class="nav-number">5.3.</span> <span class="nav-text">意向锁</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Wait-Die和Wound-Wait"><span class="nav-number">5.4.</span> <span class="nav-text">Wait-Die和Wound-Wait</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Timing-Order-T-O"><span class="nav-number">5.5.</span> <span class="nav-text">Timing Order(T/O)</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#OCC"><span class="nav-number">5.6.</span> <span class="nav-text">OCC</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#MVCC"><span class="nav-number">5.7.</span> <span class="nav-text">MVCC</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#MVCC实现-InnoDB"><span class="nav-number">5.7.1.</span> <span class="nav-text">MVCC实现(InnoDB)</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#记录结构"><span class="nav-number">5.7.1.1.</span> <span class="nav-text">记录结构</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#RC下的MVCC"><span class="nav-number">5.7.1.2.</span> <span class="nav-text">RC下的MVCC</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#RR下的MVCC"><span class="nav-number">5.7.1.3.</span> <span class="nav-text">RR下的MVCC</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#S下的MVCC"><span class="nav-number">5.7.1.4.</span> <span class="nav-text">S下的MVCC</span></a></li></ol></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">6.</span> <span class="nav-text">Reference</span></a></li></ol></div>
             
 
           </div>

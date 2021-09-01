@@ -376,7 +376,8 @@
       
 
       
-        <p>UDP协议是相对于TCP协议不是面向连接的，也是不可靠的，因此UDP套接字编程在思路上和TCP套接字编程很不一样。<br><a id="more"></a></p>
+        <p>UDP协议是相对于TCP协议不是面向连接的，也是不可靠的，因此UDP套接字编程在思路上和TCP套接字编程很不一样。</p>
+<a id="more"></a>
 <h1 id="普通的UDP套接字"><a href="#普通的UDP套接字" class="headerlink" title="普通的UDP套接字"></a>普通的UDP套接字</h1><h2 id="sentto函数和recvfrom函数"><a href="#sentto函数和recvfrom函数" class="headerlink" title="sentto函数和recvfrom函数"></a>sentto函数和recvfrom函数</h2><p><code>sentto</code>函数和<code>recvfrom</code>函数比面向连接（稍后并不仅指TCP）的<code>send</code>和<code>recv</code>函数多了<code>flag</code>和表示送达和接收地址的<code>SA</code>。<br>容易看到这两个函数是适合UDP这样的无连接协议的。对于客户端来说，相当于将<code>connect</code>函数功能去掉，然后每次都显式传地址。对于服务端来说，它也不需要<code>accept</code>函数，每次<code>recvfrom</code>过来，它都可以取到这是从谁发过来的。甚至<code>recvfrom</code>的<code>SA</code>参数可以设为<code>nullptr</code>，这样表示我接受所有信息，不管是谁发的。<br>注意<code>recvfrom</code>传入的最后一个长度参数必须是已经初始化后的。否则UDP函数返回的地址和端口都会是0。</p>
 <h2 id="普通的UDP套接字存在的问题"><a href="#普通的UDP套接字存在的问题" class="headerlink" title="普通的UDP套接字存在的问题"></a>普通的UDP套接字存在的问题</h2><h3 id="异步错误"><a href="#异步错误" class="headerlink" title="异步错误"></a>异步错误</h3><p>上面这样的设计看起来似乎很好，但考虑当服务端进程未开启，那从客户端过来的UDP包是送不到的，这时候<code>recvfrom</code>阻塞了。UNP书中给出了echo服务的例子，需要注意的是在Ubuntu的终端中我们可以仍可以输入，但实际上线程是阻塞的。<br>但是对客户端来说并不是这样，因为<code>sendto</code>函数是立即返回的（不返回也没有意义啊，毕竟无连接的，并不能指望对方一定会回复）。但对系统来说，这个包并不是就这么杳无音信的，因为服务端会发一个端口不可达的ICMP过来，可惜这个不会被客户端的进程接受（原因稍后论述）。并且这个ICMP是具有时延，所以它也不能被立即返回的<code>sendto</code>接受。这样的错误称为<strong>异步错误</strong>。<br>BTW，注意ICMP本身也是不可靠的，可能会被丢掉。所以客户端存在收不到ICMP的情况，这可能是因为数据报根本没发过去，也可能是对方主机回复的ICMP丢了。TCP甚至有个专门的Duplicate ACK机制来解决“是发过去的包丢了还是返回的ACK丢了”的问题。</p>
 <h3 id="为什么对应进程收不到端口不可达的ICMP"><a href="#为什么对应进程收不到端口不可达的ICMP" class="headerlink" title="为什么对应进程收不到端口不可达的ICMP"></a>为什么对应进程收不到端口不可达的ICMP</h3><p>考虑刚才的<code>recvfrom</code>函数，假如说给<code>recvfrom</code>函数设置一个超时（Ch14.2），那么它就不会在端口不可达时永远陷入阻塞，此时我们考虑它的行为。<br>假设一个多宿的UDP套接口（它可向多个IP发送数据包）向另外3个服务器发送了数据包，然后阻塞在<code>reccfrom</code>上等待回应。这三台服务器中前两台开启了相应的端口并给出了回应，但是第三台服务器是端口不可达的，因而对端回复了ICMP报文。按照直截了当的思路，内核应当把源IP和端口等信息写到<code>recvfrom</code>的<code>SA * from</code>参数里面，然后设置<code>errno = -1</code>，这样<code>recvfrom</code>就可以超时返回了，客户端对应进程也就能知道刚才的的一个<code>sendto</code>失败了。<br>作者指出从逻辑上就是不现实的，这是因为在<code>recvfrom</code>函数的返回值里面不能知晓是自己发送的3个UDP包中发向哪个服务器的包出现了问题，导致自己收不到回应，因为返回的<code>errno</code>无法承载IP地址信息。不过讲得并不清楚。<br>这是由于<code>sendto</code>函数调用后，它是立即返回的，此时内核已经释放了和对端套接字相关的数据结构，当端口不可达的ICMP过来时，内核无法追踪出对应的套接字了，所以它无法通知上层的应用。<br>基于上面的两点原因，最好不要重复利用UDP套接口，也就是说将它连接到一个对端。因此对UDP也有了<code>connect</code>函数。<br>重新考虑上面的问题，在connect的情况下，内核中记录了这个五元组<code>(源IP, 源port, 宿IP, 宿port, 协议)</code>的状态。如果对端传来了ICMP消息，内核可以取出ICMP中的端口号，然后根据记录的五元组找到相应的进程。因此进程就能收到这个错误，虽然还是异步的。</p>
@@ -537,7 +538,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">161</span>
+                <span class="site-state-item-count">164</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -550,7 +551,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">155</span>
+                <span class="site-state-item-count">157</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

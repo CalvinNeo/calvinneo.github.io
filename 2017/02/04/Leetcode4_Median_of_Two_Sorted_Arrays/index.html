@@ -376,7 +376,9 @@
       
 
       
-        <p><a href="https://leetcode.com/problems/median-of-two-sorted-arrays/" target="_blank" rel="noopener">LeetCode第4题</a>，求两个数组<code>nums1</code>和<code>nums2</code>的中位数，要求对数复杂度。这个思路很清晰，就是二分。一开始想的<code>lower_bound</code>比较一波，算一下偏移，然后两段去掉相同数目的元素，构成一个子问题。不过实现的时候被字符串常见的边界情况和上下中位数困住了，想了好久，后来发现其实自己想复杂了，这就是一个求第k个数的问题，直接二分答案就好了。<br><a id="more"></a><br>设<code>nums1[m1]</code>和<code>nums2[m2]</code>为两个数列<code>nums1[0..n1-1]</code>和<code>nums2[0..n2-1]</code>的中位数（长度为奇数）和上中位数（长度为偶数），显然当<code>nums1[m1] = nums2[m2]</code>时为一个结束条件，此时按照奇偶长度判断一下即可。<br>当<code>nums1[m1] &lt; nums2[m2]</code>时，显然<code>m2</code>取大了，<code>m1</code>取小了，此时中位数应该位于<code>nums1[m1..n1-1]</code>和<code>nums2[0..m2]</code>里面，注意中位数仍然可能取<code>m2</code>的，例如<code>nums1 = [1, 2, 3, 4]</code>、<code>nums2 = [1, 3, 4]</code>的情况，同理中位数也仍然可能取<code>m1</code>。但是如果单独拿出这两个片段来更新，仍然得不到子问题，因为中位数虽然在这两个片段内，但是这两个片段的中位数并不一定等于原数组的中位数。因此产生了两种想法：第一种做法试图去掉相等数量的最小值和最大值，形成依然“对称”的数组；另一种做法是不追求切完的数列依然对称，而是直接记录去掉了多少个最小值，因而新的数列中还需要去掉多少个最小值，实际上转化为求第k个小数的问题。在实现上第二种方法是高效而简单的。</p>
+        <p><a href="https://leetcode.com/problems/median-of-two-sorted-arrays/" target="_blank" rel="noopener">LeetCode第4题</a>，求两个数组<code>nums1</code>和<code>nums2</code>的中位数，要求对数复杂度。这个思路很清晰，就是二分。一开始想的<code>lower_bound</code>比较一波，算一下偏移，然后两段去掉相同数目的元素，构成一个子问题。不过实现的时候被字符串常见的边界情况和上下中位数困住了，想了好久，后来发现其实自己想复杂了，这就是一个求第k个数的问题，直接二分答案就好了。</p>
+<a id="more"></a>
+<p>设<code>nums1[m1]</code>和<code>nums2[m2]</code>为两个数列<code>nums1[0..n1-1]</code>和<code>nums2[0..n2-1]</code>的中位数（长度为奇数）和上中位数（长度为偶数），显然当<code>nums1[m1] = nums2[m2]</code>时为一个结束条件，此时按照奇偶长度判断一下即可。<br>当<code>nums1[m1] &lt; nums2[m2]</code>时，显然<code>m2</code>取大了，<code>m1</code>取小了，此时中位数应该位于<code>nums1[m1..n1-1]</code>和<code>nums2[0..m2]</code>里面，注意中位数仍然可能取<code>m2</code>的，例如<code>nums1 = [1, 2, 3, 4]</code>、<code>nums2 = [1, 3, 4]</code>的情况，同理中位数也仍然可能取<code>m1</code>。但是如果单独拿出这两个片段来更新，仍然得不到子问题，因为中位数虽然在这两个片段内，但是这两个片段的中位数并不一定等于原数组的中位数。因此产生了两种想法：第一种做法试图去掉相等数量的最小值和最大值，形成依然“对称”的数组；另一种做法是不追求切完的数列依然对称，而是直接记录去掉了多少个最小值，因而新的数列中还需要去掉多少个最小值，实际上转化为求第k个小数的问题。在实现上第二种方法是高效而简单的。</p>
 <p>对于第一种方法。假定<code>nums1[m1] &lt; nums2[m2]</code>，令<code>j = lower_bound(nums2, nums2 + n2, nums1[m1])</code>，其中<code>lower_bound</code>二分搜索可以使用python中的<a href="https://docs.python.org/2/library/bisect.html" target="_blank" rel="noopener"><strong><code>bisect.bisect_left</code></strong></a>代替，显然<code>j &lt; m1</code>，所以如果按照<code>(m1, j)</code>来分割，则小端变少了<code>m2 - j</code>个，因此<code>nums2</code>的分割点应该位于<code>[j + 1, m2 - 1]</code>这个区间内。同理，令<code>i = upper_bound(nums1, nums1 + n1, nums2[n2])</code>，<code>nums1</code>分割点应该在<code>[m1 + 1, i - 1]</code>这个区间内。<br>一个比较简单的想法是，分别对于两个数列直接去掉<code>min(n1, n2) / 2</code>个元素，这样是为了保证两个数组都有足够的元素可以取。此外要注意<code>min(n1, n2) / 2 == 0</code>的情况程序会陷入无限递归的情况，这是由于某一个数组的长度为1导致的，所以预先判定下数组长度为1的情况，写下来<a href="http://paste.ubuntu.com/23926399/" target="_blank" rel="noopener">代码是这样的</a><br>但是这样会WA，Leetcode可以直接告诉你哪一个点WA了，于是发现对于数据<code>[1, 4], [2, 3]</code>是不正确的。其实这个程序每次去掉的未必是最小的数，因为最小的数未必在中位数小的数列中。</p>
 <p>下面我们查看第二种方法，这里选择直接二分值而不是下标。对每个二分出来的值，再在两个数组中找到它的插入位置<code>i</code>和<code>j</code>，并比较<code>i + j</code>和<code>k</code>的大小，如果大了，说明中位数取大了，取左区间继续二分。<br><a href="http://paste.ubuntu.com/23952721/" target="_blank" rel="noopener"><strong>附上代码</strong></a><br>这里注意两点，第一是<code>lower_bound(nums1, nums1 + len, mid)</code>始终返回是<code>nums1</code>中<code>mid</code>上确界的下标，如果<code>mid</code>大于<code>nums1</code>中所有数，下标是<code>nums1.end()</code>，直接取值会造成<code>nums1</code>越界，例如<code>[1, 2], [3, 4]</code>的情况。出现这种情况是因为<code>mid</code>取小了，而<code>nums1</code>整体小于<code>nums2</code>，<code>lower_bound</code>从<code>nums1</code>末尾借用了一个数导致下标越界。第二是两个数列中都没有<code>mid</code>这个数，当<code>i + j == k</code>时，取到的是两个数组对<code>mid</code>的上确界，如<code>[1, 1, 3, 3], [1, 1, 3, 3]</code>中第一轮取<code>k = 4, i = 2, j = 2, mid = 2 &lt; nums1[i] = nums2[j] = 3</code>。</p>
 
@@ -526,7 +528,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">161</span>
+                <span class="site-state-item-count">164</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -539,7 +541,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">155</span>
+                <span class="site-state-item-count">157</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

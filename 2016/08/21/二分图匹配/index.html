@@ -380,26 +380,25 @@
       
 
       
-        <p>总结一下二分图匹配的几种算法<br><a id="more"></a></p>
+        <p>总结一下二分图匹配的几种算法</p>
+<a id="more"></a>
 <h1 id="定义"><a href="#定义" class="headerlink" title="定义"></a>定义</h1><p>把图的顶点分为不相交集合U和V，不存在连接U或V内部点的边，这样的图成为二分图（bipartite graph）。<br>二分图有一些性质，如二分图中不存在奇数条边的环（奇圈），因为环必须首尾相接的，奇数条边必定会使首和尾分处于U和V中。如果我们对二分图进行DFS，那么每一次都是从U到V或者从V到U，这个性质可以被用来判断是否是二分图（DFS到<code>vis[next]</code>和自己的<code>vis[cur]</code>相等就说明不是）。<br><strong>匹配</strong>是对于<strong>边</strong>而言的，表示在所有的边中，任意两条边都没有公共顶点。如果一个图中的所有顶点都能够构成匹配，则称这个图存在<strong>完美匹配</strong>，否则这个图只存在<strong>最大匹配</strong>，含有尽可能多的匹配边数。<br>一个点被当前匹配饱和指这个点在当前匹配的某个边上。</p>
 <h1 id="匈牙利算法"><a href="#匈牙利算法" class="headerlink" title="匈牙利算法"></a>匈牙利算法</h1><h2 id="算法介绍"><a href="#算法介绍" class="headerlink" title="算法介绍"></a>算法介绍</h2><p>匈牙利算法试图优化当前的匹配，得到边数+1的匹配。构造的方式是从一个<strong>非饱和点</strong>（也称为<strong>非匹配点</strong>，saturated vertex）开始，依次通过非匹配边、匹配边、非匹配边…（这样非匹配边和匹配边交替形成的路径叫做<strong>交替路</strong>）。容易发现这样的路径总结束于一个到非饱和点的非匹配边，因为到达于一个匹配点，如果轮到走该点关联的那条匹配边，这样要么走完完美匹配，要么到达另一个匹配点。如果轮到走非匹配边，则可能到达一个匹配点（回到上个情况），也可能到达一个非饱和点，但是非饱和点肯定是不能继续走匹配边形成更长的交替路的，于是结束。可以发现，这样走下来非匹配边始终比匹配边多一条，并且除了一头一尾的两个节点，中间节点全部是匹配点，如果反向匹配边和非匹配边，就能够得到边数+1的匹配。因此把<strong>这条起点和终点未饱和的交替路</strong>称为<strong>增广路</strong>。可以发现这样的增广路中每个点至多出现一次，因此反向匹配边和非匹配边后不会出现一个点有两个匹配边连接的情况，并且增广路的长度总是奇数，并且总是起于二分图的一端，终于二分图的另一端。根据berge定理，如果图G中不存在对匹配M的增广路，那么该匹配M是最大匹配。</p>
 <h2 id="算法实现"><a href="#算法实现" class="headerlink" title="算法实现"></a>算法实现</h2><p>在实现匈牙利算法时，并不需要显式地去建立交替路，交替路的扩展和反转通过dfs（或者bfs）隐式地表现出来。这样的算法复杂度O(EV)，经过优化的Hopcroft-Karp算法复杂度可达到O(E*sqrt(V))。<br>首先实现寻找增广路径的算法。从节点U（大写表示二分图左部）进行dfs寻找从U开始的增广路（因为从U开始，所以U必然要是非饱和点）。对于U的所有<strong>出边</strong>(U, v)，假如v是非饱和点，那么可以直接匹配U和v，显然匹配数会增加1。假如v已经和W匹配，但是能够为W在右部找到另一个匹配点x，那么就将U和v匹配。即对于这一种情况，匹配数同样是增加1的，假设原先(W, v)是匹配的，如果现在匹配U和v，则W失去匹配，匹配数并没有增加，但是如果能够找到另一个x能够和W匹配，那匹配数增加1，当然这个过程是递归的（因此匈牙利算法寻找增广路使用dfs实现），x和W匹配同样可能导致x的原配失配，因此这个算法的返回值是个表示是否存在增广路的布尔量，如果在递归的末端存在x的匹配Y不能找到新的匹配，也就是不存在从x开始的增广路，那么也不存在从v开始的增广路。对于其他情况就不存在从U开始的增广路。<br>因此整个算法可以枚举二分图左边的点x，寻找是否存在增广路，从而得到匹配。在实现算法的时候需要注意对于有向图邻接矩阵不能设置m[dest][src]。<br>下表给出了一个匈牙利算法的实例，其中红色点表示已经匹配了的点。增广路搜索始终从左端开始，因此从左侧到右侧是搜索的是<strong>不在</strong>当前匹配M中的边，从右侧到左侧是<strong>在</strong>当前匹配M中的边</p>
 <table>
 <thead>
 <tr>
-<th style="text-align:center">初始情况</th>
-<th style="text-align:center">寻找增广路</th>
-<th style="text-align:center">新的匹配</th>
+<th align="center">初始情况</th>
+<th align="center">寻找增广路</th>
+<th align="center">新的匹配</th>
 </tr>
 </thead>
-<tbody>
-<tr>
-<td style="text-align:center"><img src="/img/bimap/h_origin.png" alt=""></td>
-<td style="text-align:center"><img src="/img/bimap/h_path.png" alt=""></td>
-<td style="text-align:center"><img src="/img/bimap/h_end.png" alt=""></td>
+<tbody><tr>
+<td align="center"><img src="/img/bimap/h_origin.png"></td>
+<td align="center"><img src="/img/bimap/h_path.png"></td>
+<td align="center"><img src="/img/bimap/h_end.png"></td>
 </tr>
-</tbody>
-</table>
+</tbody></table>
 <h2 id="例题-HDU2063"><a href="#例题-HDU2063" class="headerlink" title="例题 HDU2063"></a>例题 HDU2063</h2><p><a href="http://paste.ubuntu.com/23479616/" target="_blank" rel="noopener">代码</a></p>
 <h1 id="Hopcroft-Karp算法"><a href="#Hopcroft-Karp算法" class="headerlink" title="Hopcroft-Karp算法"></a>Hopcroft-Karp算法</h1><h2 id="算法介绍-1"><a href="#算法介绍-1" class="headerlink" title="算法介绍"></a>算法介绍</h2><p>匈牙利算法使用dfs寻找增广路，Hopcroft-Karp算法作为改进使用bfs寻找增广路，bfs相对dfs的优势是找到的增广路永远是最短的。因此Hopcroft-Karp每轮按层搜索多条无公共顶点的增广路并全部替换。<br>算法流程如下：</p>
 <ol>
@@ -569,7 +568,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">161</span>
+                <span class="site-state-item-count">164</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -582,7 +581,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">155</span>
+                <span class="site-state-item-count">157</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

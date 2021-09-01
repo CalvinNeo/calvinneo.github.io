@@ -1,0 +1,1265 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="分布式,数据库,事务," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="介绍Percolator论文。">
+<meta name="keywords" content="分布式,数据库,事务">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Percolator论文阅读">
+<meta property="og:url" content="http://www.calvinneo.com/2021/08/14/percolator-reading/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="介绍Percolator论文。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:image" content="http://www.calvinneo.com/img/percolator/f5.png">
+<meta property="og:updated_time" content="2021-08-18T07:27:25.224Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Percolator论文阅读">
+<meta name="twitter:description" content="介绍Percolator论文。">
+<meta name="twitter:image" content="http://www.calvinneo.com/img/percolator/f5.png">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2021/08/14/percolator-reading/"/>
+
+
+
+
+
+  <title>Percolator论文阅读 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2021/08/14/percolator-reading/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                Percolator论文阅读
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2021-08-14T19:20:33+08:00">
+                2021-08-14
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>介绍Percolator论文。</p>
+<a id="more"></a>
+
+<p>类Percolator系统的环境：</p>
+<ol>
+<li><p>一个KV存储<br> 在Percolator中是BigTable，在TiDB中是TiKV。<br> BigTable可以理解为下面的一个KV映射</p>
+ <figure class="highlight lisp"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">(<span class="name">row</span><span class="symbol">:string</span>, column<span class="symbol">:string</span>, timestamp<span class="symbol">:int64</span>)-&gt;string</span><br></pre></td></tr></table></figure>
+
+<p> 在Bigtable中已经提供了针对单行的跨column的事务能力。当然，对于Percolator的跨行跨表的事务，这还是不够的。</p>
+</li>
+<li><p>一个全局授时服务器(TSO)<br> 在Percolator中叫Timestamp Oracle。在TiDB中由PD提供。<br> 这个授时服务可以给每个事务一个全局的时间戳，从而解决时序的问题。</p>
+</li>
+<li><p>Client<br> 作为分布式事务的协调者。在TSO的支持下，这个协调者实现了SI的隔离级别。<br> 所以这个协调者并不是在BigTable里面的，而其他数据库的控制节点和数据节点是放到一起的。<br> Percolator里面的每个节点都会向BigTable进行读写。</p>
+</li>
+</ol>
+<h1 id="Snapshot-Isolation"><a href="#Snapshot-Isolation" class="headerlink" title="Snapshot Isolation"></a>Snapshot Isolation</h1><p>在<a href="/2017/09/20/transaction/">数据库系统中的事务</a>这篇文章中介绍了快照隔离(Snapshot Isolation, SI)。<br>在实现SI时，需要记录两个时间戳，事务开始ST和事务提交CT。SI保护了WW冲突，其他事务在[ST,CT]中的写会和本事务产生冲突。</p>
+<h1 id="2-2-Transactions"><a href="#2-2-Transactions" class="headerlink" title="2.2 Transactions"></a>2.2 Transactions</h1><p>因为Percolator的协调者是BigTable外部的Client，所以需要自己维护锁。锁具有replicated、distributed、balanced、persistent的要求，BigTable作为存储是支持的，所以这个锁作为meta列一同存放在BigTable的中。</p>
+<p>其实有4个Meta列，如下图所示：</p>
+<p><img src="/img/percolator/f5.png"></p>
+<ol>
+<li>lock<br> 表示一个没提交的事务正在写这个cell。包含了primary lock的位置。</li>
+<li>write<br> 表示是已提交的数据。存放了BigTable的时间戳。</li>
+</ol>
+<h2 id="Demo"><a href="#Demo" class="headerlink" title="Demo"></a>Demo</h2><p>先来看一个Demo。Bob给Joe转账7块钱。一开始Joe有2块钱，Bob有10块钱。</p>
+<ol>
+<li>写<code>bal:lock</code>加锁Bob的账户，并且这个锁是primary的。此外，写了<code>bal:data</code>为3，也就是扣了7块钱的Bob。</li>
+<li>下面加锁Joe的账户，在<code>bal:lock</code>里面写一个对Bob账户的primary锁的引用。这样在事务挂掉之后，能够知道primary lock在哪里，并且把它清理掉。</li>
+<li>下面进入提交阶段，首先操作primary lock所在的Bob的账户。需要将<code>bal:lock</code>清理掉，<code>bal:write</code>写上对应的ST。通过这个ST就能找到实际的数据<code>bal:data</code>。<br> 在这之后，Reader们就能看到Bob账户上只有3块钱了。</li>
+<li>下面对Secondary也进行写记录和删除锁的处理。</li>
+</ol>
+<p>【Q】看完Demo，有几个问题：</p>
+<ol>
+<li>为什么要引入primary lock？<br> 这个是为了方便进行失败回滚。当事务提交时，会清空primary lock。因此可以认为如果primary lock还在，则事务尚未提交。<br> 例如老事务挂了，留下了一片狼藉的现场。此时，一个新事务可能会访问到老事务残留的secondary lock，对应有两种情况：<ol>
+<li>指向的primary lock还在，认为这个事务还没有提交成功。</li>
+<li>指向的primary lock不在了，认为这个事务提交成功。那么必须先继续提交老事务。</li>
+</ol>
+</li>
+<li>如果说secondary lock被清了一半，怎么办呢？</li>
+<li>写write列和清空lock是要原子的么？</li>
+<li>在还没有修改Secondary时就可以访问新版本数据了，这个一致么？</li>
+</ol>
+<h2 id="实现"><a href="#实现" class="headerlink" title="实现"></a>实现</h2><p>Percolator事务的模型也是2PC，下面就分两步来看实现，其实就是对Demo的形式化。<br>整个实现是一个Transaction类，包含几个成员：</p>
+<ol>
+<li>writes_<br> 所有的写入。<code>writes_[0]</code>是primary。</li>
+<li>start_ts_<br> ST时间戳，在事务创建时初始化。</li>
+<li>Set<br> 往<code>writes_</code>里面加数据。</li>
+<li>Get<br> 读</li>
+<li>Prewrite<br> 一阶段，会被Commit调用。</li>
+<li>Commit<br> 提交，首先调用一阶段的Prewrite，如果全部成功，执行二阶段提交。</li>
+</ol>
+<h3 id="Prewrite"><a href="#Prewrite" class="headerlink" title="Prewrite"></a>Prewrite</h3><p>我们需要lock所有被写的cell。</p>
+<p>对于所有的cell检查下面两类冲突：</p>
+<ol>
+<li>【Line 32】如果发现cell的<strong>write列</strong>上已经存在一条记录，并且它的ST还比自己大，执行abort<br> 根据SI，我们需要abort。【Q】这里有个疑问，SI不是要到提交的时候再检查冲突么？</li>
+<li>【Line 34】如果发现cell的<strong>lock列</strong>上有另外的记录，无论timestamp是什么，执行abort<br> 虽然这有可能是一个已经提交的事务，并且它的CT比我们ST还要小，但没来得及清理锁，所以并不是冲突。但Percolator认为这个不常见，所以还是abort。<br> 在<a href="https://www.jianshu.com/p/05194f4b29dd" target="_blank" rel="noopener">文章</a>中还提到可能有失败事务的情况。</li>
+</ol>
+<p>可以发现，实际上就是分别检查write列和lock列。<br>如果没有以上两类冲突，我们就更新cell的data列，并且写入上锁的信息。接下来，进入Commit阶段</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="symbol">27 </span>bool Prewrite(<span class="keyword">Write</span> w, <span class="keyword">Write</span> primary) &#123;</span><br><span class="line"><span class="symbol">28 </span>  Column c = w.col;</span><br><span class="line"><span class="symbol">29 </span>  bigtable::Txn T = bigtable::StartRowTransaction(w.row);</span><br><span class="line"><span class="number">30</span></span><br><span class="line"><span class="symbol">31 </span>  // Abort <span class="keyword">on</span> writes after our start timestamp . . .</span><br><span class="line"><span class="symbol">32 </span>  <span class="keyword">if</span> (T.<span class="keyword">Read</span>(w.row, c+<span class="string">"write"</span>, [start_ts , ∞])) <span class="keyword">return</span> false;</span><br><span class="line"><span class="symbol">33 </span>  // . . . <span class="keyword">or</span> locks at any timestamp.</span><br><span class="line"><span class="symbol">34 </span>  <span class="keyword">if</span> (T.<span class="keyword">Read</span>(w.row, c+<span class="string">"lock"</span>, [<span class="number">0</span>, ∞])) <span class="keyword">return</span> false;</span><br><span class="line"><span class="number">35</span></span><br><span class="line"><span class="symbol">36 </span>  T.<span class="keyword">Write</span>(w.row, c+<span class="string">"data"</span>, start_ts , w.value);</span><br><span class="line"><span class="symbol">37 </span>  T.<span class="keyword">Write</span>(w.row, c+<span class="string">"lock"</span>, start_ts ,</span><br><span class="line"><span class="symbol">38 </span>     &#123;primary.row, primary.col&#125;); // The primary’s location.</span><br><span class="line"><span class="symbol">39 </span>  <span class="keyword">return</span> T.Commit();</span><br><span class="line"><span class="symbol">40 </span>&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="Commit"><a href="#Commit" class="headerlink" title="Commit"></a>Commit</h3><p>Commit的前几行是封装了一阶段的Prewrite，省得用户自己去调用了。后面就是提交的第二阶段：</p>
+<ol>
+<li>向TSO请求CT</li>
+<li>对于primary<br> 一旦primary对reader可见，说明事务提交了。<ol>
+<li>更新write列<br> write列中存放了ST和CT。存放ST的原因是可以通过ST找到数据，即data列。</li>
+<li>移除锁</li>
+<li>提交BigTable的行事务</li>
+</ol>
+</li>
+<li>对于所有secondary<ol>
+<li>更新write列</li>
+<li>移除锁</li>
+<li>【Q】这边不要提交行事务了么？</li>
+</ol>
+</li>
+</ol>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="symbol">41 </span>bool Commit() &#123;</span><br><span class="line"><span class="symbol">42 </span>  <span class="keyword">Write</span> primary = writes [<span class="number">0</span>];</span><br><span class="line"><span class="symbol">43 </span>  vector&lt;<span class="keyword">Write</span>&gt; secondaries(writes .begin()+<span class="number">1</span>, writes .<span class="keyword">end</span>());</span><br><span class="line"><span class="symbol">44 </span>  <span class="keyword">if</span> (!Prewrite(primary, primary)) <span class="keyword">return</span> false;</span><br><span class="line"><span class="symbol">45 </span>  <span class="keyword">for</span> (<span class="keyword">Write</span> w : secondaries)</span><br><span class="line"><span class="symbol">46 </span>    <span class="keyword">if</span> (!Prewrite(w, primary)) <span class="keyword">return</span> false;</span><br><span class="line"><span class="number">47</span></span><br><span class="line"><span class="symbol">48 </span>  <span class="keyword">int</span> commit ts = oracle.GetTimestamp();</span><br><span class="line"><span class="number">49</span></span><br><span class="line"><span class="symbol">50 </span>  // Commit primary first.</span><br><span class="line"><span class="symbol">51 </span>  <span class="keyword">Write</span> p = primary;</span><br><span class="line"><span class="symbol">52 </span>  bigtable::Txn T = bigtable::StartRowTransaction(p.row);</span><br><span class="line"><span class="symbol">53 </span>  <span class="keyword">if</span> (!T.<span class="keyword">Read</span>(p.row, p.col+<span class="string">"lock"</span>, [start_ts , start_ts ]))</span><br><span class="line"><span class="symbol">54 </span>    <span class="keyword">return</span> false; // aborted <span class="keyword">while</span> working</span><br><span class="line"><span class="symbol">55 </span>  T.<span class="keyword">Write</span>(p.row, p.col+<span class="string">"write"</span>, commit ts,</span><br><span class="line"><span class="symbol">56 </span>    start_ts ); // Pointer <span class="keyword">to</span> <span class="keyword">data</span> written at start_ts .</span><br><span class="line"><span class="symbol">57 </span>  T.<span class="keyword">Erase</span>(p.row, p.col+<span class="string">"lock"</span>, commit ts);</span><br><span class="line"><span class="symbol">58 </span>  <span class="keyword">if</span> (!T.Commit()) <span class="keyword">return</span> false; // commit <span class="keyword">point</span></span><br><span class="line"><span class="number">59</span></span><br><span class="line"><span class="symbol">60 </span>  // Second phase: <span class="keyword">write</span> <span class="keyword">out</span> <span class="keyword">write</span> records <span class="keyword">for</span> secondary cells.</span><br><span class="line"><span class="symbol">61 </span>  <span class="keyword">for</span> (<span class="keyword">Write</span> w : secondaries) &#123;</span><br><span class="line"><span class="symbol">62 </span>    bigtable::<span class="keyword">Write</span>(w.row, w.col+<span class="string">"write"</span>, commit ts, start_ts );</span><br><span class="line"><span class="symbol">63 </span>    bigtable::<span class="keyword">Erase</span>(w.row, w.col+<span class="string">"lock"</span>, commit ts);</span><br><span class="line"><span class="symbol">64 </span>  &#125;</span><br><span class="line"><span class="symbol">65 </span>  <span class="keyword">return</span> true;</span><br><span class="line"><span class="symbol">66 </span>&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="Get"><a href="#Get" class="headerlink" title="Get"></a>Get</h3><p>首先检查[0, ST]区间内有没有锁。如果有，说明另一个事务在写，那么我们就要等这个锁被释放，实际上也就是等事务完成了。<br>【Line19】 如果没有锁，就读取最后一次写的数据<code>latest_write</code>，并且返回对应的data。</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="symbol">8 </span> bool <span class="keyword">Get</span>(Row row, Column c, string* value) &#123;</span><br><span class="line"><span class="symbol">9 </span>   <span class="keyword">while</span> (true) &#123;</span><br><span class="line"><span class="symbol">10 </span>    bigtable::Txn T = bigtable::StartRowTransaction(row);</span><br><span class="line"><span class="symbol">11 </span>    // Check <span class="keyword">for</span> locks that signal concurrent writes.</span><br><span class="line"><span class="symbol">12 </span>    <span class="keyword">if</span> (T.<span class="keyword">Read</span>(row, c+<span class="string">"lock"</span>, [<span class="number">0</span>, start_ts ])) &#123;</span><br><span class="line"><span class="symbol">13 </span>    // There is a pending lock; try <span class="keyword">to</span> clean it <span class="keyword">and</span> <span class="keyword">wait</span></span><br><span class="line"><span class="symbol">14 </span>    BackoffAndMaybeCleanupLock(row, c);</span><br><span class="line"><span class="symbol">15 </span>    continue;</span><br><span class="line"><span class="symbol">16 </span>  &#125;</span><br><span class="line"><span class="number">17</span></span><br><span class="line"><span class="symbol">18 </span>  // Find the latest <span class="keyword">write</span> below our start timestamp.</span><br><span class="line"><span class="symbol">19 </span>  latest_write = T.<span class="keyword">Read</span>(row, c+<span class="string">"write"</span>, [<span class="number">0</span>, start_ts ]);</span><br><span class="line"><span class="symbol">20 </span>  <span class="keyword">if</span> (!latest <span class="keyword">write</span>.found()) <span class="keyword">return</span> false; // no <span class="keyword">data</span></span><br><span class="line"><span class="symbol">21 </span>  <span class="keyword">int</span> <span class="keyword">data</span> ts = latest_write.start_timestamp();</span><br><span class="line"><span class="symbol">22 </span>  *value = T.<span class="keyword">Read</span>(row, c+<span class="string">"data"</span>, [data_ts, data_ts]);</span><br><span class="line"><span class="symbol">23 </span>  <span class="keyword">return</span> true;</span><br><span class="line"><span class="symbol">24 </span>&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="Failure"><a href="#Failure" class="headerlink" title="Failure"></a>Failure</h2><p>BigTable能处理自身的问题，但还需要处理Client的Failure。<br>如果在提交事务时Client挂了，那么Percolator需要能够清除遗留的锁。这个清除的过程是Lazy的</p>
+<h1 id="Refernce"><a href="#Refernce" class="headerlink" title="Refernce"></a>Refernce</h1><ol>
+<li>Large-scale Incremental Processing Using Distributed Transactions and Notiﬁcations<br> Percolator论文</li>
+<li><a href="http://mysql.taobao.org/monthly/2018/11/02/" target="_blank" rel="noopener">http://mysql.taobao.org/monthly/2018/11/02/</a><br> 阿里数据库月报，对Percolator有较为详细的介绍</li>
+<li><a href="https://www.jianshu.com/p/05194f4b29dd" target="_blank" rel="noopener">https://www.jianshu.com/p/05194f4b29dd</a><br> 一个简单翻译和个人理解</li>
+</ol>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/分布式/" rel="tag"># 分布式</a>
+          
+            <a href="/tags/数据库/" rel="tag"># 数据库</a>
+          
+            <a href="/tags/事务/" rel="tag"># 事务</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2021/08/11/wsl2-probs/" rel="next" title="WSL2使用的一些问题">
+                <i class="fa fa-chevron-left"></i> WSL2使用的一些问题
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2021/08/17/rust-acpppp/" rel="prev" title="Rust - A CPP Programmer's Perspective">
+                Rust - A CPP Programmer's Perspective <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">164</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">157</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Snapshot-Isolation"><span class="nav-number">1.</span> <span class="nav-text">Snapshot Isolation</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#2-2-Transactions"><span class="nav-number">2.</span> <span class="nav-text">2.2 Transactions</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Demo"><span class="nav-number">2.1.</span> <span class="nav-text">Demo</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#实现"><span class="nav-number">2.2.</span> <span class="nav-text">实现</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Prewrite"><span class="nav-number">2.2.1.</span> <span class="nav-text">Prewrite</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Commit"><span class="nav-number">2.2.2.</span> <span class="nav-text">Commit</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Get"><span class="nav-number">2.2.3.</span> <span class="nav-text">Get</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Failure"><span class="nav-number">2.3.</span> <span class="nav-text">Failure</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Refernce"><span class="nav-number">3.</span> <span class="nav-text">Refernce</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2021</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2021/08/14/percolator-reading/';
+          this.page.identifier = '2021/08/14/percolator-reading/';
+          this.page.title = 'Percolator论文阅读';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+  
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Config({
+        tex2jax: {
+          inlineMath: [ ['$','$'], ["\\(","\\)"]  ],
+          processEscapes: true,
+          skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+        }
+      });
+    </script>
+
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax(), i;
+        for (i=0; i < all.length; i += 1) {
+          all[i].SourceElement().parentNode.className += ' has-jax';
+        }
+      });
+    </script>
+    <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+  
+
+
+  
+
+  
+
+</body>
+</html>

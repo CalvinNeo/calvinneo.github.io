@@ -379,10 +379,17 @@
         <p>本文介绍MySQL InnoDB下锁的实现以及优化。</p>
 <p>【未完待续】</p>
 <a id="more"></a>
+
 <h1 id="锁"><a href="#锁" class="headerlink" title="锁"></a>锁</h1><p>InnoDB在RR级别下，通过Next Key Lock(Record Lock+Gap Lock)提供了等价于Serializable的能力。Serializable被用在分布式事务上，即<a href="https://www.zhihu.com/question/58308824" target="_blank" rel="noopener">对于分布式事务，MySQL要求Serializable隔离级别</a>。</p>
-<h2 id="实验"><a href="#实验" class="headerlink" title="实验"></a>实验</h2><p>实验修改自<a href="https://www.cnblogs.com/zhoujinyi/p/3435982.html" target="_blank" rel="noopener">文章</a>。<br><figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">drop</span> <span class="keyword">table</span> table1;</span><br><span class="line"><span class="keyword">create</span> <span class="keyword">table</span> table1(</span><br><span class="line">    c1 <span class="built_in">int</span>,</span><br><span class="line">    <span class="keyword">key</span> index_c1(c1)</span><br><span class="line">);</span><br><span class="line"></span><br><span class="line"><span class="keyword">insert</span> <span class="keyword">into</span> table1 <span class="keyword">values</span> (<span class="number">1</span>),(<span class="number">3</span>),(<span class="number">5</span>),(<span class="number">8</span>),(<span class="number">11</span>);</span><br></pre></td></tr></table></figure></p>
-<p>Session1，使用for update会强制加行锁（如果存在）或者间隙锁<br><figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">start</span> <span class="keyword">transaction</span>;</span><br><span class="line"><span class="keyword">select</span> * <span class="keyword">from</span> table1 <span class="keyword">where</span> c1 = <span class="number">8</span> <span class="keyword">for</span> <span class="keyword">update</span>;</span><br></pre></td></tr></table></figure></p>
-<p>Session2<br><figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">start</span> <span class="keyword">transaction</span>;</span><br><span class="line"><span class="keyword">select</span> * <span class="keyword">from</span> table1;</span><br><span class="line"><span class="keyword">insert</span> <span class="keyword">into</span> table1 <span class="keyword">values</span> (<span class="number">6</span>);</span><br></pre></td></tr></table></figure></p>
+<h2 id="实验"><a href="#实验" class="headerlink" title="实验"></a>实验</h2><p>实验修改自<a href="https://www.cnblogs.com/zhoujinyi/p/3435982.html" target="_blank" rel="noopener">文章</a>。</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">drop</span> <span class="keyword">table</span> table1;</span><br><span class="line"><span class="keyword">create</span> <span class="keyword">table</span> table1(</span><br><span class="line">    c1 <span class="built_in">int</span>,</span><br><span class="line">    <span class="keyword">key</span> index_c1(c1)</span><br><span class="line">);</span><br><span class="line"></span><br><span class="line"><span class="keyword">insert</span> <span class="keyword">into</span> table1 <span class="keyword">values</span> (<span class="number">1</span>),(<span class="number">3</span>),(<span class="number">5</span>),(<span class="number">8</span>),(<span class="number">11</span>);</span><br></pre></td></tr></table></figure>
+
+<p>Session1，使用for update会强制加行锁（如果存在）或者间隙锁</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">start</span> <span class="keyword">transaction</span>;</span><br><span class="line"><span class="keyword">select</span> * <span class="keyword">from</span> table1 <span class="keyword">where</span> c1 = <span class="number">8</span> <span class="keyword">for</span> <span class="keyword">update</span>;</span><br></pre></td></tr></table></figure>
+
+<p>Session2</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">start</span> <span class="keyword">transaction</span>;</span><br><span class="line"><span class="keyword">select</span> * <span class="keyword">from</span> table1;</span><br><span class="line"><span class="keyword">insert</span> <span class="keyword">into</span> table1 <span class="keyword">values</span> (<span class="number">6</span>);</span><br></pre></td></tr></table></figure>
+
 <p>Session2会被Session1阻塞。如果没有间隙锁，那么只会锁住c1为8的这一行。</p>
 <h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1>
       
@@ -538,7 +545,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">161</span>
+                <span class="site-state-item-count">164</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -551,7 +558,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">155</span>
+                <span class="site-state-item-count">157</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
