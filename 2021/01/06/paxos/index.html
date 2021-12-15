@@ -74,7 +74,7 @@
 <link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="Calvin, Neo, Blog, Computer Science, Game" />
+  <meta name="keywords" content="分布式,paxos,raft," />
 
 
 
@@ -93,6 +93,7 @@
 
 
 <meta name="description" content="本文介绍Paxos算法，包含Basic Paxos，以及Raft作者提出的一个Multi Paxos的工程化实现方案。此外，我们还就Raft作者给出的Paxos习题进行探讨。">
+<meta name="keywords" content="分布式,paxos,raft">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Paxos算法">
 <meta property="og:url" content="http://www.calvinneo.com/2021/01/06/paxos/index.html">
@@ -107,7 +108,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/paxos/26.a.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/paxos/26.b.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/paxos/q1.png">
-<meta property="og:updated_time" content="2021-06-02T10:52:54.744Z">
+<meta property="og:updated_time" content="2021-11-30T16:16:24.966Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Paxos算法">
 <meta name="twitter:description" content="本文介绍Paxos算法，包含Basic Paxos，以及Raft作者提出的一个Multi Paxos的工程化实现方案。此外，我们还就Raft作者给出的Paxos习题进行探讨。">
@@ -389,23 +390,23 @@
 <h1 id="Basic-Paxos"><a href="#Basic-Paxos" class="headerlink" title="Basic Paxos"></a>Basic Paxos</h1><p>Paxos允许消息被任意延迟、丢包、重复，但不允许消息被损坏。<br>Basic Paxos弱化了Leader的概念，而使用了Proposer的概念。<br>Basic Paxos只对一个Value决议。这个Value实际上<a href="https://stackoverflow.com/questions/65175880/how-can-i-understand-value-in-bacis-paxos" target="_blank" rel="noopener">类似于Raft里面的一个Log Entry</a>，即<code>x=1</code>或者<code>y=42</code>之类的。根据原版论文<em>The part-time parliament</em>，这里的Value即法令，类似于禁止画画或者允许自由艺术等。<br>注意，一个Value被决定是chosen而不是accepted，即决议的过程是</p>
 <figure class="highlight livescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">propose<span class="function"><span class="params">(issue)</span> -&gt;</span> Accept<span class="function"> -&gt;</span> chosen</span><br></pre></td></tr></table></figure>
 
-<h2 id="论证1"><a href="#论证1" class="headerlink" title="论证1"></a>论证1</h2><p>在论证1的部分，我们从原始要求倒推出我们需要维护的不变量P2b</p>
-<h3 id="P1"><a href="#P1" class="headerlink" title="P1"></a>P1</h3><p>我们考虑没有丢包和机器故障，并且我们假设只有一个proposer。对于这样的一个平凡情况，我们可以得到下面的要求：<br>一个acceptor必须接受它收到的第一个proposal。</p>
+<h2 id="论证1"><a href="#论证1" class="headerlink" title="论证1"></a>论证1</h2><p>在论证1的部分，我们从原始要求倒推出需要维护的不变量P2b</p>
+<h3 id="P1"><a href="#P1" class="headerlink" title="P1"></a>P1</h3><p>我们考虑没有丢包和机器故障，并且假设只有一个proposer。对于这样的一个平凡情况，我们可以得到下面的要求：<br>一个acceptor必须接受它收到的第一个proposal。</p>
 <p>显然这个方案存在一个问题，不同的proposer可能提出不同的value，这会导致每个acceptor收到了不同的value，但其中没有一个value是占majority的。<br>这个问题导致我们需要让acceptor去accept多于一个proposal。为了区分这些proposal，就要引入proposal number。<br>一个Value被chosen，当具有这个Value的proposal已经被大部分的acceptor accept了。</p>
 <h3 id="P2"><a href="#P2" class="headerlink" title="P2"></a>P2</h3><p>经过上面的论证，我们允许choose多个proposal，但我们必须保证所有被chosen的proposal都有相同的Value，因此我们提出下面的要求：<br>如果具有Value <code>v</code>的proposal被<strong>chosen</strong>了，那么对于任意更高的number的proposal，如果它被<strong>chosen</strong>，那么它就一定有Value <code>v</code>。</p>
 <h3 id="P2a"><a href="#P2a" class="headerlink" title="P2a"></a>P2a</h3><p>我们就P2进一步推导，因为被chosen的前提是这个proposal要至少被一个acceptor Accept，所以我们可以通过满足下面这个更强的条件来满足P2：<br>如果具有Value <code>v</code>的proposal被<strong>chosen</strong>了，那么对于任意更高的number的proposal，如果它被任意的accpetor <strong>Accept</strong>，那么它就一定有Value <code>v</code>。</p>
-<h3 id="P2b"><a href="#P2b" class="headerlink" title="P2b"></a>P2b</h3><p>注意，我们仍然需要满足要求P1，这样我们可以保证我们一定能接受一些proposal。<br>考虑下面的情况：</p>
+<h3 id="P2b"><a href="#P2b" class="headerlink" title="P2b"></a>P2b</h3><p>注意，我们仍然需要满足要求P1，这样可以保证我们一定能接受一些proposal。<br>考虑下面的情况：</p>
 <ol>
 <li>一个新的proposer提交了一个更高的number的proposal，但是具有不同的Value；</li>
 <li>一个之前从来没有收到过任何proposal的acceptor收到了这个proposal；</li>
 <li>根据要求P1，这个acceptor需要accept这个proposal；</li>
 <li>根据要求P2a，这个acceptor不能accept这个proposal；</li>
 </ol>
-<p>我们发现这里产生了矛盾，因此我们还需要继续强化要求P2a：<br>如果具有Value <code>v</code>的proposal被<strong>chosen</strong>了，那么对于任意更高的number的proposal，在它被任意proposer发出时，就一定有Value <code>v</code>。</p>
+<p>我们发现这里产生了矛盾，因此还需要继续强化要求P2a：<br>如果具有Value <code>v</code>的proposal被<strong>chosen</strong>了，那么对于任意更高的number的proposal，在它被任意proposer发出时，就一定有Value <code>v</code>。</p>
 <h2 id="论证2"><a href="#论证2" class="headerlink" title="论证2"></a>论证2</h2><p>论证2紧接着论证1，讲述如何维护P2b性质。</p>
 <h3 id="P2c"><a href="#P2c" class="headerlink" title="P2c"></a>P2c</h3><p>为了方便表示，规定<code>proposal(m,v)</code>表示具有number <code>n</code>和Value <code>v</code>的proposal。下面我们查看P2b是如何保证自己一直成立的。</p>
 <p>我们考虑<code>proposal(m,v)</code>被chosen，那么我们要证明任何number大于<code>m</code>的<code>n</code>的proposal也有Value <code>v</code>。证明如下：<br>如果<code>m</code>被chosen，那么一定有大多数acceptor accept了这个proposal，这些acceptor属于集合<code>C</code>。再结合P2b，可以推出<code>C</code>中所有的acceptor都accept了从<code>m</code>到<code>n-1</code>的proposal，并且这些被accept的proposal都具有Value <code>v</code>。</p>
-<p>对于任意包含大多数acceptor的集合<code>S</code>必须包含<code>C</code>中的至少一个成员，因此我们可以得出我们需要满足下面的要求P2c。</p>
+<p>对于任意包含大多数acceptor的集合<code>S</code>必须包含<code>C</code>中的至少一个成员，因此可以得出我们需要满足下面的要求P2c。</p>
 <p>考虑一个proposer发出了<code>proposal(v,n)</code>，那么存在一个上述<code>S</code>，满足要求P2c：</p>
 <ol>
 <li>要么<code>S</code>中的成员都没有accept过低于<code>n</code>的proposal；</li>
@@ -483,19 +484,21 @@
 <li>如何实现所谓的Fully Replication，即让大家都知道某个Entry已经被chosen了。</li>
 <li>客户端协议以及状态机相关。</li>
 </ol>
-<h2 id="维护一个Log"><a href="#维护一个Log" class="headerlink" title="维护一个Log"></a>维护一个Log</h2><p>首先我们考察，当一个proposer准备新增一个entry到log时，如下图所示，当client发送一个jmp给S1时，S1选择哪一个entry呢？这可能涉及一下的情况：</p>
+<h2 id="维护一个Log"><a href="#维护一个Log" class="headerlink" title="维护一个Log"></a>维护一个Log</h2><p>首先考察，当一个proposer准备新增一个entry到log时，如下图所示，当client发送一个jmp给S1时，S1选择哪一个entry呢？这可能涉及以下的情况：</p>
 <ol>
 <li>在Entry1和2中，mov和add被复制到了所有机器上，并且S1已经知道被chosen了。如下图所示，用粗框子框出来了。</li>
 <li>在Entry3中，cmp实际上已经被chosen了，但是S1并不知道。这个可能是因为S3被分区了。</li>
 </ol>
 <p>下面我们就考虑S3被分区的情况：</p>
 <ol>
-<li>找到第一个没有被S1知道已经chosen的entry，即<code>firstUnchosenIndex</code>。也就是Entry3。</li>
+<li>S1找到第一个自己不知道被是否chosen的entry，即<code>firstUnchosenIndex</code>。也就是下图中的Entry3。</li>
 <li>根据Basic Paxos算法，对这个entry去propose一个Value为jmp的proposal。显然，这个Value是不能被accept的，因为已经有一个Acceptor接受了cmp这个值了。所以这一个Basic Paxos Instance跑完，实际上会导致cmp在Entry3中被chosen。</li>
-<li>接着，我们回到第1步，检查下一个尚未被发现已经chosen的entry，即Entry4，并尝试propose。显然，这次jmp还是不能被accept，因为sub已经被S2上的acceptor接受了。</li>
+<li>接着，我们回到第1步，检查下一个尚未被发现已经chosen的entry，即Entry4，并尝试propose。显然，这次jmp还是不能被accept，因为sub已经被S2上的Acceptor接受了。</li>
 </ol>
+<p>上面实际上就是所谓“补空洞”的过程。</p>
 <p><img src="/img/paxos/20.png"></p>
-<p>通过这种方式，Server可以并发处理多条来自client的请求。演讲者提到，例如第一个请求用到了Entry3，那么下一个请求可能会尝试Entry4或者Entry5等等。在这一点上我还有点疑惑，就是我们能保证client的请求在Paxos log层面是in order的么？</p>
+<p>通过这种方式，Server可以并发处理多条来自client的请求。演讲者提到，例如第一个请求用到了Entry3，那么下一个请求可能会尝试Entry4或者Entry5等等。<br>我们注意到，虽然Entry5上面S3已经有了cmp这个命令，但可能因为它被分区了，所以最终被chosen的是jmp。</p>
+<p>【Q】我们能保证client的请求在Paxos log层面是in order的么？</p>
 <p>但是最后这些命令需要按照log中的顺序来放到复制自动机中执行。</p>
 <h2 id="Leader"><a href="#Leader" class="headerlink" title="Leader"></a>Leader</h2><h3 id="选举"><a href="#选举" class="headerlink" title="选举"></a>选举</h3><p>需要注意的是，Paxos在有多个Leader的时候依旧能够正常运作，只是效率会受到影响；但是Raft等就必须要求有唯一的Leader。<br>Lamport提出一种简单的办法，就是令具有最大的Server ID的proposer为Leader。接着所有的Server互相向其他Server以间隔<code>T</code>发送心跳包，心跳包中包含自己的Server ID。如果一个Server在<code>2T</code>的时间内没有收到一个具有更高的Server ID的心跳包，那么它就以Leader的方式行动，即开始处理来自client的请求，且同时执行proposer和acceptor的角色。相对应地，如果一个Server不是Leader，那么它不处理client的请求，并且只执行acceptor的角色。</p>
 <p>演讲者后来指出，一般来说，并不会用这种方案。</p>
@@ -510,9 +513,9 @@
 <li>发现可能存在的已经被chosen的Entry<br> acceptor不仅要返回对于当前entry的最大的proposal number，还需要检查所有当前entry之后的所有entry，如果其中没有任何proposal被accept，那么就返回<code>noMoreAccepted</code>。</li>
 </ol>
 <p>如果一个acceptor返回了<code>noMoreAccepted</code>，那么后续就不再发送Prepare请求，直到某个Accept请求被拒绝。<br>如果一个Leader从多数的acceptor处都收到了<code>noMoreAccepted</code>，它就不再需要发送Prepare请求了。这个状态可能会被另一个当选的Leader打破，此时旧Leader会收到被拒绝的Accept请求。</p>
-<h2 id="Fully-Replication"><a href="#Fully-Replication" class="headerlink" title="Fully Replication"></a>Fully Replication</h2><p>因为最终所有的Log Entry都需要过RSM，所以我们需要保证最终每个Server上的Log都是全的，并且他们知道哪些已经被chosen了。这通常包括两个目标：</p>
+<h2 id="Fully-Replication"><a href="#Fully-Replication" class="headerlink" title="Fully Replication"></a>Fully Replication</h2><p>因为最终所有的Log Entry都需要过RSM，所以需要保证最终每个Server上的Log都是全的，并且他们知道哪些已经被chosen了。这通常包括两个目标：</p>
 <ol>
-<li>保证Entry最终在所有的机器上被复制，但目前我们只保证了majority。</li>
+<li>保证Entry最终在所有的机器上被复制，但目前只保证了majority。</li>
 <li>保证所有的Server都能知道某个Entry是否被chosen，目前只有对应的proposer知道。</li>
 </ol>
 <p>下面是解决方案，一共有四个措施，但其实大部分措施都是为了处理就Leader宕机的情况。</p>
@@ -547,7 +550,30 @@
 <h3 id="Leader缺少日志问题"><a href="#Leader缺少日志问题" class="headerlink" title="Leader缺少日志问题"></a>Leader缺少日志问题</h3><h2 id="Client协议"><a href="#Client协议" class="headerlink" title="Client协议"></a>Client协议</h2><p>这一部分和Raft一样，非Leader的Server会把请求转发给Leader。同样的，Leader也会在Client提交的命令被chosen以及被RSM执行之后，才会返回。<br>如果请求超时，例如Leader宕机了，那么Client会将命令发送给其他Server，在最终发现新Leader后，重试命令。</p>
 <h3 id="如何保证Exact-once语义"><a href="#如何保证Exact-once语义" class="headerlink" title="如何保证Exact once语义"></a>如何保证Exact once语义</h3><p>这个问题通常发生在当老Leader在执行完自己的状态机后、返回给Client前宕机。根据上面的论述，Client实际上会通过另一个Leader重试，在这种情况下，可能同样的命令就会被执行两次。</p>
 <p>其实这种情况在我实现Raft协议的时候也遇到过。对此，演讲者建议Client对每个命令设置一个唯一的ID。每个Server上的RSM都会自己记录一下自己执行过的最新的ID。那么当RSM在执行每个命令的时候，会首先检查这个命令是否被执行过，如果被执行过了，就忽略，并且返回当时的结果。这种策略的要求是Client不挂，因为ID是由Client设置的。</p>
-<h2 id="配置切换"><a href="#配置切换" class="headerlink" title="配置切换"></a>配置切换</h2><h1 id="习题"><a href="#习题" class="headerlink" title="习题"></a>习题</h1><h2 id="官方习题"><a href="#官方习题" class="headerlink" title="官方习题"></a>官方习题</h2><p>来自于Raft作者的博客。</p>
+<p>【Q】这个现象是否违反了线性一致性要求的Exactly Once语义呢？</p>
+<h2 id="配置切换"><a href="#配置切换" class="headerlink" title="配置切换"></a>配置切换</h2><h1 id="一些讨论"><a href="#一些讨论" class="headerlink" title="一些讨论"></a>一些讨论</h1><h2 id="幽灵日志"><a href="#幽灵日志" class="headerlink" title="幽灵日志"></a>幽灵日志</h2><h3 id="第三态"><a href="#第三态" class="headerlink" title="第三态"></a>第三态</h3><p><strong>超时就是分布式系统中除了“成功”和“失败”之外的第三态</strong>，对于客户端而言，我们并不知道到底是成功还是失败：</p>
+<ol>
+<li>如果是在处理过程中，因为分区、宕机等因素导致的没有Commit成功，这个也许是失败；</li>
+<li>如果是在Commit和Apply成功之后，返回客户端时宕机或者分区了，这个应当认为是成功。</li>
+</ol>
+<h3 id="一个case"><a href="#一个case" class="headerlink" title="一个case"></a>一个case</h3><ol>
+<li>A被选为Leader，写日志1-10，其中1-5已经Commit和Apply，并返回给客户端。</li>
+<li>A宕机，但6-10没有被Commit和Apply，因此客户端会超时。</li>
+<li>B选为Leader。B应当从6开始写新的日志，此时客户端无法查到6-10号日志，因为它们还没提交。</li>
+<li>B提交了6和20号日志，并返回给客户端，但随后又宕机了。</li>
+<li>此时A又被选为Leader。</li>
+</ol>
+<p>此时，A如果想要Propose，肯定会发现自己得先补空洞，这就是类似“维护一个Log”章节中的操作：</p>
+<ol>
+<li>针对日志6，A去跑一遍Basic Paxos，因为实际上这条日志已经被Chosen了，所以A也会接受被多数派认可的日志。</li>
+<li>针对日志7-10，A是有本地日志的，但并没有被chosen，于是A会尝试提交本地日志。</li>
+<li>针对日志11-19，A没有本地日志，所以这边就都是Noop。</li>
+<li>针对日志20，也是接受被多数派认可的日志。</li>
+</ol>
+<p>现在从时间的角度考虑日志7-10。在A宕机后，客户端超时了，实际上是陷入了第三态。这有什么问题呢？我们考虑这是个转账场景，客户发现第一次超时了，可能就会重试。此时A从宕机恢复过来，又把7-10给补上了，这就很可能导致用户重复转了两次账。</p>
+<p>那么如何解决这个问题呢？朴素的想法就是“前任Leader留下的烂摊子，如果我不确定是不是可以Commit的，那么我就不能直接Commit它”。回过头来会发现，这个和Raft中新Leader不能直接提交来自较旧Leader的日志一样。</p>
+<p>对于MultiPaxos而言，yubai老师的方案其实是类似的，也就是给每个Leader赋一个term，因为MultiPaxos的Leader不进行Propose，所以这个term就可以用proposal number。在补漏洞的过程中，要忽略掉term比自己小的日志。</p>
+<h1 id="习题"><a href="#习题" class="headerlink" title="习题"></a>习题</h1><h2 id="官方习题"><a href="#官方习题" class="headerlink" title="官方习题"></a>官方习题</h2><p>来自于Raft作者的博客。</p>
 <h3 id="1"><a href="#1" class="headerlink" title="1"></a>1</h3><p>下面哪些日志是可能存在的？<br><img src="/img/paxos/q1.png"></p>
 <ol>
 <li>这个应该是个标准情况，肯定是可以的。</li>
@@ -642,6 +668,16 @@
     </div>
 
     <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/分布式/" rel="tag"># 分布式</a>
+          
+            <a href="/tags/paxos/" rel="tag"># paxos</a>
+          
+            <a href="/tags/raft/" rel="tag"># raft</a>
+          
+        </div>
       
 
       
@@ -743,7 +779,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">165</span>
+                <span class="site-state-item-count">166</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -756,7 +792,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">20</span>
+                <span class="site-state-item-count">161</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -849,7 +885,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Basic-Paxos"><span class="nav-number">1.</span> <span class="nav-text">Basic Paxos</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#论证1"><span class="nav-number">1.1.</span> <span class="nav-text">论证1</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#P1"><span class="nav-number">1.1.1.</span> <span class="nav-text">P1</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#P2"><span class="nav-number">1.1.2.</span> <span class="nav-text">P2</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#P2a"><span class="nav-number">1.1.3.</span> <span class="nav-text">P2a</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#P2b"><span class="nav-number">1.1.4.</span> <span class="nav-text">P2b</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#论证2"><span class="nav-number">1.2.</span> <span class="nav-text">论证2</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#P2c"><span class="nav-number">1.2.1.</span> <span class="nav-text">P2c</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#论证3"><span class="nav-number">1.3.</span> <span class="nav-text">论证3</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Proposer-算法-Step1"><span class="nav-number">1.3.1.</span> <span class="nav-text">Proposer 算法 Step1</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Proposer-算法-Step2"><span class="nav-number">1.3.2.</span> <span class="nav-text">Proposer 算法 Step2</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Acceptor-算法-P1a"><span class="nav-number">1.3.3.</span> <span class="nav-text">Acceptor 算法 P1a</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#持久化要求"><span class="nav-number">1.3.4.</span> <span class="nav-text">持久化要求</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#算法"><span class="nav-number">1.4.</span> <span class="nav-text">算法</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Phase-1"><span class="nav-number">1.4.1.</span> <span class="nav-text">Phase 1</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Phase-2"><span class="nav-number">1.4.2.</span> <span class="nav-text">Phase 2</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Learner"><span class="nav-number">1.5.</span> <span class="nav-text">Learner</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#活锁问题"><span class="nav-number">1.6.</span> <span class="nav-text">活锁问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#实现"><span class="nav-number">1.7.</span> <span class="nav-text">实现</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#实现状态机"><span class="nav-number">1.8.</span> <span class="nav-text">实现状态机</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Basic-Paxos-Ongaro"><span class="nav-number">2.</span> <span class="nav-text">Basic Paxos(Ongaro)</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#三种Prepare顺序讨论"><span class="nav-number">2.1.</span> <span class="nav-text">三种Prepare顺序讨论</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-当值X已经被chosen"><span class="nav-number">2.1.1.</span> <span class="nav-text">1. 当值X已经被chosen</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-当值X没有被chosen，但新的proposer能够看到"><span class="nav-number">2.1.2.</span> <span class="nav-text">2. 当值X没有被chosen，但新的proposer能够看到</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-当值X没有被chosen，新的proposer也看不到"><span class="nav-number">2.1.3.</span> <span class="nav-text">3. 当值X没有被chosen，新的proposer也看不到</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Multi-Paxos-Ongaro"><span class="nav-number">3.</span> <span class="nav-text">Multi Paxos(Ongaro)</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#维护一个Log"><span class="nav-number">3.1.</span> <span class="nav-text">维护一个Log</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Leader"><span class="nav-number">3.2.</span> <span class="nav-text">Leader</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#选举"><span class="nav-number">3.2.1.</span> <span class="nav-text">选举</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#减少Prepare"><span class="nav-number">3.2.2.</span> <span class="nav-text">减少Prepare</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Fully-Replication"><span class="nav-number">3.3.</span> <span class="nav-text">Fully Replication</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Leader缺少日志问题"><span class="nav-number">3.3.1.</span> <span class="nav-text">Leader缺少日志问题</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Client协议"><span class="nav-number">3.4.</span> <span class="nav-text">Client协议</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#如何保证Exact-once语义"><span class="nav-number">3.4.1.</span> <span class="nav-text">如何保证Exact once语义</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#配置切换"><span class="nav-number">3.5.</span> <span class="nav-text">配置切换</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#习题"><span class="nav-number">4.</span> <span class="nav-text">习题</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#官方习题"><span class="nav-number">4.1.</span> <span class="nav-text">官方习题</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1"><span class="nav-number">4.1.1.</span> <span class="nav-text">1</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2"><span class="nav-number">4.1.2.</span> <span class="nav-text">2</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3"><span class="nav-number">4.1.3.</span> <span class="nav-text">3</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4"><span class="nav-number">4.1.4.</span> <span class="nav-text">4</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#5"><span class="nav-number">4.1.5.</span> <span class="nav-text">5</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#6"><span class="nav-number">4.1.6.</span> <span class="nav-text">6</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#7"><span class="nav-number">4.1.7.</span> <span class="nav-text">7</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#参考"><span class="nav-number">5.</span> <span class="nav-text">参考</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Basic-Paxos"><span class="nav-number">1.</span> <span class="nav-text">Basic Paxos</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#论证1"><span class="nav-number">1.1.</span> <span class="nav-text">论证1</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#P1"><span class="nav-number">1.1.1.</span> <span class="nav-text">P1</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#P2"><span class="nav-number">1.1.2.</span> <span class="nav-text">P2</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#P2a"><span class="nav-number">1.1.3.</span> <span class="nav-text">P2a</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#P2b"><span class="nav-number">1.1.4.</span> <span class="nav-text">P2b</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#论证2"><span class="nav-number">1.2.</span> <span class="nav-text">论证2</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#P2c"><span class="nav-number">1.2.1.</span> <span class="nav-text">P2c</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#论证3"><span class="nav-number">1.3.</span> <span class="nav-text">论证3</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Proposer-算法-Step1"><span class="nav-number">1.3.1.</span> <span class="nav-text">Proposer 算法 Step1</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Proposer-算法-Step2"><span class="nav-number">1.3.2.</span> <span class="nav-text">Proposer 算法 Step2</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Acceptor-算法-P1a"><span class="nav-number">1.3.3.</span> <span class="nav-text">Acceptor 算法 P1a</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#持久化要求"><span class="nav-number">1.3.4.</span> <span class="nav-text">持久化要求</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#算法"><span class="nav-number">1.4.</span> <span class="nav-text">算法</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Phase-1"><span class="nav-number">1.4.1.</span> <span class="nav-text">Phase 1</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Phase-2"><span class="nav-number">1.4.2.</span> <span class="nav-text">Phase 2</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Learner"><span class="nav-number">1.5.</span> <span class="nav-text">Learner</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#活锁问题"><span class="nav-number">1.6.</span> <span class="nav-text">活锁问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#实现"><span class="nav-number">1.7.</span> <span class="nav-text">实现</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#实现状态机"><span class="nav-number">1.8.</span> <span class="nav-text">实现状态机</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Basic-Paxos-Ongaro"><span class="nav-number">2.</span> <span class="nav-text">Basic Paxos(Ongaro)</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#三种Prepare顺序讨论"><span class="nav-number">2.1.</span> <span class="nav-text">三种Prepare顺序讨论</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-当值X已经被chosen"><span class="nav-number">2.1.1.</span> <span class="nav-text">1. 当值X已经被chosen</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-当值X没有被chosen，但新的proposer能够看到"><span class="nav-number">2.1.2.</span> <span class="nav-text">2. 当值X没有被chosen，但新的proposer能够看到</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-当值X没有被chosen，新的proposer也看不到"><span class="nav-number">2.1.3.</span> <span class="nav-text">3. 当值X没有被chosen，新的proposer也看不到</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Multi-Paxos-Ongaro"><span class="nav-number">3.</span> <span class="nav-text">Multi Paxos(Ongaro)</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#维护一个Log"><span class="nav-number">3.1.</span> <span class="nav-text">维护一个Log</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Leader"><span class="nav-number">3.2.</span> <span class="nav-text">Leader</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#选举"><span class="nav-number">3.2.1.</span> <span class="nav-text">选举</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#减少Prepare"><span class="nav-number">3.2.2.</span> <span class="nav-text">减少Prepare</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Fully-Replication"><span class="nav-number">3.3.</span> <span class="nav-text">Fully Replication</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Leader缺少日志问题"><span class="nav-number">3.3.1.</span> <span class="nav-text">Leader缺少日志问题</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Client协议"><span class="nav-number">3.4.</span> <span class="nav-text">Client协议</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#如何保证Exact-once语义"><span class="nav-number">3.4.1.</span> <span class="nav-text">如何保证Exact once语义</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#配置切换"><span class="nav-number">3.5.</span> <span class="nav-text">配置切换</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#一些讨论"><span class="nav-number">4.</span> <span class="nav-text">一些讨论</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#幽灵日志"><span class="nav-number">4.1.</span> <span class="nav-text">幽灵日志</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#第三态"><span class="nav-number">4.1.1.</span> <span class="nav-text">第三态</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#一个case"><span class="nav-number">4.1.2.</span> <span class="nav-text">一个case</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#习题"><span class="nav-number">5.</span> <span class="nav-text">习题</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#官方习题"><span class="nav-number">5.1.</span> <span class="nav-text">官方习题</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1"><span class="nav-number">5.1.1.</span> <span class="nav-text">1</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2"><span class="nav-number">5.1.2.</span> <span class="nav-text">2</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3"><span class="nav-number">5.1.3.</span> <span class="nav-text">3</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4"><span class="nav-number">5.1.4.</span> <span class="nav-text">4</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#5"><span class="nav-number">5.1.5.</span> <span class="nav-text">5</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#6"><span class="nav-number">5.1.6.</span> <span class="nav-text">6</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#7"><span class="nav-number">5.1.7.</span> <span class="nav-text">7</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#参考"><span class="nav-number">6.</span> <span class="nav-text">参考</span></a></li></ol></div>
             
 
           </div>
