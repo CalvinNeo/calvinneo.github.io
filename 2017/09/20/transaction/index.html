@@ -74,7 +74,7 @@
 <link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="数据库,事务," />
+  <meta name="keywords" content="Calvin, Neo, Blog, Computer Science, Game" />
 
 
 
@@ -93,7 +93,6 @@
 
 
 <meta name="description" content="本文主要讲述数据库中事务的控制模型、事务隔离等级和事务并发控制。 本文从分布式一致性和分布式共识协议一文中分离。">
-<meta name="keywords" content="数据库,事务">
 <meta property="og:type" content="article">
 <meta property="og:title" content="数据库系统中的事务">
 <meta property="og:url" content="http://www.calvinneo.com/2017/09/20/transaction/index.html">
@@ -105,7 +104,16 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/percolator3.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/cser.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/cser2.png">
-<meta property="og:updated_time" content="2021-08-23T05:17:56.944Z">
+<meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/cstrans.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/thematrix.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/theintentionmatrix.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/tolateread.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/tolatewrite.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/dirtyreadtime.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/dirtyreadtime2.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/occp1.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/occp2.png">
+<meta property="og:updated_time" content="2022-03-01T07:55:45.459Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="数据库系统中的事务">
 <meta name="twitter:description" content="本文主要讲述数据库中事务的控制模型、事务隔离等级和事务并发控制。 本文从分布式一致性和分布式共识协议一文中分离。">
@@ -386,11 +394,10 @@
 <p>本文从<a href="/2017/09/20/distributed-system-consistency-and-consensus/">分布式一致性和分布式共识协议</a>一文中分离。</p>
 <a id="more"></a>
 
-<p>我们首先回顾一下非分布式系统上一致性的相关知识。</p>
 <h1 id="两种事务控制模型"><a href="#两种事务控制模型" class="headerlink" title="两种事务控制模型"></a>两种事务控制模型</h1><h2 id="ACID"><a href="#ACID" class="headerlink" title="ACID"></a>ACID</h2><p>对于关系型数据库，存在ACID事务控制模型维护事务的正确可靠性。</p>
 <ol>
-<li>原子性(atomicity)<br> 事务中的所有操作要么全部完成，要么全部不完成（回滚），不会出现中间状态，也就是所谓的all-or-nothing。以转账为例，假设A向B转账200元，那么原子性要求事务不存在A的钱扣了，但是B的钱没到账。<br> 需要注意的是，原子性往往不蕴含并发的概念，后者由隔离性实际来处理。<br> 原子性实现需要REDO/UNDO。例如故障恢复时，如果我们决定回滚事务，我们就得参照UNDO来回滚；如果我们决定提交事务，我们就得根据REDO来提交。</li>
-<li>一致性(consistency)<br> 在事务开始前和结束后完整性约束（<strong>不变量invariants</strong>）不被破坏。这里的“一致性<a href="https://www.jianshu.com/p/2c30d1fe5c4e" target="_blank" rel="noopener">常被称为“内部一致性”</a>，以区别分布式系统中的外部一致性C。<br> 这里的不变量，往往是由上层应用程序来实际定义的。</li>
+<li>原子性(atomicity)<br> 事务中的所有操作要么全部完成，要么全部不完成（回滚），不会出现中间状态，也就是所谓的all-or-nothing。以转账为例，假设A向B转账200元，那么原子性要求事务不存在A的钱扣了，但是B的钱没到账。<br> 需要注意的是，原子性往往不蕴含并发的概念，后者由隔离性实际来处理。<br> 原子性实现需要REDO/UNDO。例如故障恢复时，如果决定回滚事务，则参照UNDO来回滚；如果决定提交事务，则参照REDO来提交。</li>
+<li>一致性(consistency)<br> 在事务开始前和结束后完整性约束(<strong>不变量invariants</strong>)不被破坏。这里的”一致性“<a href="https://www.jianshu.com/p/2c30d1fe5c4e" target="_blank" rel="noopener">常被称为“内部一致性”</a>，以区别分布式系统中的外部一致性C。<br> 这里的不变量，往往是由上层应用程序来实际定义的。</li>
 <li>隔离性(isolation)<br> 数据库支持多个并发事务同时进行增删改。以转账为例，假设A和B同时向C转账200元，那么结束后C应当收到400元，而不存在只收到200块的情况。<br> 在传统的数据库中，隔离性可以被形式化为Serializability，也就是说每个事物可以看作自己是整个数据库上唯一运行的事务。而事务提交的顺序，犹如他们是逐一运行一样。<br> 隔离性通过并发事务控制手段，如锁等解决。在很多数据库中，所谓的Serializability往往是一个称作Snapshot Isolation的隔离等级。<br> 【Q】如何唯一区分事务呢？例如，对一个有序的tcp连接，begin和commit之间的是一个事务，但如果涉及到重连的情况呢？所以往往我们要涉及生成一个唯一的事务ID。</li>
 <li>持久性(durability)<br> 事务结束后对数据的修改是持久化的。例如系统发生宕机后，<strong>已提交的事务</strong>不应当消失。丢数据的一个常见例子是主从架构+异步复制，这种情况下durability难以保证。我们还可以考虑以下情况：<ol>
 <li>写入磁盘后，机器宕机</li>
@@ -497,17 +504,17 @@
 <li>Q去select这个id，发现没有</li>
 <li>Q去insert这个id，发现主键冲突，但是还是select不到，仿佛出现幻觉</li>
 </ol>
-<p><strong>幻读会引发写偏斜</strong>，并且会更加棘手，因为我们<strong>没办法通过显式锁定</strong>来解决这个问题：我们要锁的东西都不存在，该怎么加锁？</p>
+<p><strong>幻读会引发写偏斜</strong>，并且会更加棘手，因为我们<strong>没办法通过显式锁定</strong>来解决这个问题：要锁的东西都不存在，该怎么加锁？</p>
 <p>避免幻读，意味着我们要避免下面的情况：</p>
 <ol>
 <li><code>r1[P] ... w2[y in P] ... c2 ... r1[P] ... c1</code></li>
 <li><code>r1[P] ... w2[y in P] ... ((c1 or a1) and (c2 or a2) any order)</code></li>
 </ol>
-<p>解决幻读可以从下面几个角度入手：</p>
+<p>根据DDIA，解决幻读可以从下面几个角度入手：</p>
 <ol>
-<li>物化冲突<br> 刚才我们提到了“我们要锁的东西都不存在，该怎么加锁？”这个问题。</li>
+<li>物化冲突<br> 刚才提到了“我们要锁的东西都不存在，该怎么加锁？”这个问题，我们可以把这个不存在的东西物化出来。通过<code>SELECT FOR UPDATE</code>解决RR级别下的幻读问题的手段，就是物化冲突。如果SELECT下来，真的有东西，会加行锁；否则会加间隙锁。</li>
+<li>Next key lock<br> InnoDB可以通过间隙锁Next key lock解决了幻读的问题。<a href="https://zhuanlan.zhihu.com/p/91208953" target="_blank" rel="noopener">这实际上实现了串行化级别的效果，而且保留了比较好的并发性能</a>。<br> 当然，对于当前读我们可以加间隙锁，对于快照读，我们则可以借助MVCC。<br> 【Q】间隙锁可以理解为一种物化冲突的手段么？</li>
 <li>谓词锁</li>
-<li>Next key lock<br> InnoDB可以通过间隙锁Next key lock解决了幻读的问题，<a href="https://zhuanlan.zhihu.com/p/91208953" target="_blank" rel="noopener">因此实际上实现了串行化级别的效果，而且保留了比较好的并发性能</a>。<br> 【Q】间隙锁可以理解为一种物化冲突的手段么？</li>
 <li>实现S隔离等级<br> 其实通过实现谓词锁，或者Next key lock等也能实现S隔离等级。当然也有诸如2PL直接加锁的办法。</li>
 </ol>
 <h2 id="介绍"><a href="#介绍" class="headerlink" title="介绍"></a>介绍</h2><p>在了解并发事务控制前，首先需要了解事务的隔离等级。<br>事务具有ACID的要求，隔离性I要求数据库能够支持<strong>并发事务</strong>。隔离性I的要求主要对应了四种隔离级别，分别是Read uncommitted、Read committed(Sql Server、Oracle等的默认隔离级别)、Repeatable read(MySQL的默认隔离级别)、Serializable，分别可以解决脏读、不可重复读(Nonrepeatable Read/Fuzzy Read)、幻读(Phantom Read)几类问题。</p>
@@ -526,22 +533,25 @@
 <p><a href="http://www.nosqlnotes.com/technotes/mvcc-snapshot-isolation/" target="_blank" rel="noopener">Snapshot Isolation也是来解决2PL系列算法带来的并发度低的问题的</a>：</p>
 <ol>
 <li>每一个数据有多个版本(MVCC)<br> 这相比RC是一个变化，因为RC只会维护两个版本，即上一次被提交的值，以及这次的性质。<br> 这是因为MVCC下，数据库需要维护某个对象的几个不同的提交版本，因此此时数据库中的并发事务可能看到数据库在不同时间点的状态。这也就是所谓的MVCC机制。<br> 容易看出，MVCC能够退化地实现RC隔离性。我们将在MVCC章节中看到基于MVCC对RC和RR的实现：即对RC，每个查询用独立的快照；对RR，整个事务用一个快照。</li>
-<li>每个事务相当于看到数据的一个快照<br> 记事务开始时间戳为ST，事务提交的时间戳是CT。事务在开始时获得ST，在准备提交时获得CT。此时，该事务CT应当大于所有现存的ST和CT。具体时间戳的获取可以借助于TSO。在提交时，需要进行<strong>冲突检测</strong>，也就是说如果发现有并发事务在写同一个记录，那么至少要abort一个事务，否则会导致Lose Update。当然，我们也可以前置这个判断过程到写而不是提交的时候【Q】这是不是对应了SSI。abort的方式主要有FWW、LWW、FCW、LCW。<br> 【Q】<strong>这是根据并发事务的ST还是CT来判断呢？根据论文，是根据CT</strong><br> <img src="/img/fbs/si_conflict.png"><br> 什么是冲突事务呢？如果有其他事务在[ST,CT]之间也写了我的WriteSet，那么这就是冲突事务了。如Percolator论文中Figure3所示。事务2看不见事务1的写，这是因为事务2的ST在事务1的CT之前。对应地，事务3能够看到事务1和2的修改。此时，我们称事务1和事务2是<strong>并发事务</strong>，如果并发事务都写同一个记录规则，可以保证不造成写丢失的情况。<br> <img src="/img/dbtrans/percolator3.png"><br> 【Q】如果一个事务在执行过程中，那么它的CT会被设置为多少呢？我想应该是inf，看Percolator的实现也是inf。</li>
+<li>每个事务相当于看到数据的一个快照<br> 记事务开始时间戳为ST，事务提交的时间戳是CT。事务在开始时获得ST，在准备提交时获得CT。此时，该事务CT应当大于所有现存的ST和CT。具体时间戳的获取可以借助于TSO。在提交时，需要进行<strong>冲突检测</strong>，也就是说如果发现有并发事务在写同一个记录，那么至少要abort一个事务，否则会导致Lose Update。<br> 当然，也可以前置这个判断过程到写而不是提交的时候【Q】这是不是对应了SSI。<br> abort的方式主要有FWW、LWW、FCW、LCW。<br> 【Q】<strong>这是根据并发事务的ST还是CT来判断呢？根据论文，是根据CT</strong><br> <img src="/img/fbs/si_conflict.png"><br> 什么是冲突事务呢？如果有其他事务在[ST,CT]之间也写了我的WriteSet，那么这就是冲突事务了。如Percolator论文中Figure3所示。事务2看不见事务1的写，这是因为事务2的ST在事务1的CT之前。对应地，事务3能够看到事务1和2的修改。此时，我们称事务1和事务2是<strong>并发事务</strong>，如果并发事务都写同一个记录规则，可以保证不造成写丢失的情况。<br> <img src="/img/dbtrans/percolator3.png"><br> 【Q】如果一个事务在执行过程中，那么它的CT会被设置为多少呢？我想应该是inf，看Percolator的实现也是inf。</li>
 <li>WW冲突还是需要加锁的，但是RW冲突就不会产生任何锁定了。R和W不会相互阻塞。</li>
 <li>第一个得到行锁的事务可以进行，后面的写事务要么abort，要么block。</li>
 </ol>
-<p>Snapshot Isolation相对于SERIALIZABLE的隔离级别<a href="https://www.jdon.com/55452" target="_blank" rel="noopener">要低一些</a>，诸如Oracle宣称提供的SERIALIZABLE实际上也是Snapshot Isolation。降低了的隔离级别，带来了更好的读性能。这是显然的，想想S的实现方式吧，无论是真的串行（没有任何并行），还是2PL加锁（读和写都要加锁），都会导致读和写的竞争。</p>
-<p>Snapshot Isolation中不会存在Repeatable Read中的幻读问题了，这是显然的。我们始终读取某个历史版本的状态，那么每次读都是一样的。</p>
-<p>Snapshot Isolation可能带来写偏斜(write skew)问题，从而不能满足SERIALIZABLE级别。可是为啥会有这个问题呢？<br>我们回想上文讲述的<code>P</code>和<code>Q</code>分别运行<code>x=y</code>和<code>y=x</code>的例子。在这个例子中，我们发现Snapshot Isolation并没有管读和读之间的问题。</p>
-<p>为什么Repeatable Read不会有Write Skew问题呢？<a href="https://zhuanlan.zhihu.com/p/56868208" target="_blank" rel="noopener">根据这篇文章</a>，RR会在读取行的时候加读锁。</p>
+<p>Snapshot Isolation相对于SERIALIZABLE的隔离级别<a href="https://www.jdon.com/55452" target="_blank" rel="noopener">要低一些</a>，诸如Oracle宣称提供的SERIALIZABLE实际上也是Snapshot Isolation。</p>
+<p>Snapshot Isolation具有下面的特性：</p>
+<ol>
+<li>降低了的隔离级别，带来了更好的读性能。想想S的实现方式，就会发现这是很容易理解的。无论是真的串行（没有任何并行），还是2PL加锁（读和写都要加锁），都会导致读和写的竞争。</li>
+<li>不会存在Repeatable Read中的幻读问题了，这是显然的。我们始终读取某个历史版本的状态，那么每次读都是一样的。</li>
+<li>可能存在写偏斜(write skew)问题，从而不能满足SERIALIZABLE级别。<br> 可是为啥会有这个问题呢？<br> 回想上文讲述的<code>P</code>和<code>Q</code>分别运行<code>x=y</code>和<code>y=x</code>的例子。在这个例子中，Snapshot Isolation并没有管读和读之间的问题。<br> 为什么Repeatable Read不会有Write Skew问题呢？<a href="https://zhuanlan.zhihu.com/p/56868208" target="_blank" rel="noopener">根据这篇文章</a>，RR会在读取行的时候加读锁。</li>
+</ol>
 <h4 id="RR和SI的区别和联系"><a href="#RR和SI的区别和联系" class="headerlink" title="RR和SI的区别和联系"></a>RR和SI的区别和联系</h4><p>在1975年定义SQL的隔离级别的时候，尚未发明SI这个级别。</p>
 <h4 id="MVCC和SI的区别和联系"><a href="#MVCC和SI的区别和联系" class="headerlink" title="MVCC和SI的区别和联系"></a>MVCC和SI的区别和联系</h4><p><strong>MVCC和锁都是SI的实现手段</strong>，当然，也可以有一些方案完全无锁地实现SI。<br><a href="https://zhuanlan.zhihu.com/p/59115828" target="_blank" rel="noopener">数据行可见性的区别</a>：</p>
 <ol>
 <li>MVCC<br> 事务T1的快照记录是在生成快照时的活跃事务集合。这个集合的时间区间是[min, max]，其中所有比min小的事务都被<strong>提交</strong>了，所有比max大的事务都<strong>没有启动</strong>。如果落在这个区间内，我们还需要去真正比较是否在这个集合中。详见对MVCC的介绍。</li>
 <li>Percolator<br> 保证能够读到<code>R.start_ts &gt; W.commit_ts</code>。也就是说，当事务W提交完，才能被事务R读到。<br> 【Q】这个是不是和SI不太一样？SI貌似是CT2和[ST1,CT1]比较的。</li>
 </ol>
-<h4 id="Serial-Snapshot-Isolation-SSI"><a href="#Serial-Snapshot-Isolation-SSI" class="headerlink" title="Serial Snapshot Isolation(SSI)"></a>Serial Snapshot Isolation(SSI)</h4><p>该理论用来解决Write Skew问题。基本思想是冲突检测发生在<strong>事务运行阶段</strong>，而不是<strong>事务的提交阶段</strong>。</p>
-<p>Write Snapshot isolation需要保证一个事务读的数据的最近一个版本的提交时间要早于事务的开始时间。即下面的两个事务不能同时提交成功：</p>
+<h4 id="Serial-Snapshot-Isolation-SSI"><a href="#Serial-Snapshot-Isolation-SSI" class="headerlink" title="Serial Snapshot Isolation(SSI)"></a>Serial Snapshot Isolation(SSI)</h4><p>该理论用来解决Write Skew问题。基本思想是冲突检测发生在<strong>事务运行阶段</strong>，而不是<strong>事务提交阶段</strong>。</p>
+<p>Write Snapshot isolation需要保证一个事务读的数据(也就是最近一个版本)的提交时间要早于事务的开始时间。即下面的两个事务不能同时提交成功：</p>
 <ol>
 <li>读写在空间上的重叠<br> 事务A的写和事务B读属于同一行</li>
 <li>读写在时间上的重叠<br> 例如下面的顺序 <figure class="highlight lisp"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">start(<span class="name">A</span>) &lt; commit(<span class="name">j</span>) &lt; commit(<span class="name">i</span>)</span><br></pre></td></tr></table></figure></li>
@@ -575,54 +585,100 @@
 <li>RU<br> 读到的是20</li>
 <li>RC、RR、S<br> 读到的是10</li>
 </ol>
-<h1 id="并发事务控制"><a href="#并发事务控制" class="headerlink" title="并发事务控制"></a>并发事务控制</h1><p>为了保证<a href="http://catkang.github.io/2018/09/19/concurrency-control.html" target="_blank" rel="noopener">并发执行的事务在<strong>某一隔离级别</strong>上的正确执行的机制</a>，我们需要并发事务控制。并发事务控制实际上是解决并发事务之间隔离性的问题。<br>并发控制的主要思想可以根据乐观程度进行分类：</p>
+<h1 id="并发事务控制"><a href="#并发事务控制" class="headerlink" title="并发事务控制"></a>并发事务控制</h1><p>为了保证<a href="http://catkang.github.io/2018/09/19/concurrency-control.html" target="_blank" rel="noopener">并发执行的事务在<strong>某一隔离级别</strong>上的正确执行的机制</a>，我们需要并发事务控制来解决并发事务之间<strong>隔离性</strong>的问题。<br>并发控制的主要思想可以根据乐观程度进行分类：</p>
 <ol>
-<li>Lock<br> 这个方法是最悲观的，也就是在访问资源之前，需要加锁。如果获取不到锁，就阻塞事务。<br> 如2PL</li>
-<li>Timestamp<br> 在每个<strong>事务开始时</strong>，获得时间戳，并期望事务按照时间戳的顺序执行。如果发现冲突，可以选择阻塞或者回滚。<br> 如Basic T/O</li>
-<li>Validation<br> 在<strong>事务提交时</strong>，再进行验证。如果发生冲突，只能回滚。<br> 如OCC系列算法</li>
+<li>基于锁<br> 这个方法是最悲观的，也就是在访问资源之前，需要加锁。如果获取不到锁，就阻塞事务。</li>
+<li>基于时间戳<br> 在每个<strong>事务开始时</strong>，获得时间戳，并期望事务按照时间戳的顺序执行。如果发现冲突，可以选择阻塞或者回滚。</li>
+<li>基于有效性确认<br> 在<strong>事务提交时</strong>，再进行验证。如果发生冲突，只能回滚。<br> 当然，这种可能产生活锁，比如两个事务交替回滚。一个解决方案是在反复几次后，尝试加锁。</li>
 </ol>
-<p>容易发现，越乐观的策略下，对冲突的检查就越迟。从最悲观的访问资源之前加锁，到最乐观的Commit前验证，并发的能力是加强的，但是失败回滚的可能性也就越来越大。</p>
-<p>需要注意的是，以上的策略都有单版本和多版本的实现。这个应该是能比较容易理解的，对于MVCC，因为一次对数据库的修改都会生成一个新的版本，所以实际上在处理隔离性上会更加的灵活。因为我们成功把问题转化到了如何选取版本和管理版本上。</p>
-<h2 id="可串行性和冲突可串行性-Conflict-Serializability"><a href="#可串行性和冲突可串行性-Conflict-Serializability" class="headerlink" title="可串行性和冲突可串行性(Conflict Serializability)"></a>可串行性和冲突可串行性(Conflict Serializability)</h2><p>可串行性要求<a href="https://zhuanlan.zhihu.com/p/127274032" target="_blank" rel="noopener">事务并发执行的效果和事务单独执行的效果</a>是一样的。</p>
-<p>关于这一点，我们可以类比到CPU并行编程里面的内存模型。如下图所示，左边的是串行调度，因为事务和事务之间都是串行的了。右边的是不可串行调度，因为右边的结果和左图（先T1再T2）不一样，并且和先T2再T1也不一样。中间的图并<strong>不是串行调度</strong>，因为T1和T2是彼此交织的，但是它的<strong>结果和左边的图是一样的</strong>，所以<strong>是可串行调度</strong>。</p>
+<p>容易发现，越乐观的策略下，对冲突的检查就越迟。从最悲观的访问资源之前加锁，到最乐观的Commit前验证，并发的能力是加强的，但是失败回滚的可能性也就越来越大。虽然加锁的方案看似浪费资源，但因为回滚的开销比加锁大，所以当冲突较多时，基于锁的方案反而能有更好的效率(即每个事务被推迟的时间更少)。此外，在回滚不可避免时，基于时间戳的方法能更早检查到。</p>
+<p>需要注意的是，三种策略都有<strong>单版本和多版本</strong>的实现。对于MVCC，因为一次对数据库的修改都会生成一个新的版本，所成功把问题转化到了如何选取版本和管理版本上，在处理隔离性上会更加的灵活。</p>
+<h2 id="记号"><a href="#记号" class="headerlink" title="记号"></a>记号</h2><p><code>r1(A)</code>表示事务1读取元素A。<code>w2(B)</code>表示事务2写元素B。<br>其中事务1可以被写为T1，事务2可以被写为T2。</p>
+<h2 id="调度"><a href="#调度" class="headerlink" title="调度"></a>调度</h2><h3 id="串行调度"><a href="#串行调度" class="headerlink" title="串行调度"></a>串行调度</h3><p>如果一个调度的动作组成首先是事务A的所有动作，然后是事务B的所有动作，那个这个调度就是个串行调度。</p>
+<p>容易发现，执行事务A-&gt;事务B，和执行事务B-&gt;事务A的结果是不同的。</p>
+<h3 id="可串行性"><a href="#可串行性" class="headerlink" title="可串行性"></a>可串行性</h3><p>可串行性要求<a href="https://zhuanlan.zhihu.com/p/127274032" target="_blank" rel="noopener">事务并发执行的效果和事务单独执行的效果</a>是一样的。比如对于非串行事务S，如果存在一个串行事务S’，使得对于每个数据库初态，调度S和调度S’相同，那么S就是可串行化的。</p>
+<p>关于这一点，我们可以类比到CPU并行编程里面的内存模型。如下图所示：</p>
+<ol>
+<li>左边的是串行调度，由定义可知</li>
+<li>右边的是不是串行调度，也不是可串行调度<br> 因为右边的结果和先T1再T2(左图)不一样，也和先T2再T1不一样</li>
+<li>中间的图<strong>不是串行调度</strong>，但是可串行调度<br> 虽然T1和T2是彼此交织的，但是它的<strong>结果和左边的图是一样的</strong>，所以<strong>是可串行调度</strong>。</li>
+</ol>
 <p><img src="/img/dbtrans/cser.png"></p>
-<p>和并发编程里面一样，除了读读操作，诸如读写、写读、写写之类的操作都是<strong>冲突操作</strong>。</p>
-<p>一个调度S在保证冲突操作的次序不变的前提下，通过<strong>交换非冲突操作的次序</strong>得到另一个调度S’，同时如果S’是可串行的，那么我们就说S是一个冲突可串行化的调度。一个调度是冲突可串行化的，那么它一定是可串行化的调度。</p>
-<p>如下面这一组图所示。图1就是一个冲突可串行化的调度，因为它可以通过交换顺序得到图3。但是图4就不是一个可串行化。<br><img src="/img/dbtrans/cser2.png"></p>
-<h2 id="2PL"><a href="#2PL" class="headerlink" title="2PL"></a>2PL</h2><p>2PL用户实现InnoDB和SQL Server中的S级别，以及DB2中的RR级别。这个方案的思路是通过为每个对象加锁来解决冲突。这些锁可以是共享的，也可以是排他的，具体来说：</p>
+<h3 id="冲突操作"><a href="#冲突操作" class="headerlink" title="冲突操作"></a>冲突操作</h3><p>在事务序列中的两个连续操作，如果交换他们的顺序，则涉及事务中至少有一个的行为会改变，那么这两个操作是冲突的。</p>
+<p>可以进行如下讨论：</p>
+<ol>
+<li><code>r1(X)</code>和<code>r2(Y)</code>是不冲突的，即使X=Y<br> 很容易理解，读读事务不会冲突</li>
+<li><code>r1(X)</code>和<code>w2(Y)</code>是不冲突的，其中X不等于Y<br> 也很容易，读和写不是作用在一个对象上。<br> 同理<code>w1(X)</code>和<code>r2(Y)</code>也不冲突；<code>w1(X)</code>和<code>w2(Y)</code>也不冲突。</li>
+<li>【读写冲突】<code>r1(X)</code>和<code>w2(Y)</code>，其中X=Y<br> 特别的，即使是同一事务，<code>r1(X)</code>和<code>w1(Y)</code>也冲突。</li>
+<li>【写写冲突】<code>w1(X)</code>和<code>w2(Y)</code>，其中X=Y</li>
+</ol>
+<p>总结，两个操作的冲突发生在：</p>
+<ol>
+<li>操作同一元素</li>
+<li>其中一个是写</li>
+</ol>
+<h3 id="冲突可串行性-Conflict-Serializability"><a href="#冲突可串行性-Conflict-Serializability" class="headerlink" title="冲突可串行性(Conflict Serializability)"></a>冲突可串行性(Conflict Serializability)</h3><p>一个调度S在保证冲突操作的次序不变的前提下，通过<strong>交换非冲突操作的次序</strong>得到另一个调度S’。此时，如果S’是可串行的，就说S是一个冲突可串行化的调度。</p>
+<p>考虑这一组图。图1就是一个冲突可串行化的调度。交换T1的<code>read(B)</code>和T2的<code>write(A)</code>可以得到如图2所示的调度。进一步，如果交换T1的<code>read(B)-&gt;write(B)</code>和T2的<code>read(A)-&gt;write(A)</code>，就可以得到如图3的调度。</p>
+<p>但是图4就不是一个可串行化调度，因为<code>read(Q)</code>和两个<code>write(Q)</code>都是冲突操作。<br><img src="/img/dbtrans/cser2.png"></p>
+<p>下图展示了通过交换相邻操作(下换线)将冲突可串行化调度转为串行调度的过程。<br><img src="/img/dbtrans/cstrans.png"></p>
+<h3 id="冲突可串行化是一个更强的条件"><a href="#冲突可串行化是一个更强的条件" class="headerlink" title="冲突可串行化是一个更强的条件"></a>冲突可串行化是一个更强的条件</h3><p>冲突可串行化是一个比较强的条件。一个可串行化调度未必是冲突可串行化的，原因是可串行化调度可能交换冲突操作。例如事务<code>w1(A)</code>作用是A+2，事务<code>w2(A)</code>的作用是A+3。那么两个事务还是可串行化的。</p>
+<p>考虑下面的例子，S1是串行的，S2通过交换<code>w2(Y) w2(X)</code>和<code>w1(X)</code>可以得到S1。明显，冲突操作之间发生了交换，这不是冲突可串行化的。但S1却是S2的串行调度。这是因为两种调度最终都使得X的值为w3(X)而Y的值为w2(Y)。</p>
+<figure class="highlight gcode"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">S<span class="number">1</span>: w<span class="number">1</span><span class="comment">(Y)</span> w<span class="number">1</span><span class="comment">(X)</span> w<span class="number">2</span><span class="comment">(Y)</span> w<span class="number">2</span><span class="comment">(X)</span> w<span class="number">3</span><span class="comment">(X)</span></span><br><span class="line">S<span class="number">2</span>: w<span class="number">1</span><span class="comment">(Y)</span> w<span class="number">2</span><span class="comment">(Y)</span> w<span class="number">2</span><span class="comment">(X)</span> w<span class="number">1</span><span class="comment">(X)</span> w<span class="number">3</span><span class="comment">(X)</span></span><br></pre></td></tr></table></figure>
+
+<h3 id="优先图"><a href="#优先图" class="headerlink" title="优先图"></a>优先图</h3><p>可以通过构造优先图，并判断其中是否有环来判断事务是否是冲突可串行化的。构造方式，对于T1中的A1，和T2中的A2，如果满足：</p>
+<ol>
+<li>在S中A1在A2前；</li>
+<li>A1和A2涉及同一数据库元素</li>
+<li>A1和A2至少有一个是写操作</li>
+</ol>
+<p>那么就添加一条从1到2的有向弧，称为A1优先于A2。</p>
+<p>优先图的原理是，如果A1在A2前，而我们要将T1和T2串行化，根据定义，那么T1肯定要整体在T2前。</p>
+<h2 id="基于锁的并发控制"><a href="#基于锁的并发控制" class="headerlink" title="基于锁的并发控制"></a>基于锁的并发控制</h2><p>记：</p>
+<ol>
+<li><code>l1(X)</code>表示事务1请求给X上锁</li>
+<li><code>u1(X)</code>表示事务1释放X的锁</li>
+</ol>
+<p>需要保证：</p>
+<ol>
+<li>事务一致性<br> 只要有事务<code>r1(X)</code>和<code>w1(X)</code>，则前面有<code>l1(X)</code>，后面有<code>u1(X)</code>。实际保证访问对象就会上锁。</li>
+<li>事务合法性<br> 只要调度动作中有<code>l1(X)</code>和<code>l2(X)</code>，则中间必然有<code>u1(X)</code>。实际上保证不会重复加锁。</li>
+</ol>
+<p>下面的调度是合法的</p>
+<h3 id="2PL"><a href="#2PL" class="headerlink" title="2PL"></a>2PL</h3><p>2PL用户实现InnoDB和SQL Server中的S级别，以及DB2中的RR级别。其思路是通过为每个对象加锁来解决冲突。这些锁可以是共享的，也可以是排他的，具体来说：</p>
 <ol>
 <li>如果需要读取，那么可以使用共享锁</li>
 <li>如果需要写入，必须使用排它锁</li>
 <li>如果先读后写，需要将共享锁升级为排它锁，升级过程如同重新获得排它锁</li>
 <li>获得锁之后，必须持有锁到事务提交或者中止<br> 这应该是S2PL和SS2PL的规定。</li>
 </ol>
-<p>我们知道死锁有四个条件：互斥、占有且申请、不可抢占和循环等待。而为了解决死锁问题，一个方案就是一次性获得所有的锁，这样实际上破坏了占有且申请的条件。如何避免死锁？我在<a href="/2017/12/28/Concurrency-Programming-Compare/">文章中</a>进行了较为详尽的讨论。避免死锁的一个可行的办法就是一次性请求所有锁（1PL），但这个对数据库来说很困难，因为我们很难知道我们具体要那些资源，并且这样一次性锁协议牺牲了并发性。<br>为此我们引入了2PL，2PL将加解锁过程分为两个阶段，在第一阶段只能加锁或者操作数据，不能解锁；在第二阶段只能解锁或者操作数据，不能加锁。<br><strong>2PL不能避免死锁</strong>，如下所示。两个事务按照2PL加锁，假定第一个事务1请求到了4，第二个事务请求到了3，那么1和2就会陷入死锁。那么我们就必须干掉其中一个事务。</p>
+<p>其中做最重要的过程是，2PL将加解锁过程分为两个阶段，在第一阶段只能加锁或者操作数据，不能解锁；在第二阶段只能解锁或者操作数据，不能加锁。<br>我们认为在解开第一个锁时，事务成功。【Q】这是在《数据库系统实现里面的措辞》，但在解锁之后，还是可以操作数据的啊，这些数据还没操作，为什么这个事务就算成功了？其实这个涉及级联回滚的细节，我们还真有S2PL和SS2PL来要求在Commit之后再释放锁。</p>
+<p>数据库实现了死锁检测和死锁超时机制。以InnoDB为例，如果启动死锁检测(<code>innodb_lock_wait_timeout</code>)，那么会在死锁发生时会选择将持有最少行级X锁的事务进行回滚。当然也可以选择等待(<code>innodb_lock_wait_timeout</code>)超时。</p>
+<h3 id="2PL可串行性的证明"><a href="#2PL可串行性的证明" class="headerlink" title="2PL可串行性的证明"></a>2PL可串行性的证明</h3><p>假设在2PL条件下，Ti在S中有第一个解锁动作<code>ui(x)</code>，则可以断言我们能将Ti的动作不经过任何有冲突的读和写移动到开始。</p>
+<p>我们不放假设Ti的某个动作<code>wi(Y)</code>前有Tj的动作<code>wj(Y)</code>。那么根据事务一致性原则，在调度S中，<code>uj(Y)</code>和<code>li(Y)</code>必然出现在下面的序列中。</p>
+<figure class="highlight lisp"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">wj(<span class="name">Y</span>) uj(<span class="name">Y</span>) li(<span class="name">Y</span>) wi(<span class="name">Y</span>)</span><br></pre></td></tr></table></figure>
+
+<p>下面，我们将“第一个解锁动作<code>ui(x)</code>”加入到序列S中，它至少处于如下位置(可能还会更靠左)。仔细查看下面式子，这违反了2PL的条件，因为T在上锁Y之前解锁了X。</p>
+<figure class="highlight lisp"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">wj(<span class="name">Y</span>) ui(<span class="name">X</span>) uj(<span class="name">Y</span>) li(<span class="name">Y</span>) wi(<span class="name">Y</span>)</span><br></pre></td></tr></table></figure>
+
+<h3 id="死锁"><a href="#死锁" class="headerlink" title="死锁"></a>死锁</h3><h4 id="2PL不能避免死锁"><a href="#2PL不能避免死锁" class="headerlink" title="2PL不能避免死锁"></a>2PL不能避免死锁</h4><p><strong>2PL不能避免死锁</strong>，如下所示。两个事务按照2PL加锁，假定第一个事务1请求到了4，第二个事务请求到了3，那么1和2就会陷入死锁。那么我们就必须干掉其中一个事务。</p>
 <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">START</span> <span class="keyword">TRANSACTION</span>;</span><br><span class="line"><span class="keyword">UPDATE</span> StockPrice <span class="keyword">SET</span> <span class="keyword">close</span> = <span class="number">45</span> <span class="keyword">WHERE</span> stock_id = <span class="number">4</span>;</span><br><span class="line"><span class="keyword">UPDATE</span> StockPrice <span class="keyword">SET</span> <span class="keyword">close</span> = <span class="number">19</span> <span class="keyword">WHERE</span> stock_id = <span class="number">3</span>;</span><br><span class="line"><span class="keyword">COMMIT</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">START</span> <span class="keyword">TRANSACTION</span>;</span><br><span class="line"><span class="keyword">UPDATE</span> StockPrice <span class="keyword">SET</span> <span class="keyword">close</span> = <span class="number">22</span> <span class="keyword">WHERE</span> stock_id = <span class="number">3</span>;</span><br><span class="line"><span class="keyword">UPDATE</span> StockPrice <span class="keyword">SET</span> <span class="keyword">close</span> = <span class="number">44</span> <span class="keyword">WHERE</span> stock_id = <span class="number">4</span>;</span><br><span class="line"><span class="keyword">COMMIT</span>;</span><br></pre></td></tr></table></figure>
 
-<p>【Q】我们知道指定加锁顺序，可以避免死锁。例如我们在遍历链表的时候，始终沿着同一个方向遍历等。但是2PL这里的顺序并不是锁的顺序，例如我们先获取第一个锁，然后才能获取第二个锁，而是强调所有的加锁工作必须在解锁工作完成前完成，那么显然这里是不能避免死锁的。既然如此，为什么还需要引入2PL呢？<br>2PL的目的是为了保证<strong>可串行性</strong>，进而是为了保证隔离性。如果不满足2PL，那么可串行性就可能出问题。考虑下面的Case</p>
-<figure class="highlight lisp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">Ta                                  Tb</span><br><span class="line">begin</span><br><span class="line">x-lock(<span class="name">A</span>)</span><br><span class="line">write(<span class="name">A</span>)</span><br><span class="line">release(<span class="name">A</span>)</span><br><span class="line">                                    x-lock(<span class="name">A</span>)</span><br><span class="line">                                    write(<span class="name">A</span>)</span><br><span class="line">                                    release(<span class="name">A</span>)</span><br><span class="line">s-lock(<span class="name">A</span>)</span><br><span class="line">read(<span class="name">A</span>)</span><br></pre></td></tr></table></figure>
-
-<p>容易看出，Ta先后申请并释放了两次A的锁，在这过程中，Tb修改了A的值，结果第二次对A的读取就是有问题的了。</p>
-<p>我们需要注意的是，即使遵守2PL，还可能会出现问题。考虑下面的Case</p>
-<figure class="highlight lisp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">Ta                                  Tb</span><br><span class="line">begin</span><br><span class="line">x-lock(<span class="name">A</span>)</span><br><span class="line">write(<span class="name">A</span>)</span><br><span class="line">read(<span class="name">B</span>)</span><br><span class="line">release(<span class="name">A</span>)</span><br><span class="line">                                    x-lock(<span class="name">A</span>)</span><br><span class="line">                                    read(<span class="name">A</span>)</span><br><span class="line">                                    write(<span class="name">A</span>)</span><br><span class="line">write(<span class="name">B</span>)</span><br><span class="line">release(<span class="name">B</span>)</span><br><span class="line">commit</span><br></pre></td></tr></table></figure>
-
-<p>Tb出现了RU的情况。如果此时Ta回滚，那么Tb也要回滚，这称为级联回滚。所以一般数据库会有S2PL和SS2PL，分别要求写锁和读写锁在事务Commit后再释放。</p>
-<p>数据库实现了死锁检测和死锁超时机制。以InnoDB为例，如果启动死锁检测(<code>innodb_lock_wait_timeout</code>)，那么会在死锁发生时会选择将持有最少行级X锁的事务进行回滚。当然也可以选择等待(<code>innodb_lock_wait_timeout</code>)超时。</p>
-<h2 id="意向锁"><a href="#意向锁" class="headerlink" title="意向锁"></a>意向锁</h2><p>数据库里面至少有表和行两个层级，我们考虑对某张表里面的一万行加锁，我们有锁表和分别锁一万行两个选择：</p>
+<p>2PL不能避免死锁。既然如此，为什么还需要引入2PL呢？</p>
 <ol>
-<li>表锁<br> 会降低并发度。</li>
-<li>行锁<br> 对内存的消耗比较大，同时大量时间会消耗在检查锁。</li>
+<li><p>2PL这里的顺序并不是锁的顺序，而是所有的加锁工作必须在解锁工作完成前完成，显然这不能避免死锁<br> 为了解决死锁问题，一个方案就是<strong>原子地</strong>获得所有的锁，这实际上破坏了占有且申请的条件。但这种办法对数据库来说很困难，因为它很难知道用户具体要那些资源，并且这样一次性锁协议牺牲了并发性。<br> 【Q】我们知道指定加锁顺序，例如先获取第一个锁，然后才能获取第二个锁，可以避免死锁；或者遍历链表的时候，始终沿着同一个方向遍历等。我们能设计出这样的加锁协议，从而避免死锁？</p>
+</li>
+<li><p>2PL的目的是为了保证<strong>可串行性</strong>，进而是为了保证隔离性。<br> 如果不满足2PL，那么可能破坏隔离性。考虑下面的Case</p>
+ <figure class="highlight gcode"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">Ta                                  Tb</span><br><span class="line">xl<span class="comment">(A)</span></span><br><span class="line">w<span class="comment">(A)</span></span><br><span class="line">u<span class="comment">(A)</span></span><br><span class="line">                                    xl<span class="comment">(A)</span></span><br><span class="line">                                    w<span class="comment">(A)</span></span><br><span class="line">                                    u<span class="comment">(A)</span></span><br><span class="line">sl<span class="comment">(A)</span></span><br><span class="line">r<span class="comment">(A)</span></span><br><span class="line">u<span class="comment">(A)</span></span><br></pre></td></tr></table></figure>
+
+<p> 容易看出，Ta先加写锁进行了写入，然后释放锁。Tb再加写锁进行了另一次写入。后面Ta重新加读锁进行了读取，此时Ta读到的不是自己刚写入的。事务的隔离性会被破坏。</p>
+</li>
 </ol>
-<p>意向锁的产生就是为了解决这个问题。意向锁要求如果对一个下层节点加锁，那么我们会对上层节点加意向锁。</p>
-<p>考虑一个数据表中有一些行正在被锁定，而现在试图加一个表级锁，这显然是要被阻塞的。但阻塞前我们需要遍历数据表的每一行才知道我们表中有些行被锁定了。为此意向锁要求在锁定行时对数据表也维护一个状态，表示当前数据表中有些行时被锁定的，因此你意向是获得表锁，那么请原地阻塞，别往下找了，现在是不可能的。<strong>这样在试图加表锁的时候，就不要逐一遍历检查是不是有行被锁住了</strong>。</p>
-<p>如果把上下层节点组合起来看，能组合成四种锁的类型即SIS、SIX、XIS、XIX。介绍如下：</p>
+<h4 id="通过等待度检测死锁"><a href="#通过等待度检测死锁" class="headerlink" title="通过等待度检测死锁"></a>通过等待度检测死锁</h4><h4 id="通过时间戳检测死锁"><a href="#通过时间戳检测死锁" class="headerlink" title="通过时间戳检测死锁"></a>通过时间戳检测死锁</h4><p>我们引入一个新的时间戳来解决死锁问题。这个时间戳不同于“基于时间戳的并发控制”中介绍的时间戳，例如当事务回滚后，并发控制的时间戳会重置为一个更晚的，但死锁检测的时间戳不会重置。<br>当事务T发现自己需要等待事务U的锁时，将会比较时间戳，并选择Wait-Die和Wound-Wait两种方案之一来执行：</p>
 <ol>
-<li>意向共享锁IS<br> 如果我们想对一行加S锁，那么我们先要对表加IS锁，表示我们对表中的某一行有加共享锁的意向。</li>
-<li>意向排它锁IX<br> 同理。如果我们发现一张表加了IX锁，说明里面有一或者若干行被X锁保护。</li>
-<li>共享意向排他锁SIX<br> 表明内部至少一个对象被X-Lock保护，并且自身被S-Lock保护。例如某个操作要全表扫描，并更改表中几行，可以给表加SIX。</li>
+<li>Wait-Die<br> 如果T比U老(时间戳小)，则T等待U；<br> 否则，T回滚</li>
+<li>Wound-Wait<br> 如果T比U老，它将主动“伤害”U，使U回滚，并放弃所有T需要的锁。<br> 否则，T等待U</li>
 </ol>
-<p>其他的一些锁的形式并不常见，原因是除了SIX之外其，他的锁并没有提高强度，实际上可以退化为一个表级锁或者行级锁。以SIS为例，我们要读取整个表，对表加S锁，然后要读取其中一行，对表加IS锁，实际上可以简化为一个对表加S锁的操作。</p>
-<h2 id="Wait-Die和Wound-Wait"><a href="#Wait-Die和Wound-Wait" class="headerlink" title="Wait-Die和Wound-Wait"></a>Wait-Die和Wound-Wait</h2><p>这两个策略都是用来解决在锁冲突时，如何<br>共同点：</p>
+<p>共同点：</p>
 <ol>
 <li>总是<strong>牺牲较新的事务</strong>，这里牺牲的意思就是<strong>回滚</strong><br> 这是因为老事务往往会持有较多的锁，并且作了不少对数据库的修改，<strong>回滚老事务的成本比较大</strong>。</li>
 <li>这个策略是公平的<br> 当事务重新开始的时候，应当保留自己的时间戳。<br> 最终，被牺牲的事务会变得足够老。</li>
@@ -637,26 +693,124 @@
 <li>Wait-Die会导致较多的回滚，但是这些回滚的事务只会进行很少的修改</li>
 <li>Wound-Wait会回滚较少的事务，但这些回滚事务可能已经进行了比较多的修改了</li>
 </ol>
-<h2 id="Timing-Order-T-O"><a href="#Timing-Order-T-O" class="headerlink" title="Timing Order(T/O)"></a>Timing Order(T/O)</h2><p>基于TO的并发事务控制，也就是给每个事务分配一个timestamp，用它来决定事务的执行顺序，其中timestamp较小的事务优先执行。这里的timestamp可以是物理时钟，也可以是逻辑时钟。</p>
-<p>下面我们<a href="https://zhuanlan.zhihu.com/p/130242140" target="_blank" rel="noopener">以Basic T/O为例</a>介绍。和MVCC类似，每条记录里面也要增加一些标记，这一次增加的是最近一次读和写记录X的事务的时间戳，记为WTS(X)和RTX(X)。我们再令当前事务的时间戳是TTS。</p>
+<h3 id="级联回滚"><a href="#级联回滚" class="headerlink" title="级联回滚"></a>级联回滚</h3><p>需要注意的是，即使遵守2PL，还可能会出现问题。考虑下面的Case</p>
+<figure class="highlight lisp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">Ta                                  Tb</span><br><span class="line">l(<span class="name">A</span>)</span><br><span class="line">r(<span class="name">A</span>)</span><br><span class="line">w(<span class="name">A</span>)</span><br><span class="line">l(<span class="name">B</span>)</span><br><span class="line">u(<span class="name">A</span>)</span><br><span class="line">                                    l(<span class="name">A</span>)</span><br><span class="line">                                    r(<span class="name">A</span>)</span><br><span class="line">                                    w(<span class="name">A</span>)</span><br><span class="line">                                    l(<span class="name">B</span>) // Will be rejected</span><br><span class="line">r(<span class="name">B</span>)</span><br><span class="line">w(<span class="name">B</span>)</span><br><span class="line">u(<span class="name">B</span>)</span><br><span class="line">                                    l(<span class="name">B</span>)</span><br><span class="line">                                    u(<span class="name">A</span>)</span><br><span class="line">                                    r(<span class="name">B</span>)</span><br></pre></td></tr></table></figure>
+
+<p>如果在获得B的锁后，Ta回滚，那么Tb也要回滚，否则Tb就RU了。这称为级联回滚。</p>
+<p>如果一个调度中的每个事务在它读取的所有事务提交之后再提交，那么这个调度是一个可恢复调度，也就是我们可以通过undo/redo日志来恢复事务。并且事务日志到达磁盘的顺序和它们被写入的顺序是一致的。例如下面的调度S1，如果对应日志在磁盘上的实际写入顺序是S1’，并且在c2之后磁盘立即断电，那么c2处于提交状态，而c1不是。</p>
+<figure class="highlight gcode"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">S<span class="number">1</span>: w<span class="number">1</span><span class="comment">(A)</span>; w<span class="number">1</span><span class="comment">(B; w2(A)</span>; r<span class="number">2</span><span class="comment">(B)</span>; c<span class="number">1</span>; c<span class="number">2</span></span><br><span class="line">S<span class="number">1</span><span class="string">': w1(A); w1(B; w2(A); r2(B); c2; c1</span></span><br></pre></td></tr></table></figure>
+
+<p>可恢复调度还是可能导致级联回滚，例如上面的调度中，T2读取了T1的写入，因此T2需要在T1之后提交。可以发现，级联回滚的原因是事务执行过程中脏读。所以我们不仅要T2的Commit在T1的Commit之后，还要T2的所有Read都在T1的Commit之后。因此我们有定义：如果调度中的事务只读取已提交事务写入的数据，则称这个事务为避免级联回滚调度(ACR)事务。易知每个ACR事务都是可恢复事务。</p>
+<h4 id="基于锁避免级联回滚"><a href="#基于锁避免级联回滚" class="headerlink" title="基于锁避免级联回滚"></a>基于锁避免级联回滚</h4><p>可以通过S2PL和SS2PL解决类似问题，它们分别要求写锁和读写锁在事务Commit后再释放。例如著名的Percolator，它就是S2PL，因为在Commit时才会清除lock列并设置write列。</p>
+<h4 id="基于时间戳不会产生级联回滚"><a href="#基于时间戳不会产生级联回滚" class="headerlink" title="基于时间戳不会产生级联回滚"></a>基于时间戳不会产生级联回滚</h4><p>在基于时间戳的方法中引入了提交位C(X)，从而禁止使用了脏数据的事务提交，因此这种模式下不会产生级联回滚。</p>
+<h3 id="其他的锁模式和相容矩阵"><a href="#其他的锁模式和相容矩阵" class="headerlink" title="其他的锁模式和相容矩阵"></a>其他的锁模式和相容矩阵</h3><ol>
+<li>共享锁S</li>
+<li>排它锁X</li>
+<li>更新锁U<br> 更新锁<code>uli(X)</code>能申请X的读锁，但是在稍后，能够升级自己为写锁。</li>
+<li>增量锁I<br> 有些写操作是可以交换的，例如<code>INC 3</code>和<code>INC 2</code>。但这些操作和读和其他的写是冲突的。</li>
+</ol>
+<p>相容矩阵表示在事务持有某些类型锁时，<strong>其他事务</strong>是否可以获得某些类型的锁。</p>
+<p><img src="/img/dbtrans/thematrix.png"></p>
+<h3 id="意向锁"><a href="#意向锁" class="headerlink" title="意向锁"></a>意向锁</h3><p>数据库里面至少有表和行两个层级，考虑对某张表里面的一万行加锁，我们有锁表和分别锁一万行两个选择：</p>
+<ol>
+<li>表锁<br> 会降低并发度。</li>
+<li>行锁<br> 对内存的消耗比较大，同时大量时间会消耗在检查锁。<br> 考虑一个数据表中有一些行正在被锁定，而现在试图加一个表级锁，这显然是要被阻塞的。但需要在遍历数据表的每一行才知道表中有行被锁定这个事实。</li>
+</ol>
+<p>意向锁的产生就是为了解决这个问题。意向锁要求在锁定行时对数据表也维护一个状态，表示当前数据表中有些行时被锁定的。如果对一个下层节点加锁，那么要先对上层节点加意向锁。比如你意向是获得表锁，那么请原地阻塞，别往下找了，现在是不可能的。<strong>这样在试图加表锁的时候，就不要逐一遍历检查是不是有行被锁住了</strong>。</p>
+<p>下图展示了意向锁的相容矩阵。可以看出，IS和IX锁彼此是相容的：如果我想读取某表下面的元素，我也没理由直接不让其他事务写这个表下面的元素。就算它们真的冲突，那也是到具体行的时候再判断。<br><img src="/img/dbtrans/theintentionmatrix.png"></p>
+<h4 id="意向锁的组模式"><a href="#意向锁的组模式" class="headerlink" title="意向锁的组模式"></a>意向锁的组模式</h4><p>可以发现，有一些锁是强于另一些锁的，例如X强于U、U强于S。但我们发现，IX和S相互不优于对方。事实上，同一个事务可以先后以S和IX锁住一个对象，比如它想要读表，然后写表中的某些行。既然S和IX是“平行”的，我们就有必要把上下层节点组合起来看了。这样能组合成四种锁的类型即SIS、SIX、XIS、XIX。介绍如下：</p>
+<ol>
+<li>意向共享锁IS<br> 如果我们想对一行加S锁，则先要对表加IS锁，表示我们对表中的某一行有加共享锁的意向。</li>
+<li>意向排它锁IX<br> 同理。如果我们发现一张表加了IX锁，说明里面有一或者若干行被X锁保护。</li>
+<li>共享意向排他锁SIX<br> 表明内部至少一个对象被X-Lock保护，并且自身被S-Lock保护。例如某个操作要全表扫描，并更改表中几行，可以给表加SIX。</li>
+</ol>
+<p>除了SIX之外，其他的一些锁的形式并不常见，原因是其他的锁并没有提高强度，实际上可以退化为一个表级锁或者行级锁。<br>以SIS为例，我们要读取整个表，对表加S锁，然后要读取其中一行，对表加IS锁，实际上可以简化为一个对表加S锁的操作。</p>
+<h4 id="幻读与意向锁"><a href="#幻读与意向锁" class="headerlink" title="幻读与意向锁"></a>幻读与意向锁</h4><p>TODO</p>
+<h2 id="基于时间戳的并发控制"><a href="#基于时间戳的并发控制" class="headerlink" title="基于时间戳的并发控制"></a>基于时间戳的并发控制</h2><p>基于时间戳的并发事务控制，需要在事务开始时分配一个时间戳TS来决定事务的执行顺序，其中TS较小的事务优先执行。这里的TS可以是物理时钟，也可以是逻辑时钟，只要保证开始较晚的事务总是有一个更大的时间戳。<br>对于每一个元素X，记录：</p>
+<ol>
+<li>RT(X)，为最新的读时间戳</li>
+<li>WT(X)，为最新的写时间戳</li>
+<li>C(X)，表示最新的写事务是否已经提交<br> 这个虽然很奇怪，但是必要的。假定事务T读取了事务U的写入，但U中止了，我们需要<strong>通过C来避免脏读</strong>。</li>
+</ol>
+<h3 id="基本情况讨论"><a href="#基本情况讨论" class="headerlink" title="基本情况讨论"></a>基本情况讨论</h3><p>我们的判断是以当前事务的开启时间TS，和X的RT、WT、C比较。</p>
+<p>虽然时间戳表明了事务的先后关系，但因为事务执行是一个过程，<strong>具体到事务中的单个读写动作就未必恰巧等于TS</strong>，这可能会导致下面两种情况：</p>
+<ol>
+<li>late read<br> 考虑读事务TS(T)正在读取数据库元素X，如果TS(T) &lt; WT(X)，说明目前X的值是在事务T之后(被某个更新的事务)写入的，事务T不应该读到该值。<br> 如下图所示，U在T后开始，理论上T应该读不到U的写入。但现在T的读取被后延了，因此T别无选择，只能看到U写入之后的这个值。对于这种情况，如果没有MVCC做快照读，则只能中止T。<br> <img src="/img/dbtrans/tolateread.png"></li>
+<li>late write<br> 考虑写事务TS(T)正在写入数据库元素X，如果WT(X) &lt; TS(T) &lt; RT(X)，其中WT(X)表示TS(T)之前的一个写入，RT(X)表示TS(T)之后的一个读取。那么RT(X)不应该读到WT(X)写入的值。<br> 如下图所示，U在T之后开始，理论上U应该读到T的写入。但现在T的写入被后延了。因为在T准备写入时发现TS(T) &lt; RT(X)，说明自己的写入会被后面的事务U读取；并且WT(X) &lt; TS(T)，说明自己的写入是最新的。为了能让U读取到WT(X)的值，T同样需要被中止。<br> 特别地，如果我们不中止事务，则可能会破坏RR约束。因为TS(T) &lt; RT(X)，说明U会读取，并且<strong>可能已经读取</strong>了一次X的值了，如果T修改了，然后U再次读取，就会读到一个不一样的值，从而破坏RR。<br> <img src="/img/dbtrans/tolatewrite.png"></li>
+</ol>
+<p>下面还有两种脏读的情况：</p>
+<ol>
+<li>读到最终被中止事务写入的值<br> 如下图所示，如果U最终没被中止，T应该读到U的写入，这是因为TS(T) &gt; WT(X)。<br> <img src="/img/dbtrans/dirtyreadtime.png"></li>
+<li>Thomas写法则(即忽略过时的写入)的例外情况<br> 如下图所示，事务U在事务T之后开启，但是U却在T之前写了X。我感觉这其实也是一个late write的情况，因为TS(T) &lt; WT(X)，但却没有在之前讨论到。根据Thomas法则，此时T应该什么也不做。<br> 显然不会有一个事务V想要读T的值，却读到了U的。因为如果V想要读T，就会满足TS(V) &lt; WT(U)，而这就是个late read，所以这样的V会被终止。<br> Thomas法则的一个问题是如果后续U被中止了，那么它的写入X应该被回滚，恢复到之前的值，也就是T的写入。但这是不可能的，因为T跳过写入就提交了。<br> <img src="/img/dbtrans/dirtyreadtime2.png"><br> <del>为了解决该问题，有一个思路是让T的写变成尝试性的，也就是设置C(X)位为false，并缓存一份之前的X和WT(X)，方便在T中止时撤销。【Q】其实我不太懂这个方案为什么解决了问题，也许这里的T应该改为U，还是看下面的具体方案吧。</del></li>
+</ol>
+<h3 id="Timing-Order-T-O"><a href="#Timing-Order-T-O" class="headerlink" title="Timing Order(T/O)"></a>Timing Order(T/O)</h3><p>下面<a href="https://zhuanlan.zhihu.com/p/130242140" target="_blank" rel="noopener">基于Basic T/O</a>构建一个基于时间戳的管理机制。令当前事务开启的时间戳是TS(T)。</p>
 <p>考虑读：</p>
 <ol>
-<li>TTS &lt; WTS(X)<br> 即有一个比TTS更新的事务写了X记录。那么这个X对TTS是不可见的，我们要abort掉TTS。</li>
-<li>TTS &gt; WTS(X)<br> 记录X对事务TTS是可见的，更新RTS(X) = max(TTS, RTS(X))。</li>
+<li>TS(T) &lt; WT(X)<br> 即late read情况，需要abort掉。稍后可以以一个更大的时间戳来重启这个事务。</li>
+<li>TS(T) &gt;= WT(X)<br> 记录X对事务TS是可见的，但还需要考虑C(X)：<ol>
+<li>如果C(X)为true，同意请求并更新RT(X) = max(TS(T), RT(X))。</li>
+<li>如果C(X)为false，则需要等到C(X)变成true，或者写X的事务中止(【Q】好奇这个如何判断)。</li>
+</ol>
+</li>
 </ol>
 <p>考虑写：</p>
 <ol>
-<li>TTS &lt; WTS(X)或TTS &lt; RTS(X)<br> 需要abort掉。<br> 为什么要求TTS大于WTS(X)呢？这个很简单，我们不能覆盖更新的写。<br> 为什么要求TTS大于RTS(X)呢？我们不妨思考什么时候出现TTS &lt; RTS(X)这个情况？这说明在这个事务之后，有事务(令为Tb)已经读取了X的值了。如果我现在修改X的值，就会破坏RR的约束。因为如果Tb再次读X，会发现和之前的结果是不一样的。</li>
-<li>否则<br> 可写，并且更新WTS(X) = TTS</li>
+<li>TS(T) &lt; RT(X)<br> 即late write的情况之一，需要abort掉。稍后可以以一个更大的时间戳来重启这个事务。</li>
+<li>如果TS(T) &gt;= RT(X)，但TS(T) &lt; WT(X)<br> 即late write的情况之一，也可以abort掉。但考虑Thomas写法则，其实原则上是可以写的，此时需要检查C(X)：<ol>
+<li>为true，说明之前的事务(比如例子中的U)已经提交了，我们可以放心地跳过写。</li>
+<li>为false，我们必须等待其变成true，或者事务中止。</li>
 </ol>
-<h2 id="OCC"><a href="#OCC" class="headerlink" title="OCC"></a>OCC</h2><h2 id="MVCC"><a href="#MVCC" class="headerlink" title="MVCC"></a>MVCC</h2><p>多版本并发控制(Multi-Version Concurrency Control, MVCC)是相对于单版本的概念， 有不同方式的实现，如基于锁的MV2PL，基于时间戳的MVTO，基于乐观并发控制(Optimistic Concurrency Control, OCC)的MVOCC。MVCC是为了提高数据库的读性能产生的一种思路，是一种<a href="https://www.zhihu.com/question/27876575" target="_blank" rel="noopener">解决读写冲突的无锁并发控制方式</a>。</p>
-<p>根据<a href="https://zh.wikipedia.org/wiki/%E5%A4%9A%E7%89%88%E6%9C%AC%E5%B9%B6%E5%8F%91%E6%8E%A7%E5%88%B6" target="_blank" rel="noopener">Wikipedia</a>，MVCC意图解决<strong>读写锁</strong>造成的多个、长时间的<strong>读操作饿死写操作</strong>问题。<br>每个事务读到的数据项都是一个snapshot并依赖于实现的隔离级别。写操作不覆盖已有数据项，而是创建一个新的版本，直至所在操作提交时才变为可见。快照隔离使得事务看到它启动时的数据状态。</p>
+</li>
+<li>否则(即TS(T) &gt;= RT(X)且TS(T) &gt;= WT(X))<br> 可写，写入新值，更新WT(X) = TS(T)，<strong>更新C(X)为false</strong>。</li>
+</ol>
+<p>考虑事务提交：</p>
+<ol>
+<li>将C(X)改为true</li>
+<li>让所有pending的事务继续执行</li>
+</ol>
+<h3 id="MVTO"><a href="#MVTO" class="headerlink" title="MVTO"></a>MVTO</h3><p>其实MVTO的思路反而更显然：</p>
+<ol>
+<li>当一个<strong>合法的</strong>写wT(X)发生时，创建一个新的版本的X，令Xt，其中t为TS(T)<br> 注意，这里就不维护真实的写入时间了，而是认为写入原子地发生在事务开始的那一刻。</li>
+<li>当读发生时rT(X)发生时，找到满足t &lt;= TS(T)的最大t对应的Xt对应的值</li>
+<li>判断不合法的写<br> 考虑t=80的事务正在读取X，并且选择了t=50的版本。如果此时有个t=60的事务打算写入，则这个事务会被中止。因为如果它可以执行，那么它的写入应当被t=80读到，但并没有。</li>
+<li>删除旧版本Xt<br> 如果t小于所有活跃事务的TS，则可以删除这个版本。</li>
+</ol>
+<h2 id="基于有效性确认的并发控制"><a href="#基于有效性确认的并发控制" class="headerlink" title="基于有效性确认的并发控制"></a>基于有效性确认的并发控制</h2><p>对于事务T，需要维护其写集合WS(T)和读集合RS(T)。分为三个阶段：</p>
+<ol>
+<li>读<br> 这个阶段会读入RS(T)中所有的元素，并将WS(T)写入到临时存储中。</li>
+<li>有效性确认</li>
+<li>写</li>
+</ol>
+<p>我们在全局维护三个事务的集合：</p>
+<ol>
+<li>START<br> 记录每个事务T的开始时间START(T)。</li>
+<li>VAL<br> 记录每个事务T的开始时间START(T)和验证时间VAL(T)。<br> 注意，每个成功的事务<strong>是在有效性确认的那一刻执行的</strong>。所以VAL(T)可以认为是执行时间。</li>
+<li>FIN<br> 记录所有已经完成的事务。<br> 如果对于任意的活跃事务U，START(U) &gt; FIN(T)，则事务T就可以从FIN中被GC掉。</li>
+</ol>
+<p>和基于时间戳的并发控制一样，也需要检查一些问题：</p>
+<ol>
+<li>T读U的写，U已经经过VAL，但还没完成FIN阶段<br> 如下图所示，因为U在T前面进行了VAL，所以理论上应该U先写X，T后读X。但可能在实际上T先读X，U后写X。所以，其实我们不能判断T究竟读到了什么。因此，我们需要在这种情况下回滚T。<br> <img src="/img/dbtrans/occp1.png"><br> 如果U在T的START之前完成VAL-&gt;FIN，那么就不会有冲突。所以，在对T进行有效性验证时，需要检查FIN(U) &gt; START(T)且RS(T) ∩ WS(U) != ∅的所有的U。如果存在，则有效性验证不通过，需要回滚T。</li>
+<li>T和U同时写一个对象，U已经经过VAL，但在V经过VAL之前还没完成FIN阶段。<br> 如下图所示，从VAL的时刻来看，应该U在T之前写，但实际上T在U之前写。<br> <img src="/img/dbtrans/occp2.png"><br> 如果U在T的VAL之前完成VAL-&gt;FIN，那么就不会有冲突。所以，在对T进行有效性验证时，需要检查FIN(U) &gt; VAL(T)且WS(T) ∩ WS(U) != ∅的所有的U。如果存在，则有效性验证不通过，需要回滚T。</li>
+</ol>
+<h3 id="OCC"><a href="#OCC" class="headerlink" title="OCC"></a>OCC</h3><h2 id="MVCC"><a href="#MVCC" class="headerlink" title="MVCC"></a>MVCC</h2><p>多版本并发控制(Multi-Version Concurrency Control, MVCC)是相对于单版本的概念，而不是一种全新的并发控制方式。和单版本一样，MVCC有不同方式的实现，如基于锁的MV2PL，基于时间戳的MVTO，基于乐观并发控制的MVOCC。</p>
+<p>MVCC是一种<a href="https://www.zhihu.com/question/27876575" target="_blank" rel="noopener">解决读写冲突的无锁并发控制方式</a>，它的目的是<strong>提高读性能</strong>。</p>
+<p><a href="https://zh.wikipedia.org/wiki/%E5%A4%9A%E7%89%88%E6%9C%AC%E5%B9%B6%E5%8F%91%E6%8E%A7%E5%88%B6" target="_blank" rel="noopener">根据Wikipedia</a>，MVCC意图解决<strong>读写锁</strong>造成的多个、长时间的<strong>读操作饿死写操作</strong>问题。每个事务读到的数据项都是一个Snapshot并依赖于实现的隔离级别。写操作<strong>不覆盖已有数据项，而是创建一个新的版本</strong>，直至所在操作<strong>提交时才变为可见</strong>。快照隔离使得事务看到它启动时的数据状态。</p>
 <p>具体来说：</p>
 <ol>
 <li>当事务Ti读取对象P时，只有比Ti时间戳更早的最新对象版本是可见的。</li>
-<li>当事务Ti写入对象P时，如果Tk要写同一对象，那么Ti必须早于Tk才能成功。【Q】这个说法就很奇怪，那对称地，Tk不是也要早于Ti么？</li>
+<li>当事务Ti写入对象P时，如果Tk要写同一对象，那么Ti必须早于Tk才能成功。</li>
 </ol>
-<h3 id="MVCC实现-InnoDB"><a href="#MVCC实现-InnoDB" class="headerlink" title="MVCC实现(InnoDB)"></a>MVCC实现(InnoDB)</h3><p>我们主要讨论RC和RR下的MVCC。至少对于InnoDB而言，RU和S是不兼容MVCC的。容易想到，RU始终读取最新的记录，并不需要考虑版本，而S默认要加锁，并不需要考虑并发。</p>
+<h3 id="快照读与当前读"><a href="#快照读与当前读" class="headerlink" title="快照读与当前读"></a>快照读与当前读</h3><p>在MySQL中，<strong>不加锁的读是快照读</strong>，只会读取到事务开始前的数据，以及事务过程中插入的数据。</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">SELECT</span> * <span class="keyword">FROM</span> t <span class="keyword">WHERE</span> <span class="keyword">id</span>=<span class="number">1</span></span><br></pre></td></tr></table></figure>
+
+<p><strong>加锁的读是当前读</strong>，表示读的最新数据</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">SELECT</span> * <span class="keyword">FROM</span> t <span class="keyword">WHERE</span> <span class="keyword">id</span>=<span class="number">1</span> <span class="keyword">LOCK</span> <span class="keyword">IN</span> <span class="keyword">SHARE</span> <span class="keyword">MODE</span>;</span><br><span class="line"><span class="keyword">SELECT</span> * <span class="keyword">FROM</span> t <span class="keyword">WHERE</span> <span class="keyword">id</span>=<span class="number">1</span> <span class="keyword">FOR</span> <span class="keyword">UPDATE</span>;</span><br></pre></td></tr></table></figure>
+
+<h3 id="MVCC实现-InnoDB"><a href="#MVCC实现-InnoDB" class="headerlink" title="MVCC实现(InnoDB)"></a>MVCC实现(InnoDB)</h3><p>我们主要讨论RC和RR下的MVCC。至少对于InnoDB而言，RU和S是不兼容MVCC的，这是因为：</p>
+<ol>
+<li>RU始终读取最新的记录，并不需要考虑版本</li>
+<li>S默认要加锁，并不需要考虑并发</li>
+</ol>
 <h4 id="记录结构"><a href="#记录结构" class="headerlink" title="记录结构"></a>记录结构</h4><p>在使用MVCC时，InnoDB需要对每一条记录多存储一些字段：</p>
 <ol>
 <li><code>trx_id</code><br> 标记最近一次修改这个记录的事务的ID。</li>
@@ -670,20 +824,20 @@
 <li>写UNDO</li>
 <li>实际修改Record<br> 除了修改值之外，还需要修改<code>trx_id</code>指向当前事务，修改<code>db_roll_ptr</code>指向UNDO。</li>
 </ol>
-<h4 id="RC下的MVCC"><a href="#RC下的MVCC" class="headerlink" title="RC下的MVCC"></a>RC下的MVCC</h4><p><strong>【首先介绍观察一致性快照的可见性规则】</strong>，具体来说，就是当事务在<strong>读取</strong>时，通过它的事务ID，决定哪些对象<strong>对它来说</strong>是可见的，哪些对象是不可见的。基本原则是：</p>
+<h4 id="观察一致性快照的可见性规则"><a href="#观察一致性快照的可见性规则" class="headerlink" title="观察一致性快照的可见性规则"></a>观察一致性快照的可见性规则</h4><p>当事务在<strong>读取</strong>时，通过它的事务ID，决定哪些对象<strong>对它来说</strong>是可见的，哪些对象是不可见的。<br>基本原则是：</p>
 <ol>
-<li>【原则1】在事务开始时列出所有活跃事务（尚未commit或者abort）的列表。我们要忽略这些事务的提交。</li>
+<li>【原则1】在事务开始时的所有活跃事务的提交要被忽略。<br> 活跃事务指的是尚未commit或者abort的事务。</li>
 <li>【原则2】所有被abort的事务的写入要被忽略。</li>
 <li>【原则3】所有在当前事务创建之后创建的事务的写入都需要被忽略。</li>
 <li>【原则4】所有其他写入可见。</li>
 </ol>
-<p>根据上面说的原则，下面列出具体的实现方案。在ReadView中维护一个列表<code>m_ids</code>，里面存放了所有当前活跃事务的ID，可以和每条记录里面的<code>trx_id</code>对应，其中<code>trx_id</code>能够代表事务开启的先后顺序。令其中最小值是low，最大值是up。<br>假设我们现在需要访问某一条记录，我们根据活跃事务集的范围[low,up]进行一次初筛，对于<strong>可能落在活跃事务集</strong>中的，在进行一次细筛。如下所示</p>
+<h4 id="RC下的MVCC"><a href="#RC下的MVCC" class="headerlink" title="RC下的MVCC"></a>RC下的MVCC</h4><p>相比于记录ST和CT，这里记录的是ST以及是否提交。</p>
+<p>在RC下，每一个SELECT都会生成一个ReadView。在ReadView中维护一个列表<code>m_ids</code>，里面存放了所有当前活跃事务的ID，可以和每条记录里面的<code>trx_id</code>对应，其中<code>trx_id</code>能够代表事务开启的先后顺序，可以简单理解为时间戳。令其中最小值是low，最大值是up。<br>假设我们现在需要访问某一条记录，我们根据活跃事务集的范围<code>[low,up]</code>进行一次初筛，对于<strong>可能落在活跃事务集</strong>中的，再进行一次细筛。如下所示</p>
 <ol>
 <li>被访问的<code>trx_id</code>小于low<br> 说明生成该版本的事务在ReadView创建前就提交了，所以可以被访问。</li>
-<li>被访问的<code>trx_id</code>大于up<br> 对应了【原则3】<br> 说明该事务在ReadView创建后在生成，所以不能被当前事务访问。需要通过Undo Log找到上一个版本，再判断一次可见性。<br> 【Q】这个规则有点奇怪，例如对于上面的Case1而言，这里应该是返回新值的。但这个规则导致新值不能被使用。</li>
+<li>被访问的<code>trx_id</code>大于up<br> 对应了【原则3】<br> 说明该事务在ReadView创建后才生成，所以不能被当前事务访问。需要通过Undo Log找到上一个版本，再判断一次可见性。<br> 【Q】这个规则有点奇怪，例如对于上面的Case1而言，这里应该是返回新值的，这个规则是否导致新值不能被使用呢？答案是不会，因为每个SELECT都会生成一个ReadView。</li>
 <li>如果<code>trx_id</code>落在<code>[low,up]</code>之间<br> 【细筛】<br> 需要判断<code>trx_id</code>是不是在<code>m_ids</code>中。<br> 如果在，说明在ReadView创建时，生成这个版本对应的事务还是活跃的。因此不能访问，需要回溯Undo Log。<br> 否则，说明在创建时，这个事务已经提交了。【Q】那为啥<code>trx_id</code>还会落在low和up之间呢？我想可能是因为这个事务非常短，例如同时有123事务开启，然后2就结束了，但是1和3一直延续到ReadView创建时。</li>
 </ol>
-<p>在RC下，每一个SELECT都会生成一个ReadView。</p>
 <h4 id="RR下的MVCC"><a href="#RR下的MVCC" class="headerlink" title="RR下的MVCC"></a>RR下的MVCC</h4><p>在RR下，在第一次读的时候创建一个ReadView，在创建ReadView之后，即使有其他事务提交，也不会对ReadView的内容造成影响。</p>
 <p>例如，事务Ta的ID是200，在没有提交时，事务Tb开始查询。假如事务Tb的ID是300，此时生成ReadView的<code>m_ids</code>为<code>[200,300]</code>。那么一直到这个事务结束前，<code>m_ids</code>都不变化了。假设现在Ta提交了，但由于它的ID在<code>m_ids</code>中，所以事务Tb还是只能回溯访问版本链中的记录，对应的值是10。</p>
 <h4 id="S下的MVCC"><a href="#S下的MVCC" class="headerlink" title="S下的MVCC"></a>S下的MVCC</h4><p>不需要MVCC，因为一定要加锁了。</p>
@@ -701,6 +855,9 @@
 <li>DDIA<br> DDIA对事务隔离的论述，在事务章节中</li>
 <li><a href="https://developer.aliyun.com/article/77965" target="_blank" rel="noopener">https://developer.aliyun.com/article/77965</a><br> 对A Critique of ANSI SQL Isolation Levels这篇论文的翻译</li>
 <li><a href="https://cloud.tencent.com/developer/news/330343" target="_blank" rel="noopener">https://cloud.tencent.com/developer/news/330343</a><br> 介绍了各个isolation 问题</li>
+<li>On Optimistic Methods for Concurrency Control<br> OCC的提出，基于时间戳的方法</li>
+<li><a href="https://caroly.fun/archives/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%93%E4%BA%94" target="_blank" rel="noopener">https://caroly.fun/archives/%E5%88%86%E5%B8%83%E5%BC%8F%E6%95%B0%E6%8D%AE%E5%BA%93%E4%BA%94</a><br> 分布式数据库</li>
+<li>数据库系统实现（第二版）</li>
 </ol>
 
       
@@ -749,14 +906,6 @@
     </div>
 
     <footer class="post-footer">
-      
-        <div class="post-tags">
-          
-            <a href="/tags/数据库/" rel="tag"># 数据库</a>
-          
-            <a href="/tags/事务/" rel="tag"># 事务</a>
-          
-        </div>
       
 
       
@@ -867,15 +1016,6 @@
           
 
           
-            
-            
-            <div class="site-state-item site-state-tags">
-              <a href="/tags/index.html">
-                <span class="site-state-item-count">161</span>
-                <span class="site-state-item-name">标签</span>
-              </a>
-            </div>
-          
 
         </nav>
 
@@ -964,7 +1104,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#两种事务控制模型"><span class="nav-number">1.</span> <span class="nav-text">两种事务控制模型</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#ACID"><span class="nav-number">1.1.</span> <span class="nav-text">ACID</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#BASE"><span class="nav-number">1.2.</span> <span class="nav-text">BASE</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#分布式事务"><span class="nav-number">2.</span> <span class="nav-text">分布式事务</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#单对象事务和多对象事务"><span class="nav-number">2.1.</span> <span class="nav-text">单对象事务和多对象事务</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#故障恢复"><span class="nav-number">3.</span> <span class="nav-text">故障恢复</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#WAL"><span class="nav-number">3.1.</span> <span class="nav-text">WAL</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Shadow-paging"><span class="nav-number">3.2.</span> <span class="nav-text">Shadow paging</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#事务更新的两条规则"><span class="nav-number">3.3.</span> <span class="nav-text">事务更新的两条规则</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#提交规则"><span class="nav-number">3.3.1.</span> <span class="nav-text">提交规则</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#先记后写规则"><span class="nav-number">3.3.2.</span> <span class="nav-text">先记后写规则</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#事务的隔离等级"><span class="nav-number">4.</span> <span class="nav-text">事务的隔离等级</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#简写符号"><span class="nav-number">4.1.</span> <span class="nav-text">简写符号</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#常见并发问题"><span class="nav-number">4.2.</span> <span class="nav-text">常见并发问题</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#【P1】脏读-Dirty-Read"><span class="nav-number">4.2.1.</span> <span class="nav-text">【P1】脏读(Dirty Read)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#【P0】脏写-Dirty-Write"><span class="nav-number">4.2.2.</span> <span class="nav-text">【P0】脏写(Dirty Write)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#【P4】写丢失-丢失更新-Lost-Update"><span class="nav-number">4.2.3.</span> <span class="nav-text">【P4】写丢失/丢失更新(Lost Update)</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#回滚丢失"><span class="nav-number">4.2.3.1.</span> <span class="nav-text">回滚丢失</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#覆盖丢失-两次更新"><span class="nav-number">4.2.3.2.</span> <span class="nav-text">覆盖丢失/两次更新</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#【P4C】Cursor-Lost-Update"><span class="nav-number">4.2.4.</span> <span class="nav-text">【P4C】Cursor Lost Update</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#【P2】不可重复读-Fuzzy-Read"><span class="nav-number">4.2.5.</span> <span class="nav-text">【P2】不可重复读(Fuzzy Read)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#【A5A】读偏差"><span class="nav-number">4.2.6.</span> <span class="nav-text">【A5A】读偏差</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#【A5B】写偏差-Write-Skew"><span class="nav-number">4.2.7.</span> <span class="nav-text">【A5B】写偏差(Write Skew)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#【P3】幻读"><span class="nav-number">4.2.8.</span> <span class="nav-text">【P3】幻读</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#介绍"><span class="nav-number">4.3.</span> <span class="nav-text">介绍</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Read-uncommitted-RU"><span class="nav-number">4.3.1.</span> <span class="nav-text">Read uncommitted(RU)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Read-committed-RC"><span class="nav-number">4.3.2.</span> <span class="nav-text">Read committed(RC)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Repeatable-Read-RR"><span class="nav-number">4.3.3.</span> <span class="nav-text">Repeatable Read(RR)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Snapshot-Isolation-SI"><span class="nav-number">4.3.4.</span> <span class="nav-text">Snapshot Isolation(SI)</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#RR和SI的区别和联系"><span class="nav-number">4.3.4.1.</span> <span class="nav-text">RR和SI的区别和联系</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#MVCC和SI的区别和联系"><span class="nav-number">4.3.4.2.</span> <span class="nav-text">MVCC和SI的区别和联系</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Serial-Snapshot-Isolation-SSI"><span class="nav-number">4.3.4.3.</span> <span class="nav-text">Serial Snapshot Isolation(SSI)</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Serializable-S"><span class="nav-number">4.3.5.</span> <span class="nav-text">Serializable(S)</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Demo"><span class="nav-number">4.4.</span> <span class="nav-text">Demo</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#并发事务控制"><span class="nav-number">5.</span> <span class="nav-text">并发事务控制</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#可串行性和冲突可串行性-Conflict-Serializability"><span class="nav-number">5.1.</span> <span class="nav-text">可串行性和冲突可串行性(Conflict Serializability)</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2PL"><span class="nav-number">5.2.</span> <span class="nav-text">2PL</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#意向锁"><span class="nav-number">5.3.</span> <span class="nav-text">意向锁</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Wait-Die和Wound-Wait"><span class="nav-number">5.4.</span> <span class="nav-text">Wait-Die和Wound-Wait</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Timing-Order-T-O"><span class="nav-number">5.5.</span> <span class="nav-text">Timing Order(T/O)</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#OCC"><span class="nav-number">5.6.</span> <span class="nav-text">OCC</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#MVCC"><span class="nav-number">5.7.</span> <span class="nav-text">MVCC</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#MVCC实现-InnoDB"><span class="nav-number">5.7.1.</span> <span class="nav-text">MVCC实现(InnoDB)</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#记录结构"><span class="nav-number">5.7.1.1.</span> <span class="nav-text">记录结构</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#RC下的MVCC"><span class="nav-number">5.7.1.2.</span> <span class="nav-text">RC下的MVCC</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#RR下的MVCC"><span class="nav-number">5.7.1.3.</span> <span class="nav-text">RR下的MVCC</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#S下的MVCC"><span class="nav-number">5.7.1.4.</span> <span class="nav-text">S下的MVCC</span></a></li></ol></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">6.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#两种事务控制模型"><span class="nav-number">1.</span> <span class="nav-text">两种事务控制模型</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#ACID"><span class="nav-number">1.1.</span> <span class="nav-text">ACID</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#BASE"><span class="nav-number">1.2.</span> <span class="nav-text">BASE</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#分布式事务"><span class="nav-number">2.</span> <span class="nav-text">分布式事务</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#单对象事务和多对象事务"><span class="nav-number">2.1.</span> <span class="nav-text">单对象事务和多对象事务</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#故障恢复"><span class="nav-number">3.</span> <span class="nav-text">故障恢复</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#WAL"><span class="nav-number">3.1.</span> <span class="nav-text">WAL</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Shadow-paging"><span class="nav-number">3.2.</span> <span class="nav-text">Shadow paging</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#事务更新的两条规则"><span class="nav-number">3.3.</span> <span class="nav-text">事务更新的两条规则</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#提交规则"><span class="nav-number">3.3.1.</span> <span class="nav-text">提交规则</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#先记后写规则"><span class="nav-number">3.3.2.</span> <span class="nav-text">先记后写规则</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#事务的隔离等级"><span class="nav-number">4.</span> <span class="nav-text">事务的隔离等级</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#简写符号"><span class="nav-number">4.1.</span> <span class="nav-text">简写符号</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#常见并发问题"><span class="nav-number">4.2.</span> <span class="nav-text">常见并发问题</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#【P1】脏读-Dirty-Read"><span class="nav-number">4.2.1.</span> <span class="nav-text">【P1】脏读(Dirty Read)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#【P0】脏写-Dirty-Write"><span class="nav-number">4.2.2.</span> <span class="nav-text">【P0】脏写(Dirty Write)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#【P4】写丢失-丢失更新-Lost-Update"><span class="nav-number">4.2.3.</span> <span class="nav-text">【P4】写丢失/丢失更新(Lost Update)</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#回滚丢失"><span class="nav-number">4.2.3.1.</span> <span class="nav-text">回滚丢失</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#覆盖丢失-两次更新"><span class="nav-number">4.2.3.2.</span> <span class="nav-text">覆盖丢失/两次更新</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#【P4C】Cursor-Lost-Update"><span class="nav-number">4.2.4.</span> <span class="nav-text">【P4C】Cursor Lost Update</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#【P2】不可重复读-Fuzzy-Read"><span class="nav-number">4.2.5.</span> <span class="nav-text">【P2】不可重复读(Fuzzy Read)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#【A5A】读偏差"><span class="nav-number">4.2.6.</span> <span class="nav-text">【A5A】读偏差</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#【A5B】写偏差-Write-Skew"><span class="nav-number">4.2.7.</span> <span class="nav-text">【A5B】写偏差(Write Skew)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#【P3】幻读"><span class="nav-number">4.2.8.</span> <span class="nav-text">【P3】幻读</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#介绍"><span class="nav-number">4.3.</span> <span class="nav-text">介绍</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Read-uncommitted-RU"><span class="nav-number">4.3.1.</span> <span class="nav-text">Read uncommitted(RU)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Read-committed-RC"><span class="nav-number">4.3.2.</span> <span class="nav-text">Read committed(RC)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Repeatable-Read-RR"><span class="nav-number">4.3.3.</span> <span class="nav-text">Repeatable Read(RR)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Snapshot-Isolation-SI"><span class="nav-number">4.3.4.</span> <span class="nav-text">Snapshot Isolation(SI)</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#RR和SI的区别和联系"><span class="nav-number">4.3.4.1.</span> <span class="nav-text">RR和SI的区别和联系</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#MVCC和SI的区别和联系"><span class="nav-number">4.3.4.2.</span> <span class="nav-text">MVCC和SI的区别和联系</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Serial-Snapshot-Isolation-SSI"><span class="nav-number">4.3.4.3.</span> <span class="nav-text">Serial Snapshot Isolation(SSI)</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Serializable-S"><span class="nav-number">4.3.5.</span> <span class="nav-text">Serializable(S)</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Demo"><span class="nav-number">4.4.</span> <span class="nav-text">Demo</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#并发事务控制"><span class="nav-number">5.</span> <span class="nav-text">并发事务控制</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#记号"><span class="nav-number">5.1.</span> <span class="nav-text">记号</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#调度"><span class="nav-number">5.2.</span> <span class="nav-text">调度</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#串行调度"><span class="nav-number">5.2.1.</span> <span class="nav-text">串行调度</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#可串行性"><span class="nav-number">5.2.2.</span> <span class="nav-text">可串行性</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#冲突操作"><span class="nav-number">5.2.3.</span> <span class="nav-text">冲突操作</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#冲突可串行性-Conflict-Serializability"><span class="nav-number">5.2.4.</span> <span class="nav-text">冲突可串行性(Conflict Serializability)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#冲突可串行化是一个更强的条件"><span class="nav-number">5.2.5.</span> <span class="nav-text">冲突可串行化是一个更强的条件</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#优先图"><span class="nav-number">5.2.6.</span> <span class="nav-text">优先图</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#基于锁的并发控制"><span class="nav-number">5.3.</span> <span class="nav-text">基于锁的并发控制</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#2PL"><span class="nav-number">5.3.1.</span> <span class="nav-text">2PL</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2PL可串行性的证明"><span class="nav-number">5.3.2.</span> <span class="nav-text">2PL可串行性的证明</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#死锁"><span class="nav-number">5.3.3.</span> <span class="nav-text">死锁</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#2PL不能避免死锁"><span class="nav-number">5.3.3.1.</span> <span class="nav-text">2PL不能避免死锁</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#通过等待度检测死锁"><span class="nav-number">5.3.3.2.</span> <span class="nav-text">通过等待度检测死锁</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#通过时间戳检测死锁"><span class="nav-number">5.3.3.3.</span> <span class="nav-text">通过时间戳检测死锁</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#级联回滚"><span class="nav-number">5.3.4.</span> <span class="nav-text">级联回滚</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#基于锁避免级联回滚"><span class="nav-number">5.3.4.1.</span> <span class="nav-text">基于锁避免级联回滚</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#基于时间戳不会产生级联回滚"><span class="nav-number">5.3.4.2.</span> <span class="nav-text">基于时间戳不会产生级联回滚</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#其他的锁模式和相容矩阵"><span class="nav-number">5.3.5.</span> <span class="nav-text">其他的锁模式和相容矩阵</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#意向锁"><span class="nav-number">5.3.6.</span> <span class="nav-text">意向锁</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#意向锁的组模式"><span class="nav-number">5.3.6.1.</span> <span class="nav-text">意向锁的组模式</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#幻读与意向锁"><span class="nav-number">5.3.6.2.</span> <span class="nav-text">幻读与意向锁</span></a></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#基于时间戳的并发控制"><span class="nav-number">5.4.</span> <span class="nav-text">基于时间戳的并发控制</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#基本情况讨论"><span class="nav-number">5.4.1.</span> <span class="nav-text">基本情况讨论</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Timing-Order-T-O"><span class="nav-number">5.4.2.</span> <span class="nav-text">Timing Order(T/O)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#MVTO"><span class="nav-number">5.4.3.</span> <span class="nav-text">MVTO</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#基于有效性确认的并发控制"><span class="nav-number">5.5.</span> <span class="nav-text">基于有效性确认的并发控制</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#OCC"><span class="nav-number">5.5.1.</span> <span class="nav-text">OCC</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#MVCC"><span class="nav-number">5.6.</span> <span class="nav-text">MVCC</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#快照读与当前读"><span class="nav-number">5.6.1.</span> <span class="nav-text">快照读与当前读</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#MVCC实现-InnoDB"><span class="nav-number">5.6.2.</span> <span class="nav-text">MVCC实现(InnoDB)</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#记录结构"><span class="nav-number">5.6.2.1.</span> <span class="nav-text">记录结构</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#观察一致性快照的可见性规则"><span class="nav-number">5.6.2.2.</span> <span class="nav-text">观察一致性快照的可见性规则</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#RC下的MVCC"><span class="nav-number">5.6.2.3.</span> <span class="nav-text">RC下的MVCC</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#RR下的MVCC"><span class="nav-number">5.6.2.4.</span> <span class="nav-text">RR下的MVCC</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#S下的MVCC"><span class="nav-number">5.6.2.5.</span> <span class="nav-text">S下的MVCC</span></a></li></ol></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">6.</span> <span class="nav-text">Reference</span></a></li></ol></div>
             
 
           </div>

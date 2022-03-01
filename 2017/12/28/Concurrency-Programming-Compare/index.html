@@ -74,7 +74,7 @@
 <link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="C++,多线程,Linux,并行计算," />
+  <meta name="keywords" content="Calvin, Neo, Blog, Computer Science, Game" />
 
 
 
@@ -93,7 +93,6 @@
 
 
 <meta name="description" content="在本篇中比较了各种并发、并行技术。**并发(concurrency)**强调的是逻辑上的同时发生，是语义上的模型(semantic model)，在实际上并发程序可能是由一个处理器同时(simultaneously)处理多个任务，因此并发过程中常出现一个线程等待其他资源的情况。此时常伴随着线程的阻塞和调度。并发过程通常可划分为多个级别：Blocking、Obstruction-Free、Lock-">
-<meta name="keywords" content="C++,多线程,Linux,并行计算">
 <meta property="og:type" content="article">
 <meta property="og:title" content="并发编程重要概念及比较">
 <meta property="og:url" content="http://www.calvinneo.com/2017/12/28/Concurrency-Programming-Compare/index.html">
@@ -112,7 +111,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/bfbc/dequeue.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/bfbc/no-sync-with.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/bfbc/dclpjj.png">
-<meta property="og:updated_time" content="2022-02-07T09:31:21.603Z">
+<meta property="og:updated_time" content="2022-02-28T00:55:58.590Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="并发编程重要概念及比较">
 <meta name="twitter:description" content="在本篇中比较了各种并发、并行技术。**并发(concurrency)**强调的是逻辑上的同时发生，是语义上的模型(semantic model)，在实际上并发程序可能是由一个处理器同时(simultaneously)处理多个任务，因此并发过程中常出现一个线程等待其他资源的情况。此时常伴随着线程的阻塞和调度。并发过程通常可划分为多个级别：Blocking、Obstruction-Free、Lock-">
@@ -761,13 +760,14 @@
 <p>在“std::atomic”这一章中，我们讨论了CAS操作的实现：</p>
 <ol>
 <li>对于通常情况，可能会使用自旋锁甚至内核锁</li>
-<li>对于一些特殊类型，比如int等，会借助于CPU的原子操作，即<strong>CPU原子操作的实现借助于总线锁、缓存锁等机制</strong>。<br> 如果细究上面WINAPI的<code>InterlockedCompareExchange</code>，容易猜到它的实现方式来自于CPU的硬件支持，因为它只能为特定数据类型提供服务。事实上，这里<a href="http://blog.csdn.net/zhangliang1223/article/details/7614027" target="_blank" rel="noopener">用了x86中的<strong>cmpxchg</strong>命令</a>。</li>
+<li>对于一些特殊类型，比如int等，会借助于CPU的原子操作，而CPU原子操作的实现可能借助于总线锁、缓存锁等机制。<br> 如果细究上面WINAPI的<code>InterlockedCompareExchange</code>，容易猜到它的实现方式来自于CPU的硬件支持，因为它只能为特定数据类型提供服务。事实上，这里<a href="http://blog.csdn.net/zhangliang1223/article/details/7614027" target="_blank" rel="noopener">用了x86中的<strong>cmpxchg</strong>命令</a>。</li>
 </ol>
 <p>下面介绍一下LOCK指令对<a href="https://albk.tech/%E8%81%8A%E8%81%8ACPU%E7%9A%84LOCK%E6%8C%87%E4%BB%A4.html" target="_blank" rel="noopener">总线锁和缓存锁的选用</a>：</p>
 <ol>
 <li>总线锁<br> <code>LOCK#</code>信号就是我们经常说到的总线锁，处理器使用<code>LOCK#</code>信号达到锁定总线，来解决原子性问题。当一个处理器往总线上输出LOCK#信号时，<strong>其它处理器的请求将被阻塞</strong>，此时该处理器此时独占共享内存。<br> 总线锁这种做法锁定的范围太大了，导致CPU利用率急剧下降，因为<strong>LOCK#把CPU和内存之间的通信锁住了</strong>，这使得锁定时期间，其它处理器不能访问内存 ，所以总线锁的开销比较大。</li>
-<li>缓存锁<br> 如果访问的内存区域已经缓存在处理器的缓存行中，P6系统和之后系列的处理器则不会声明<code>LOCK#</code>信号，它会对CPU的缓存中的缓存行进行锁定，在锁定期间，其它CPU 不能同时缓存此数据，在修改之后，通过<strong>缓存一致性协议</strong>来保证修改的原子性，这个操作被称为“缓存锁”。</li>
+<li>缓存锁<br> 如果访问的内存区域已经缓存在处理器的缓存行中，P6系统和之后系列的处理器则不会声明<code>LOCK#</code>信号，它会对CPU的缓存中的缓存行进行锁定，在锁定期间，其它CPU不能同时缓存此数据，在修改之后，通过<strong>缓存一致性协议</strong>来保证修改的原子性，这个操作被称为“缓存锁”。</li>
 </ol>
+<p>需要注意，虽然总线锁和缓存锁可能有较大的性能开销，但这只是处理器级别针对于单个指令而言的，最多会导致某些指令执行变慢。而内核锁则涉及操作系统，特别是线程间的上下文切换了。</p>
 <p>特别地，当操作的数据不能被缓存在处理器内部，或操作的数据跨多个缓存行时，也会使用总线锁。<br>诸如BTS、BTR、BTC 、XADD、XCHG、ADD、OR等指令自带总线锁。注意CMPXCHG应该不默认是原子的，对于单核，可以不加LOCK；但是对于多核，需要加LOCK。</p>
 <h4 id="CAS操作的实现"><a href="#CAS操作的实现" class="headerlink" title="CAS操作的实现"></a>CAS操作的实现</h4><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;atomic&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;cstdio&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span>&#123;</span><br><span class="line">    <span class="built_in">std</span>::atomic&lt;<span class="keyword">int</span>&gt; ai;</span><br><span class="line">    <span class="keyword">int</span> z = <span class="number">10</span>;</span><br><span class="line">    ai.compare_exchange_weak(z, <span class="number">11</span>, <span class="built_in">std</span>::memory_order_seq_cst);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">"%d"</span>, ai.load());</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
@@ -1424,18 +1424,6 @@ pthread_cond_wait(&amp;cond, &amp;mutex);
 
     <footer class="post-footer">
       
-        <div class="post-tags">
-          
-            <a href="/tags/C/" rel="tag"># C++</a>
-          
-            <a href="/tags/多线程/" rel="tag"># 多线程</a>
-          
-            <a href="/tags/Linux/" rel="tag"># Linux</a>
-          
-            <a href="/tags/并行计算/" rel="tag"># 并行计算</a>
-          
-        </div>
-      
 
       
         
@@ -1544,15 +1532,6 @@ pthread_cond_wait(&amp;cond, &amp;mutex);
 
           
 
-          
-            
-            
-            <div class="site-state-item site-state-tags">
-              <a href="/tags/index.html">
-                <span class="site-state-item-count">161</span>
-                <span class="site-state-item-name">标签</span>
-              </a>
-            </div>
           
 
         </nav>

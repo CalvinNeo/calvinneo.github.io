@@ -74,7 +74,7 @@
 <link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="数据库," />
+  <meta name="keywords" content="Calvin, Neo, Blog, Computer Science, Game" />
 
 
 
@@ -93,14 +93,13 @@
 
 
 <meta name="description" content="介绍F1的在线异步DDL schema变更。">
-<meta name="keywords" content="数据库">
 <meta property="og:type" content="article">
 <meta property="og:title" content="F1的在线异步DDL">
 <meta property="og:url" content="http://www.calvinneo.com/2022/01/28/f1-ddl/index.html">
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="介绍F1的在线异步DDL schema变更。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2022-02-07T15:07:09.722Z">
+<meta property="og:updated_time" content="2022-02-18T09:17:16.400Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="F1的在线异步DDL">
 <meta name="twitter:description" content="介绍F1的在线异步DDL schema变更。">
@@ -379,16 +378,35 @@
         <p>介绍F1的在线异步DDL schema变更。</p>
 <a id="more"></a>
 
-<h1 id="简要问题"><a href="#简要问题" class="headerlink" title="简要问题"></a>简要问题</h1><p>我们需要处理DDL执行进度不一致的问题，比如：</p>
+<h1 id="简要问题"><a href="#简要问题" class="headerlink" title="简要问题"></a>简要问题</h1><h2 id="定义问题"><a href="#定义问题" class="headerlink" title="定义问题"></a>定义问题</h2><p>我们需要处理DDL执行进度不一致的问题，比如：</p>
 <ol>
 <li>Node A已经处理了a/b/c三个DDL</li>
 <li>Node B刚处理完a这个DDL</li>
 </ol>
-<p>假定c是创建一个表，那么Node A能看见这个表，而Node B则看不见。</p>
-<p>目标1：在同一时刻改变所有Node的状态。很遗憾，因为各种延迟并不能做到。<br>妥协后的目标1：在某一时刻进行修改，在确定的时间长度T之后，不会使用旧Schema的Node继续提供服务。这样在T之后这个修改就是确定生效的了。<br>方案：</p>
+<p>假定c是创建一个表，那么Node A能看见这个表，而Node B则看不见。那么分别从Node A和B查询，就会发现数据不一致的情况。</p>
+<p>具体来说，有两类不一致问题需要考虑：</p>
+<ol>
+<li>orphan data anomaly<br> 违反1/3/5/7</li>
+<li>integrity anomaly<br> 违反2/4/6</li>
+</ol>
+<p>其中：</p>
+<ol>
+<li>所有 ColumnKV 都能找到一个包含它的 Row 和 Table。</li>
+<li>所有 Row 都包含所有非空列的 ColumnKV。</li>
+<li>所有 IndexKV 都能找到一个包含它的 Index。</li>
+<li>所有 Index 都是完整的（不存在某个 Row 缺少指向它的 IndexKV）。</li>
+<li>所有 IndexKV 都指向有效的 Row。</li>
+<li>没有违反 Constraint 的数据。</li>
+<li>不存在未知的 KV（特指除上述 1，3 以外的未知 KV）。</li>
+</ol>
+<h2 id="分步解决问题"><a href="#分步解决问题" class="headerlink" title="分步解决问题"></a>分步解决问题</h2><p>目标1：在同一时刻改变所有Node的状态。很遗憾，因为各种延迟并不能做到。<br>妥协后的目标1：在某一时刻修改Schema，在确定的时间长度T之后，整个集群中不会有使用旧Schema的Node继续提供服务。这样在T之后这个修改就是确定生效的了。<br>方案：</p>
 <ol>
 <li>定时刷新<br> 每个节点会按照固定时间刷新自己的Schema。<br> 例如，可以选举出一个Owner，每个节点定时向Owner请求当前的Schema。</li>
 <li>强制失败<br> 如果刷新失败，则停止服务，而不是继续按照旧Schema服务。</li>
+</ol>
+<p>目标1.1：在集群间同步最新的Schema<br>方案：借助于Spanner</p>
+<ol>
+<li>每次刷新时，从Spanner上的某个固定位置加载Schema。</li>
 </ol>
 <p>在实现目标1后，发现还是有问题。例如，虽然a/b在a+T/b+T时刻被完成，但在a+T之前的某个时刻，我们仍然不知道当前状态是a已生效，还是ab都已生效。如果在加上个c，那么情况更复杂。</p>
 <p>目标2：在同一时刻，只会有最多两个Schema生效。例如在同一时刻内，最多只有DDL a之前的状态和DDL a之后的状态生效。<br>分析：直接Bruteforce搞就行，比如插一个barrier，等到DDL a确定生效(等到a+T)后，再执行DDL b。<br>方案：</p>
@@ -397,7 +415,16 @@
 <li>每个Lease中只能执行一个DDL</li>
 <li>我们在T+2个Lease时一定可以执行DDL b</li>
 </ol>
-<p>通过实现目标1和2进行了问题的分解，不需要处理多个DDL的进度不一致问题了。但仍然存在问题，考虑一个add index的DDL，Node A上已经执行完了，Node B则没有开始执行，然后考虑此刻开始执行的两个DML：</p>
+<p>目标2.1：不会产生不合法的DML。<br>方案：write fencing</p>
+<ol>
+<li>事务允许跨越多个Lease。</li>
+<li>但是，如果事务中有写操作，写操作只允许在当前Lease中进行：<ol>
+<li>写操作在他们submit时，转换为Spanner上的KV操作</li>
+<li>如果写操作跨Lease，可能会违反同一时刻集群中最多只有两个Schema版本生效的限制。</li>
+</ol>
+</li>
+</ol>
+<p>通过实现之前的目标进行了问题的分解，不需要处理多个DDL的进度不一致问题了。但仍然存在问题，考虑一个add index的DDL，Node A上已经执行完了，Node B则没有开始执行，然后考虑此刻开始执行的两个DML：</p>
 <ol>
 <li>通过Node A添加一个Row：会添加数据和索引</li>
 <li>通过Node B删除一个Row：只会删除数据</li>
@@ -415,7 +442,11 @@
 <li>从Write Only到Public<br> 假如Node A在Write Only状态，它的所有写操作都会涉及索引。而Node B在Public状态，它也能读到Node A的修改。</li>
 </ol>
 <p>考虑所有节点都到达了Write Only状态，现在就可以做Reorg补上之前的索引数据了，方式很简单，就是取一个现在的Snapshot，然后照着补。此时可能有并发写的冲突问题，但Spanner的Percolator协议可以解决。</p>
-<p>目标4：缩短Lease长度。Lease长度一般都会很长，F1中是分钟级，TiDB中也有45秒。如果完全走Lease的方案，那么一次DDL的时间就是分钟级的了，这显然很难被接受<br>方案：</p>
+<p>目标4：缩短Lease长度。Lease长度一般都会很长，F1中是分钟级，TiDB中也有45秒。如果完全走Lease的方案，那么一次DDL的时间就是分钟级的了，这显然很难被接受<br>方案1：直接将Lease长度缩短，例如改为1s。<br>这个方案是有问题的：</p>
+<ol>
+<li>在每个Lease结束后，Node需要去加载最新的Schema，这个伴随网络开销，需要时间。如果加载Schema的时间大于Lease的时间，那么就会导致刚加载的又失效了，从而重新加载，极大地降低了性能。</li>
+</ol>
+<p>既然方案1不行，那么就有了方案2<br>方案2：</p>
 <ol>
 <li>Owner在修改完DDL后，主动通知其他节点，并统计ack。如果其他节点都回复了，那么就主动确定了这个ddl在所有节点上都生效了。</li>
 <li>如果有节点没有回复，那么再主动等2个Lease。</li>
@@ -424,7 +455,9 @@
 <li><a href="http://zimulala.github.io/2016/02/02/schema-change-implement/" target="_blank" rel="noopener">http://zimulala.github.io/2016/02/02/schema-change-implement/</a></li>
 <li><a href="https://github.com/zimulala/builddatabase/blob/master/f1/schema-change.md" target="_blank" rel="noopener">https://github.com/zimulala/builddatabase/blob/master/f1/schema-change.md</a></li>
 <li><a href="https://disksing.com/understanding-f1-schema-change/" target="_blank" rel="noopener">https://disksing.com/understanding-f1-schema-change/</a></li>
-<li>Online, Asynchronous Schema Change in F1</li>
+<li><a href="https://tongtianta.site/paper/57876" target="_blank" rel="noopener">https://tongtianta.site/paper/57876</a><br> Online, Asynchronous Schema Change in F1</li>
+<li><a href="https://www.zenlife.tk/schema-lease.md" target="_blank" rel="noopener">https://www.zenlife.tk/schema-lease.md</a></li>
+<li><a href="https://hhwyt.xyz/2021-03-27-online-async-schema-change-in-f1/" target="_blank" rel="noopener">https://hhwyt.xyz/2021-03-27-online-async-schema-change-in-f1/</a></li>
 </ol>
 
       
@@ -473,12 +506,6 @@
     </div>
 
     <footer class="post-footer">
-      
-        <div class="post-tags">
-          
-            <a href="/tags/数据库/" rel="tag"># 数据库</a>
-          
-        </div>
       
 
       
@@ -585,15 +612,6 @@
           
 
           
-            
-            
-            <div class="site-state-item site-state-tags">
-              <a href="/tags/index.html">
-                <span class="site-state-item-count">161</span>
-                <span class="site-state-item-name">标签</span>
-              </a>
-            </div>
-          
 
         </nav>
 
@@ -682,7 +700,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#简要问题"><span class="nav-number">1.</span> <span class="nav-text">简要问题</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">2.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#简要问题"><span class="nav-number">1.</span> <span class="nav-text">简要问题</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#定义问题"><span class="nav-number">1.1.</span> <span class="nav-text">定义问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#分步解决问题"><span class="nav-number">1.2.</span> <span class="nav-text">分步解决问题</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">2.</span> <span class="nav-text">Reference</span></a></li></ol></div>
             
 
           </div>

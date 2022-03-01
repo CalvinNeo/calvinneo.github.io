@@ -74,7 +74,7 @@
 <link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="Rust," />
+  <meta name="keywords" content="Calvin, Neo, Blog, Computer Science, Game" />
 
 
 
@@ -93,14 +93,13 @@
 
 
 <meta name="description" content="鉴于贵司大作tikv、tidb、tiflash在Rust、Go和C++之间横跳，因此学习Rust被提上了日程。 本文简称叫Rust: ACPPPP，它主要是用来讨论Rust在一些方面和C++的异同，而不是介绍这一门语言。所以文章是话题形式的，会有很多穿插，例如在讨论所有权时，会直接讲结构体。">
-<meta name="keywords" content="Rust">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Rust - A CPP Programmer&#39;s Perspective">
 <meta property="og:url" content="http://www.calvinneo.com/2021/08/17/rust-acpppp/index.html">
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="鉴于贵司大作tikv、tidb、tiflash在Rust、Go和C++之间横跳，因此学习Rust被提上了日程。 本文简称叫Rust: ACPPPP，它主要是用来讨论Rust在一些方面和C++的异同，而不是介绍这一门语言。所以文章是话题形式的，会有很多穿插，例如在讨论所有权时，会直接讲结构体。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2021-12-04T16:30:49.616Z">
+<meta property="og:updated_time" content="2022-02-22T06:53:17.140Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Rust - A CPP Programmer&#39;s Perspective">
 <meta name="twitter:description" content="鉴于贵司大作tikv、tidb、tiflash在Rust、Go和C++之间横跳，因此学习Rust被提上了日程。 本文简称叫Rust: ACPPPP，它主要是用来讨论Rust在一些方面和C++的异同，而不是介绍这一门语言。所以文章是话题形式的，会有很多穿插，例如在讨论所有权时，会直接讲结构体。">
@@ -645,7 +644,7 @@
 <p><code>Pin&lt;&amp;mut Self&gt;</code>实际是个指针，它是为了解决自引用结构的问题。</p>
 <h4 id="impl-Future"><a href="#impl-Future" class="headerlink" title="impl Future"></a>impl Future</h4><p>impl了<code>trait Future</code>的类型有很多，例如<code>f.map</code>生成的Map，<code>f.then</code>生成的<code>Then</code>这些组合子都是Future。</p>
 <p>例如，下面代码为Map类型impl Future。</p>
-<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">pub</span> <span class="class"><span class="keyword">struct</span> <span class="title">Map</span></span>&lt;I, F&gt; &#123;</span><br><span class="line">    <span class="comment">// Used for `SplitWhitespace` and `SplitAsciiWhitespace` `as_str` methods</span></span><br><span class="line">    <span class="keyword">pub</span>(<span class="keyword">crate</span>) iter: I,</span><br><span class="line">    f: F,</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// in futures, src/future/map.rs</span></span><br><span class="line"><span class="keyword">impl</span>&lt;U, A, F&gt; Future <span class="keyword">for</span> Map&lt;A, F&gt;</span><br><span class="line">    <span class="keyword">where</span> A: Future,</span><br><span class="line">          F: <span class="built_in">FnOnce</span>(A::Item) -&gt; U,</span><br><span class="line">&#123;</span><br><span class="line">    <span class="class"><span class="keyword">type</span> <span class="title">Item</span></span> = U;</span><br><span class="line">    <span class="class"><span class="keyword">type</span> <span class="title">Error</span></span> = A::Error;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">fn</span> <span class="title">poll</span></span>(&amp;<span class="keyword">mut</span> <span class="keyword">self</span>) -&gt; Poll&lt;U, A::Error&gt; &#123;</span><br><span class="line">        <span class="keyword">let</span> e = <span class="keyword">match</span> <span class="keyword">self</span>.future.poll() &#123;</span><br><span class="line">            <span class="literal">Ok</span>(Async::NotReady) =&gt; <span class="keyword">return</span> <span class="literal">Ok</span>(Async::NotReady),</span><br><span class="line">            <span class="literal">Ok</span>(Async::Ready(e)) =&gt; <span class="literal">Ok</span>(e),</span><br><span class="line">            <span class="literal">Err</span>(e) =&gt; <span class="literal">Err</span>(e),</span><br><span class="line">        &#125;;</span><br><span class="line">        e.map(<span class="keyword">self</span>.f.take().expect(<span class="string">"cannot poll Map twice"</span>))</span><br><span class="line">         .map(Async::Ready)</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">pub</span> <span class="class"><span class="keyword">struct</span> <span class="title">Map</span></span>&lt;I, F&gt; &#123;</span><br><span class="line">    <span class="comment">// Used for `SplitWhitespace` and `SplitAsciiWhitespace` `as_str` methods</span></span><br><span class="line">    <span class="keyword">pub</span>(<span class="keyword">crate</span>) iter: I,</span><br><span class="line">    f: F,</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// in futures-0.1.31, src/future/map.rs</span></span><br><span class="line"><span class="comment">// 注意，这是一个较老的版本，所以future.poll的签名也不一样。在futures-0.3.15中该实现被挪到了futures-util中</span></span><br><span class="line"><span class="keyword">impl</span>&lt;U, A, F&gt; Future <span class="keyword">for</span> Map&lt;A, F&gt;</span><br><span class="line">    <span class="keyword">where</span> A: Future,</span><br><span class="line">          F: <span class="built_in">FnOnce</span>(A::Item) -&gt; U,</span><br><span class="line">&#123;</span><br><span class="line">    <span class="class"><span class="keyword">type</span> <span class="title">Item</span></span> = U;</span><br><span class="line">    <span class="class"><span class="keyword">type</span> <span class="title">Error</span></span> = A::Error;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">fn</span> <span class="title">poll</span></span>(&amp;<span class="keyword">mut</span> <span class="keyword">self</span>) -&gt; Poll&lt;U, A::Error&gt; &#123;</span><br><span class="line">        <span class="keyword">let</span> e = <span class="keyword">match</span> <span class="keyword">self</span>.future.poll() &#123;</span><br><span class="line">            <span class="literal">Ok</span>(Async::NotReady) =&gt; <span class="keyword">return</span> <span class="literal">Ok</span>(Async::NotReady),</span><br><span class="line">            <span class="literal">Ok</span>(Async::Ready(e)) =&gt; <span class="literal">Ok</span>(e),</span><br><span class="line">            <span class="literal">Err</span>(e) =&gt; <span class="literal">Err</span>(e),</span><br><span class="line">        &#125;;</span><br><span class="line">        e.map(<span class="keyword">self</span>.f.take().expect(<span class="string">"cannot poll Map twice"</span>))</span><br><span class="line">         .map(Async::Ready)</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
 <p>这里<code>e.map().map()</code>比较独特，前一个map是把<code>self.f</code>应用到e里面的东西，并且清空<code>self.f</code>，让它成为一次性的调用。后一个是把将map的结果包在<code>Async::Ready</code>里面。</p>
 <h3 id="async的生命周期"><a href="#async的生命周期" class="headerlink" title="async的生命周期"></a>async的生命周期</h3><h3 id="async实现"><a href="#async实现" class="headerlink" title="async实现"></a>async实现</h3><p>我们知道，因为在async实现中会产生自引用结构，所以需要用Pin，那什么是自引用结构？为什么async中会存在这种结构呢？<br>首先得从async的实现讲起</p>
@@ -841,12 +840,6 @@
 
     <footer class="post-footer">
       
-        <div class="post-tags">
-          
-            <a href="/tags/Rust/" rel="tag"># Rust</a>
-          
-        </div>
-      
 
       
         
@@ -955,15 +948,6 @@
 
           
 
-          
-            
-            
-            <div class="site-state-item site-state-tags">
-              <a href="/tags/index.html">
-                <span class="site-state-item-count">161</span>
-                <span class="site-state-item-name">标签</span>
-              </a>
-            </div>
           
 
         </nav>
