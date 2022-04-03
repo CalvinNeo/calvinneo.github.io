@@ -74,7 +74,7 @@
 <link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="Calvin, Neo, Blog, Computer Science, Game" />
+  <meta name="keywords" content="C++,多线程,Linux,并行计算," />
 
 
 
@@ -93,6 +93,7 @@
 
 
 <meta name="description" content="在本篇中比较了各种并发、并行技术。**并发(concurrency)**强调的是逻辑上的同时发生，是语义上的模型(semantic model)，在实际上并发程序可能是由一个处理器同时(simultaneously)处理多个任务，因此并发过程中常出现一个线程等待其他资源的情况。此时常伴随着线程的阻塞和调度。并发过程通常可划分为多个级别：Blocking、Obstruction-Free、Lock-">
+<meta name="keywords" content="C++,多线程,Linux,并行计算">
 <meta property="og:type" content="article">
 <meta property="og:title" content="并发编程重要概念及比较">
 <meta property="og:url" content="http://www.calvinneo.com/2017/12/28/Concurrency-Programming-Compare/index.html">
@@ -111,7 +112,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/bfbc/dequeue.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/bfbc/no-sync-with.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/bfbc/dclpjj.png">
-<meta property="og:updated_time" content="2022-02-28T00:55:58.590Z">
+<meta property="og:updated_time" content="2022-03-21T13:56:43.356Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="并发编程重要概念及比较">
 <meta name="twitter:description" content="在本篇中比较了各种并发、并行技术。**并发(concurrency)**强调的是逻辑上的同时发生，是语义上的模型(semantic model)，在实际上并发程序可能是由一个处理器同时(simultaneously)处理多个任务，因此并发过程中常出现一个线程等待其他资源的情况。此时常伴随着线程的阻塞和调度。并发过程通常可划分为多个级别：Blocking、Obstruction-Free、Lock-">
@@ -1325,7 +1326,7 @@ pthread_cond_wait(&amp;cond, &amp;mutex);
 <h3 id="future-then"><a href="#future-then" class="headerlink" title="future.then"></a>future.then</h3><p>在先前介绍future时，我们认为其有一个美中不足就是最后总有一个同步的过程，也就是调用get时候的等待，而使用裸线程（池）有优势的一点就是我们可以通过回调更为灵活地控制我们的逻辑，但裸线程也有之前提到的回调地狱之类的缺点。能不能两相结合呢？<a href="https://stackoverflow.com/questions/22175100/how-to-add-a-callback-in-boostfuture-in-c" target="_blank" rel="noopener">SoF上也有类似的提问</a>。实际上有一个提案称为future.then就是用来解决这个问题的。其风格类似于CPS和Haskell中的Monad，相比先前介绍的future/promise/packaged_task机制，future.then利用了回调链的机制避免了调用<code>future::get()</code>形成阻塞。相比<code>std::future</code>，future.then是完全的异步。future.then目前还没有进入C++标准，因此C++中目前还需要借助于线程池、事件或者IOCP的方式来实现异步。</p>
 <h3 id="co-await、co-yield、co-return"><a href="#co-await、co-yield、co-return" class="headerlink" title="co_await、co_yield、co_return"></a>co_await、co_yield、co_return</h3><p>future.then机制降低了流程操控的复杂度，不过写起来仍然很繁琐，而且存在回调地狱的问题。在链式调用的过程中，整个流程难以在中间直接abort，为此Rust先后提出了<code>try!</code>和<code>?.</code>这样的机制。截至目前这三个函数尚未进入C++标准，但这种由C Sharp流行开来的异步编程范式其实十分优雅，我们将在一个单独的专题进行讨论。</p>
 <h1 id="多进程并发模型"><a href="#多进程并发模型" class="headerlink" title="多进程并发模型"></a>多进程并发模型</h1><p>常见的并发模型有共享变量（内存）、Communicating Sequential Process(CSP)、Actor等模型。共享变量的模型中，多个线程通过锁或者原子操作对变量进行有序访问，在先前我们讨论了future等基于线程的共享内存的模型，它们在<strong>多线程</strong>环境中非常实用。共享变量模型强调利用共享内存进行通信，我们明显发现在future等模式中信息的交互是一次性的，即调用者在启动异步任务后很难再去操作异步任务，而异步任务更是看不到调用者。<br>另一种思路是通过通信来共享内存，CSP和Actor模型选择后者，因此在<strong>多进程</strong>情况下会更得心应手。CSP模型可以参照Go语言中的Channel，Actor模型可以参照Mapreduce模型，他们都是通过消息来进行同步的。</p>
-<h2 id="Actor模型"><a href="#Actor模型" class="headerlink" title="Actor模型"></a>Actor模型</h2><p>Actor模型围绕<strong>具名</strong>节点（称为Actor）展开，消息从一个Actor<strong>直接发送</strong>到另一个Actor，而并不需要通过诸如Channel的桥梁。特别地，Actor是与线程无关的，一个线程上可以存在多个Actor。更进一步地，<a href="https://tonybai.com/2014/09/29/a-channel-compendium-for-golang/" target="_blank" rel="noopener">Actor的消息传递也是异步的</a>，消息的发送和接受可以在任意时间发生。<br>Actor之间进行严格地隔离，实现所谓“Share nothing”的机制，每一个Actor只能同时处理一个消息，多余的消息会存放在Mailox里面。这样实际上消息的处理过程是独占的。</p>
+<h2 id="Actor模型"><a href="#Actor模型" class="headerlink" title="Actor模型"></a>Actor模型</h2><p>Actor模型围绕<strong>具名</strong>节点（称为Actor）展开，消息从一个Actor<strong>直接发送</strong>到另一个Actor，而并不需要通过诸如Channel的桥梁。特别地，Actor是与线程无关的，一个线程上可以存在多个Actor。更进一步地，<a href="https://tonybai.com/2014/09/29/a-channel-compendium-for-golang/" target="_blank" rel="noopener">Actor的消息传递也是异步的</a>，消息的发送和接受可以在任意时间发生。<br>Actor之间进行严格地隔离，实现所谓“Share nothing”的机制，每一个Actor只能同时处理一个消息，多余的消息会存放在Mailbox里面。这样实际上消息的处理过程是独占的。</p>
 <h2 id="CSP模型"><a href="#CSP模型" class="headerlink" title="CSP模型"></a>CSP模型</h2><p>相比Actor，CSP模型围绕一个中间桥梁（在这里使用Go语言中的具象也就是Channel来表示），不同的节点向对应的Channel获取或者发送消息，因此在耦合性上要比Actor模型松一点。相比Actor模型，CSP模型要求发送方在接收方准备好接受消息时才能发送消息，所以同步性要更强一点。<br>以Go为例，Channel一般具有4个基本操作：</p>
 <ol>
 <li>创建<br> <code>c = make(chan int, buffer_size)</code></li>
@@ -1423,6 +1424,18 @@ pthread_cond_wait(&amp;cond, &amp;mutex);
     </div>
 
     <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/C/" rel="tag"># C++</a>
+          
+            <a href="/tags/多线程/" rel="tag"># 多线程</a>
+          
+            <a href="/tags/Linux/" rel="tag"># Linux</a>
+          
+            <a href="/tags/并行计算/" rel="tag"># 并行计算</a>
+          
+        </div>
       
 
       
@@ -1524,7 +1537,7 @@ pthread_cond_wait(&amp;cond, &amp;mutex);
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">168</span>
+                <span class="site-state-item-count">169</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -1532,6 +1545,15 @@ pthread_cond_wait(&amp;cond, &amp;mutex);
 
           
 
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">161</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
           
 
         </nav>
