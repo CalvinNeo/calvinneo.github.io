@@ -100,10 +100,12 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="介绍F1的在线异步DDL schema变更。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2022-02-18T09:17:16.400Z">
+<meta property="og:image" content="http://www.calvinneo.com/img/f1/f1_schema_change.png">
+<meta property="og:updated_time" content="2022-07-16T06:06:54.484Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="F1的在线异步DDL">
 <meta name="twitter:description" content="介绍F1的在线异步DDL schema变更。">
+<meta name="twitter:image" content="http://www.calvinneo.com/img/f1/f1_schema_change.png">
 
 
 
@@ -395,10 +397,10 @@
 <li>所有 ColumnKV 都能找到一个包含它的 Row 和 Table。</li>
 <li>所有 Row 都包含所有非空列的 ColumnKV。</li>
 <li>所有 IndexKV 都能找到一个包含它的 Index。</li>
-<li>所有 Index 都是完整的（不存在某个 Row 缺少指向它的 IndexKV）。</li>
+<li>所有 Index 都是完整的(不存在某个 Row 缺少指向它的 IndexKV)。</li>
 <li>所有 IndexKV 都指向有效的 Row。</li>
 <li>没有违反 Constraint 的数据。</li>
-<li>不存在未知的 KV（特指除上述 1，3 以外的未知 KV）。</li>
+<li>不存在未知的 KV(特指除上述 1，3 以外的未知 KV)。</li>
 </ol>
 <h2 id="分步解决问题"><a href="#分步解决问题" class="headerlink" title="分步解决问题"></a>分步解决问题</h2><p>目标1：在同一时刻改变所有Node的状态。很遗憾，因为各种延迟并不能做到。<br>妥协后的目标1：在某一时刻修改Schema，在确定的时间长度T之后，整个集群中不会有使用旧Schema的Node继续提供服务。这样在T之后这个修改就是确定生效的了。<br>方案：</p>
 <ol>
@@ -428,19 +430,20 @@
 <p>通过实现之前的目标进行了问题的分解，不需要处理多个DDL的进度不一致问题了。但仍然存在问题，考虑一个add index的DDL，Node A上已经执行完了，Node B则没有开始执行，然后考虑此刻开始执行的两个DML：</p>
 <ol>
 <li>通过Node A添加一个Row：会添加数据和索引</li>
-<li>通过Node B删除一个Row：只会删除数据</li>
+<li>通过Node B删除一个Row：只会删除数据，因为尚未得到索引的schema</li>
 </ol>
-<p>现在如果从Node A索引读，那么会读到一开始被写入的索引，但对应的数据却被删除了。于是这里产生了孤儿索引的问题，这破坏了数据库的完整性。这是因为不同Node之间同一DDL的进度不同产生的不一致，如何解决呢？</p>
+<p>现在如果从Node A索引读，那么会读到一开始被写入的索引，但对应的数据却被删除了。于是这里产生了<strong>孤儿索引</strong>的问题，这破坏了数据库的完整性。这是因为不同Node之间同一DDL的进度不同产生的不一致，如何解决呢？</p>
 <p>目标3：将这一个DDL拆成多个Schema Change的步骤。由于Update可以看做是Delete+Insert，所以实际需要考虑Insert、Delete和Query三种操作。</p>
 <p>从孤儿索引的问题可以看出，delete操作需要和insert操作分离，要拆出一个Delete Only状态，这个状态下该DDL的只对Delete操作可见，即该索引只对Delete操作可见：</p>
 <ol>
-<li>从None到Delete Only<br> 增和查都不会使用索引。删会使用索引。</li>
-<li>从Delete Only到Public<br> 不会出现孤儿索引问题了。假如Node A在Delete Only状态，它会在删除时一并删除索引；Node B在Public状态，在查询时发现索引被一并删除了。<br> 但有个新的问题，索引不会“多出来”，但却可能缺。这就得需要有个操作帮忙补索引，也就是reorg。<br> 这个补索引的过程能发生在Delete Only到Public之间么？假设Node A在Delete Only阶段，它只能响应删除，然后开始为既有数据补索引，直到补完变成Public，同时可以处理增删改查。问题是这个过程中的insert，对应的索引并没有被补上啊。因此，需要引入新的状态Write Only。</li>
+<li>从None到Delete Only<br> 增和查都不会使用索引。<br> <strong>所有的删除操作会使用索引</strong>。</li>
+<li>从Delete Only到Public<br> 不会出现孤儿索引问题了。假如Node A在Delete Only状态，它会在删除时一并删除索引；Node B在Public状态，在查询时发现索引被一并删除了。</li>
 </ol>
+<p>但有个新的问题，索引不会“多出来”，<strong>但却可能缺</strong>。这就得需要有个操作帮忙补索引，也就是reorg。<br>这个补索引的过程能发生在Delete Only到Public之间么？假设Node A在Delete Only阶段，它只能响应删除，然后开始为既有数据补索引，直到补完变成Public，同时可以处理增删改查。问题是这个过程中的insert，对应的索引并没有被补上啊。因此，需要引入新的状态Write Only。</p>
 <p>于是引入Write Only状态，这个过程只不允许读：</p>
 <ol>
 <li>从Delete Only到Write Only</li>
-<li>从Write Only到Public<br> 假如Node A在Write Only状态，它的所有写操作都会涉及索引。而Node B在Public状态，它也能读到Node A的修改。</li>
+<li>从Write Only到Public<br> 假如Node A在Write Only状态，它的<strong>所有写操作都会涉及索引</strong>。而Node B在Public状态，它也能读到Node A的修改。</li>
 </ol>
 <p>考虑所有节点都到达了Write Only状态，现在就可以做Reorg补上之前的索引数据了，方式很简单，就是取一个现在的Snapshot，然后照着补。此时可能有并发写的冲突问题，但Spanner的Percolator协议可以解决。</p>
 <p>目标4：缩短Lease长度。Lease长度一般都会很长，F1中是分钟级，TiDB中也有45秒。如果完全走Lease的方案，那么一次DDL的时间就是分钟级的了，这显然很难被接受<br>方案1：直接将Lease长度缩短，例如改为1s。<br>这个方案是有问题的：</p>
@@ -452,13 +455,52 @@
 <li>Owner在修改完DDL后，主动通知其他节点，并统计ack。如果其他节点都回复了，那么就主动确定了这个ddl在所有节点上都生效了。</li>
 <li>如果有节点没有回复，那么再主动等2个Lease。</li>
 </ol>
-<h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
+<h1 id="论文证明"><a href="#论文证明" class="headerlink" title="论文证明"></a>论文证明</h1><h2 id="Denotation"><a href="#Denotation" class="headerlink" title="Denotation"></a>Denotation</h2><p>一个 F1 schema 是一系列 table的定义。每个 table 包含一系列 column、index、constraint、optimistic lock。其中 constraint 包含外键以及 unique 约束。</p>
+<h2 id="Schema-elements-and-states"><a href="#Schema-elements-and-states" class="headerlink" title="Schema elements and states"></a>Schema elements and states</h2><p>schema elements 包括 table、column、index、constraint、optimistic lock。每个 element 都可以对应 absent 和 public 两个 state。此外，还有 delete only 和 write only 两个中间态。</p>
+<p>【定义1】一个 delete only 的 table、column 和 index 不能被读，且：</p>
+<ol>
+<li>如果 E 是 table 或 column，则只能被 delete</li>
+<li>如果 E 是 index，则只能被 delete 和 update，<strong>这里的 update 不包含 create</strong><br> 注意这里的范围会更大一点了。</li>
+</ol>
+<p>【定义2】一个 write only 的 column 或 index 可以被 insert、delete、update，但继续不能被读。</p>
+<p>【定义3】一个 write only 的 constraint 会在执行 insert、delete、update 操作应用。但它不能覆盖所有的已有数据。</p>
+<h2 id="Database-consistency"><a href="#Database-consistency" class="headerlink" title="Database consistency"></a>Database consistency</h2><p>【定义4】一个 database representation(可以理解为某个快照) d consistent with respect to schema S，如果</p>
+<ol>
+<li>所有的 column 都属于 row 和 table</li>
+<li>所有的 row 都具有所有 public required 的 column 值</li>
+<li>所有的 index entry(索引数据)在 schema 中都能找到对应的 index<br> 也就是说我们写了条索引，但是 schema 里面却没有定义这一条索引</li>
+<li>所有的 public 的 index 是完整的<br> 也就是说不会存在某一个 row 上没有对应的 index</li>
+<li>所有的 index 都能指向 valid 的 row<br> 实际上就是不会有孤儿索引</li>
+<li>所有的 public 的 constraint 一定是满足的</li>
+<li>不存在未知数据</li>
+</ol>
+<p>这个定义在之前已经提到过了。</p>
+<p>We denote the fact that database representation d is consistent with respect to schema S as d |= S. If d is not consistent with respect to schema S, we denote this as d |/= S.</p>
+<p>【定义5】<strong>从 S1 到 S2 的 schema change，是 consistentcy preserving 的，当且仅当</strong>：</p>
+<ol>
+<li>d 在 schema S1 中任何操作下能够对 schema S2 也能保持 consistency</li>
+<li>d 在 schema S2 中任何操作下能够对 schema S1 也能保持 consistency</li>
+</ol>
+<p>下图描述了不同元素的 schema 的变更。<br><img src="/img/f1/f1_schema_change.png"></p>
+<h2 id="Adding-and-removing-schema-elements"><a href="#Adding-and-removing-schema-elements" class="headerlink" title="Adding and removing schema elements"></a>Adding and removing schema elements</h2><p>我们将 table、column和 index 称为 structural elements。它们可以被理解为决定了 Spanner 上能存储哪些 KV 数据的元素。注意 optimistic lock 因为在处理上和 column 是一致的，所以我们将它包含在 column 中讨论。</p>
+<p>【Claim2】所有从 S1 到 S2 的 schema change，如果涉及到增加或者删除 public 的 structual element E，那么它就不是 consistency preserving 的。在下面的例子中，假设 S2 包含了 E，但 S1 没有。即从 S1 到 S2 的变换是新增。</p>
+<ol>
+<li>E 是 table<br> 如果对 S2 上的 E 做 insert，那么得到的 representation d2 和 S1 是不一致的。因为其中包含的新增的数据 S1 不能解析。违反了 Database consistency 中的第一条。</li>
+<li>E 是 table R 上的 column<br> 同上</li>
+<li>E 是 table R 上的 index<br> 如果在 S2 上的 E 做 insert，那么会同时违反3和4。对于 S1，违反了3，因为我们写入的索引在 schema 里面没找到定义。</li>
+</ol>
+<p>【Claim3】从 S1 到 S2 的 schema change 是 consistency preserving 的，当且仅当它在 S1 和 S2 上都能避免 orphan data 和 integrity anomaly 两种数据不一致的情况。</p>
+<h2 id="Optional-structural-elements"><a href="#Optional-structural-elements" class="headerlink" title="Optional structural elements"></a>Optional structural elements</h2><p>这里的 Optional 指的是 element 是可选的，例如定义了 default，或者是 nullable 的。</p>
+<p>【Claim4】【absent-&gt;delete only】考虑从 schema S1 到 schema S2 的 schema change，它添加了一个 delete only 的 structural element E。对于任意的 representation d，且 d |= S1, d |= S2。那么所有基于 S1 和 S2 在 E 上的操作都不会产生两种异常。</p>
+<p>【Claim5】【delete only-&gt;public】类似 Claim4</p>
+<h2 id="Required-structural-elements"><a href="#Required-structural-elements" class="headerlink" title="Required structural elements"></a>Required structural elements</h2><h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
 <li><a href="http://zimulala.github.io/2016/02/02/schema-change-implement/" target="_blank" rel="noopener">http://zimulala.github.io/2016/02/02/schema-change-implement/</a></li>
 <li><a href="https://github.com/zimulala/builddatabase/blob/master/f1/schema-change.md" target="_blank" rel="noopener">https://github.com/zimulala/builddatabase/blob/master/f1/schema-change.md</a></li>
 <li><a href="https://disksing.com/understanding-f1-schema-change/" target="_blank" rel="noopener">https://disksing.com/understanding-f1-schema-change/</a></li>
 <li><a href="https://tongtianta.site/paper/57876" target="_blank" rel="noopener">https://tongtianta.site/paper/57876</a><br> Online, Asynchronous Schema Change in F1</li>
 <li><a href="https://www.zenlife.tk/schema-lease.md" target="_blank" rel="noopener">https://www.zenlife.tk/schema-lease.md</a></li>
 <li><a href="https://hhwyt.xyz/2021-03-27-online-async-schema-change-in-f1/" target="_blank" rel="noopener">https://hhwyt.xyz/2021-03-27-online-async-schema-change-in-f1/</a></li>
+<li><a href="https://zhuanlan.zhihu.com/p/309831009" target="_blank" rel="noopener">https://zhuanlan.zhihu.com/p/309831009</a><br> 一个翻译</li>
 </ol>
 
       
@@ -614,7 +656,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">169</span>
+                <span class="site-state-item-count">175</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -627,7 +669,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">161</span>
+                <span class="site-state-item-count">162</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -720,7 +762,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#简要问题"><span class="nav-number">1.</span> <span class="nav-text">简要问题</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#定义问题"><span class="nav-number">1.1.</span> <span class="nav-text">定义问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#分步解决问题"><span class="nav-number">1.2.</span> <span class="nav-text">分步解决问题</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">2.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#简要问题"><span class="nav-number">1.</span> <span class="nav-text">简要问题</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#定义问题"><span class="nav-number">1.1.</span> <span class="nav-text">定义问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#分步解决问题"><span class="nav-number">1.2.</span> <span class="nav-text">分步解决问题</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#论文证明"><span class="nav-number">2.</span> <span class="nav-text">论文证明</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Denotation"><span class="nav-number">2.1.</span> <span class="nav-text">Denotation</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Schema-elements-and-states"><span class="nav-number">2.2.</span> <span class="nav-text">Schema elements and states</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Database-consistency"><span class="nav-number">2.3.</span> <span class="nav-text">Database consistency</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Adding-and-removing-schema-elements"><span class="nav-number">2.4.</span> <span class="nav-text">Adding and removing schema elements</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Optional-structural-elements"><span class="nav-number">2.5.</span> <span class="nav-text">Optional structural elements</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Required-structural-elements"><span class="nav-number">2.6.</span> <span class="nav-text">Required structural elements</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">3.</span> <span class="nav-text">Reference</span></a></li></ol></div>
             
 
           </div>

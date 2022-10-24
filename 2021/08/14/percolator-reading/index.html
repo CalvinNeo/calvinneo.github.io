@@ -102,7 +102,7 @@
 <meta property="og:locale" content="zh-Hans">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/percolator3.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/percolator/f5.png">
-<meta property="og:updated_time" content="2022-02-18T12:55:25.523Z">
+<meta property="og:updated_time" content="2022-10-24T11:29:22.002Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Percolator论文阅读">
 <meta name="twitter:description" content="介绍Percolator论文。">
@@ -446,8 +446,7 @@
 
 <p>【Q】先对primary进行Prewrite这个行为是必要的么？此外，在Commit 2阶段也能看到类似的现象。我们放到Commit 2这部分讲。</p>
 <h3 id="Prewrite"><a href="#Prewrite" class="headerlink" title="Prewrite"></a>Prewrite</h3><p>传入的两个参数，primary是<code>writes_[0]</code>，primary lock会在它上面。</p>
-<p>我们需要lock所有被写的cell。</p>
-<p>对于所有的cell检查下面两类冲突：</p>
+<p>我们需要lock所有被写的cell，在这之前，先对于所有的cell检查下面两类冲突：</p>
 <ol>
 <li>【Line 32】如果发现cell的<strong>write列</strong>在自己的ST之后已经存在一条记录，执行abort<br> 这实际上是有其他事务已经提交了修改，事务write-write冲突了。根据SI，需要abort。<br> 【Q】这里有个疑问，SI不是要到提交的时候再检查冲突么？</li>
 <li>【Line 34】如果发现cell的<strong>lock列</strong>上有另外的记录，无论timestamp是什么，执行abort<br> 有可能是一个已经提交的事务，并且它的CT比我们ST还要小，但没来得及清理锁，所以并不是冲突。<br> Percolator认为这个不常见，所以还是abort。<br> 在<a href="https://www.jianshu.com/p/05194f4b29dd" target="_blank" rel="noopener">文章</a>中还提到可能有失败事务的情况。</li>
@@ -477,9 +476,19 @@
 </li>
 </ol>
 <p>【Q】为什么在处理primary的时候就提交行事务<code>T.Commit()</code>了？先对primary进行Prewrite这个行为是必要的么？<br>原因是primary的lock列和write列是判断整个事务状态的金标准。在primary写完write、清完lock之后，就认为事务已经提交，所以就<code>T.Commit()</code>了。后面往secondary写，只是起到通知作用。<br>假如往secondary写失败了，也不会影响到整个事务的提交。因为secondary还是会将请求redirect到primary上，然后就能发现primary的已提交状态。</p>
-<p>【Q】写write删lock是原子操作么？如果不是原子操作，它们的顺序是必然的么？</p>
+<p>【Q】写write删lock是原子操作么？如果不是原子操作，它们的顺序是必然的么？是的，因为这是一个 bigtable 事务。</p>
 <figure class="highlight maxima"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">41</span> bool Commit() &#123;</span><br><span class="line">...</span><br><span class="line"><span class="number">47</span></span><br><span class="line"><span class="number">48</span>   int commit ts = oracle.GetTimestamp();</span><br><span class="line"><span class="number">49</span></span><br><span class="line"><span class="number">50</span>   // Commit primary <span class="built_in">first</span>.</span><br><span class="line"><span class="number">51</span>   Write p = primary;</span><br><span class="line"><span class="number">52</span>   bigtable::Txn T = bigtable::StartRowTransaction(p.<span class="built_in">row</span>);</span><br><span class="line"><span class="number">53</span>   <span class="keyword">if</span> (!T.Read(p.<span class="built_in">row</span>, p.<span class="built_in">col</span>+<span class="string">"lock"</span>, [start_ts , start_ts ]))</span><br><span class="line"><span class="number">54</span>     <span class="built_in">return</span> <span class="literal">false</span>; // aborted <span class="keyword">while</span> working</span><br><span class="line"><span class="number">55</span>   T.Write(p.<span class="built_in">row</span>, p.<span class="built_in">col</span>+<span class="string">"write"</span>, commit ts,</span><br><span class="line"><span class="number">56</span>     start_ts ); // Pointer to data written <span class="built_in">at</span> start_ts .</span><br><span class="line"><span class="number">57</span>   T.Erase(p.<span class="built_in">row</span>, p.<span class="built_in">col</span>+<span class="string">"lock"</span>, commit ts);</span><br><span class="line"><span class="number">58</span>   <span class="keyword">if</span> (!T.Commit()) <span class="built_in">return</span> <span class="literal">false</span>; // commit point</span><br><span class="line"><span class="number">59</span></span><br><span class="line"><span class="number">60</span>   // Second phase: write out write records <span class="keyword">for</span> secondary cells.</span><br><span class="line"><span class="number">61</span>   <span class="keyword">for</span> (Write w : secondaries) &#123;</span><br><span class="line"><span class="number">62</span>     bigtable::Write(w.<span class="built_in">row</span>, w.<span class="built_in">col</span>+<span class="string">"write"</span>, commit ts, start_ts );</span><br><span class="line"><span class="number">63</span>     bigtable::Erase(w.<span class="built_in">row</span>, w.<span class="built_in">col</span>+<span class="string">"lock"</span>, commit ts);</span><br><span class="line"><span class="number">64</span>   &#125;</span><br><span class="line"><span class="number">65</span>   <span class="built_in">return</span> <span class="literal">true</span>;</span><br><span class="line"><span class="number">66</span> &#125;</span><br></pre></td></tr></table></figure>
 
+<p>【Q】ST和CT的关系是什么，会出现<code>ST1&lt;ST2</code>但是<code>CT1&gt;CT2</code>的情况吗？也就是说 st2 对应的更晚被启动，但是更早被提交，并且在这之前的 st1 反而在它提交之后还能成功提交？其实不会，我们考虑：<br>如果 st2 被提交，说明 st2 设置的lock，没有被清掉。从而 st2 需要能成功设置 lock。从而 st2 事务在 prewrite 时，没有 ts 大于 st2 的 write，在 [0, ∞] 没有 lock。因为 <code>st1&lt;st2</code>，所以实际要求就是在 [0, ∞] 没有 lock。那么就分为两种情况：</p>
+<ol>
+<li>st1 此时已经提交了，那么 ct1 肯定小于 ct2，假设不成立</li>
+<li>st1 此时还没提交<ol>
+<li>如果此时 st1 已经持有 lock，则 st2 不能上锁成功，假设不成立</li>
+<li>所以此时 st1 会卡在【line 35】，一直到 st2 提交完</li>
+</ol>
+</li>
+</ol>
+<p>但这个情况成立么？其实不会，因为我们注意到 Line 39 的 <code>T.Commit()</code>，可以看出从31到38行的代码都是作为 bigtable 事务被整体提交的。</p>
 <h3 id="Get"><a href="#Get" class="headerlink" title="Get"></a>Get</h3><p>首先检查[0, ST]区间内有没有锁。<br>如果有，说明另一个事务在写，这个读取事务就要等锁被释放(也就是事务完成)后才能继续执行。注意，不能在这里返回旧数据，<a href="https://pingcap.com/zh/blog/percolator-and-txn" target="_blank" rel="noopener">否则可能导致幻读</a>。<br>【Line19】 如果没有锁，就读取最后一次写的数据<code>latest_write</code>，并且返回对应的data【Line22】。如果没有读到数据，就返回no data。</p>
 <figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="symbol">8 </span> bool <span class="keyword">Get</span>(Row row, Column c, string* value) &#123;</span><br><span class="line"><span class="symbol">9 </span>   <span class="keyword">while</span> (true) &#123;</span><br><span class="line"><span class="symbol">10 </span>    bigtable::Txn T = bigtable::StartRowTransaction(row);</span><br><span class="line"><span class="symbol">11 </span>    // Check <span class="keyword">for</span> locks that signal concurrent writes.</span><br><span class="line"><span class="symbol">12 </span>    <span class="keyword">if</span> (T.<span class="keyword">Read</span>(row, c+<span class="string">"lock"</span>, [<span class="number">0</span>, start_ts_])) &#123;</span><br><span class="line"><span class="symbol">13 </span>    // There is a pending lock; try <span class="keyword">to</span> clean it <span class="keyword">and</span> <span class="keyword">wait</span></span><br><span class="line"><span class="symbol">14 </span>    BackoffAndMaybeCleanupLock(row, c);</span><br><span class="line"><span class="symbol">15 </span>    continue;</span><br><span class="line"><span class="symbol">16 </span>  &#125;</span><br><span class="line"><span class="number">17</span></span><br><span class="line"><span class="symbol">18 </span>  // Find the latest <span class="keyword">write</span> below our start timestamp.</span><br><span class="line"><span class="symbol">19 </span>  latest_write = T.<span class="keyword">Read</span>(row, c+<span class="string">"write"</span>, [<span class="number">0</span>, start_ts_]);</span><br><span class="line"><span class="symbol">20 </span>  <span class="keyword">if</span> (!latest_write.found()) <span class="keyword">return</span> false; // no <span class="keyword">data</span></span><br><span class="line"><span class="symbol">21 </span>  <span class="keyword">int</span> <span class="keyword">data</span> ts = latest_write.start_timestamp();</span><br><span class="line"><span class="symbol">22 </span>  *value = T.<span class="keyword">Read</span>(row, c+<span class="string">"data"</span>, [data_ts, data_ts]);</span><br><span class="line"><span class="symbol">23 </span>  <span class="keyword">return</span> true;</span><br><span class="line"><span class="symbol">24 </span>&#125;</span><br></pre></td></tr></table></figure>
 
@@ -661,7 +670,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">169</span>
+                <span class="site-state-item-count">175</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -674,7 +683,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">161</span>
+                <span class="site-state-item-count">162</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

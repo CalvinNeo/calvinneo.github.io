@@ -107,7 +107,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/fbs/raft_exam/1.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/fbs/raft_exam/2.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/fbs/raft_exam/3.png">
-<meta property="og:updated_time" content="2021-11-30T16:10:28.479Z">
+<meta property="og:updated_time" content="2022-06-01T15:55:06.990Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Raft共识算法">
 <meta name="twitter:description" content="本文来自我的文章分布式一致性和分布式共识协议太长，因此将其中的Raft部分单独列出来作为一篇文章。 Raft协议的设计者们认为Paxos协议非常难于理解，并且需要作出很多修改才能够应用到工程中，因此设计了偏重于实现的Raft协议，这甚至体现在他们的论文标题《In Search of an Understandable Consensus Algorithm(Extended Version)》上，">
@@ -475,8 +475,8 @@
 </ol>
 <p>注意，有时候一个刚竞选成功的Leader会收到同term的Candidate的Vote请求，而它会给一个Candidate投票。<a href="https://paste.ubuntu.com/p/zrz29bgFPk/" target="_blank" rel="noopener">参考下面的log</a>。这应该是一个错误的实现导致的，**当Leader竞选成功时，我们不需要重置其<code>vote_for</code>**。</p>
 <h1 id="Log-replication"><a href="#Log-replication" class="headerlink" title="Log replication"></a>Log replication</h1><p>一旦由<strong>当前Leader</strong>创建的某日志条目被成功复制到<strong>过半数</strong>的服务器上时，这个Leader可以Commit<strong>该条目</strong>及自己日志中<strong>该条目之前的所有条目</strong>（论文5.4.2节会提到一些细节证明）。这里要求至少过半数实际上为前面的选举投票顺利进行提供了保障，剩余的节点（可能因为宕机或者脑裂没收到）可以在后面慢慢AppendEntries。不需要全部成功复制的原因会在Safety中进行论证。有意思的是即使先前的条目可能是由其他Leader创建的，但这也不影响提交，事实上在下面可以看到，这种方式实际上是唯一的可以提交较旧的term的日志条目的方法。<br>在<code>AppendEntriesRPC</code>中，Leader还通过<code>leaderCommit</code>字段来告知所有的Follower自己当前的提交位置，每个服务器会试图在本地提交直到<code>commitIndex</code>的日志。注意到有的服务器可能在本地并没有这个<code>commitIndex</code>的日志，因此它只能提交到自己最新日志条目的index位置。在更新完后，每个节点会更新<code>lastApplied</code>，从而将新的<code>commitIndex</code>后面的日志条目应用到复制状态机上。在apply之后，Leader便可以向客户返回结果。</p>
-<h2 id="不能提交来自较旧任期的日志条目-论文5-4-2节"><a href="#不能提交来自较旧任期的日志条目-论文5-4-2节" class="headerlink" title="不能提交来自较旧任期的日志条目(论文5.4.2节)"></a>不能提交来自较旧任期的日志条目(论文5.4.2节)</h2><h3 id="Leader在commit了一条日志后，立刻宕机会怎么样呢？"><a href="#Leader在commit了一条日志后，立刻宕机会怎么样呢？" class="headerlink" title="Leader在commit了一条日志后，立刻宕机会怎么样呢？"></a>Leader在commit了一条日志后，立刻宕机会怎么样呢？</h3><p><a href="https://www.zhihu.com/question/357207584" target="_blank" rel="noopener">Leader在commit了一条日志后，立刻宕机会怎么样呢？</a>，我认为领导人完全性(Leader Completeness)要求如果某个日志条目在某个term中已经被提交，那么这个条目必然出现在所有具有更大的term的Leader中。因此不具备该entry的节点不可能被选举为新Leader。但是注意新Leader，不能提交来自较旧任期的日志条目。</p>
-<p>另外，我们还需要注意commitIndex是volatile的。在紧随其后的一节中，我们将看到<strong>已经被存储到大多数节点中</strong>的<strong>较旧的</strong>日志条目也可能被未来的Leader所覆盖掉。但因为“不能提交来自较旧任期的日志条目”，所以在c阶段是不能Commit的。这就导致安全性并没有被破坏，<strong>如果不Commit和Apply，Client也就一直不知道成功还是失败</strong>，所以即使将来Commit的时候这个版本被覆盖掉，大不了就告诉Client失败了呗。</p>
+<h2 id="不能提交来自较旧任期的日志条目-论文5-4-2节"><a href="#不能提交来自较旧任期的日志条目-论文5-4-2节" class="headerlink" title="不能提交来自较旧任期的日志条目(论文5.4.2节)"></a>不能提交来自较旧任期的日志条目(论文5.4.2节)</h2><h3 id="Leader在commit了一条日志后，立刻宕机会怎么样呢？"><a href="#Leader在commit了一条日志后，立刻宕机会怎么样呢？" class="headerlink" title="Leader在commit了一条日志后，立刻宕机会怎么样呢？"></a>Leader在commit了一条日志后，立刻宕机会怎么样呢？</h3><p><a href="https://www.zhihu.com/question/357207584" target="_blank" rel="noopener">Leader在commit了一条日志后，立刻宕机会怎么样呢？</a>，我认为领导人完全性(Leader Completeness)要求如果某个日志条目在某个term中已经被提交，那么这个条目必然出现在所有具有更大的term的Leader中。因此不具备该entry的节点不可能被选举为新Leader。所以这个被commit的日志在后续的raft流程中肯定还是commit的。但是注意新Leader不能提交来自较旧任期的日志条目。</p>
+<p>另外，还需要注意commitIndex是volatile的。在紧随其后的一节中，将看到<strong>已经被存储到大多数节点中</strong>的<strong>较旧的</strong>日志条目也可能被未来的Leader所覆盖掉。但因为“不能提交来自较旧任期的日志条目”，所以在c阶段是不能Commit的。这就导致安全性并没有被破坏，<strong>如果不Commit和Apply，Client也就一直不知道成功还是失败</strong>，所以即使将来Commit的时候这个版本被覆盖掉，大不了就告诉Client失败了呗。</p>
 <h3 id="进一步讨论：论文5-4-2节"><a href="#进一步讨论：论文5-4-2节" class="headerlink" title="进一步讨论：论文5.4.2节"></a>进一步讨论：论文5.4.2节</h3><p>如果一个LogEntry已经出现在多数节点上，那么可以认为它已经被Commit了么？<br>上一章节已经知道不可以这样认为，因为<strong>已经被persist</strong>到<strong>majority</strong>节点中的<strong>较旧term</strong>的LogEntry也可能被未来的Leader所覆盖掉。因此，我们不能告诉客户端我们已经成功Commit了。</p>
 <p>通过这个性质，保证了两点：</p>
 <ol>
@@ -770,7 +770,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">169</span>
+                <span class="site-state-item-count">175</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -783,7 +783,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">161</span>
+                <span class="site-state-item-count">162</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

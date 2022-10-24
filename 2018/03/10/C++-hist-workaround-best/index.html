@@ -100,7 +100,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="C++历史概述C++是一门历史悠久的语言，原来叫C with classes，自1979年以来已经出现了98/03/11/14/17五个标准，因此C++中的Workaround和Best practice是随着标准演化而推进的。因此这里首先概览一下C++从开始设计以来的特性的引入、废止与更新的过程，以及对C++11及以后引入的重要特性的一些论述。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2022-02-07T09:24:05.119Z">
+<meta property="og:updated_time" content="2022-07-12T15:17:03.928Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="C++历史标准的发展及常见的Workaround和最佳实践">
 <meta name="twitter:description" content="C++历史概述C++是一门历史悠久的语言，原来叫C with classes，自1979年以来已经出现了98/03/11/14/17五个标准，因此C++中的Workaround和Best practice是随着标准演化而推进的。因此这里首先概览一下C++从开始设计以来的特性的引入、废止与更新的过程，以及对C++11及以后引入的重要特性的一些论述。">
@@ -499,6 +499,8 @@
 <h2 id="C-17"><a href="#C-17" class="headerlink" title="C++17"></a>C++17</h2><ol>
 <li><p><code>static_assert</code>现在可以省略第二个参数了（这居然也算特性）</p>
 </li>
+<li><p>Class template argument deduction (CTAD)</p>
+</li>
 <li><p>template template现在允许<code>typename</code>了，之前只能用<code>class</code><br> 他这个<code>typename</code>啦<code>class</code>啦啥的总是有很多人搞不清，上次用那个RapidXML，多加了几个<code>typename</code></p>
 </li>
 <li><p>类型推导<br> 现在auto可以从braced-init-list推导了，即我们可以按照下面的写法</p>
@@ -507,7 +509,7 @@
 </li>
 <li><p>Allowing attributes for namespaces and enumerators</p>
 </li>
-<li><p>新的attributes，包括<code>[[fallthrough]]</code>等</p>
+<li><p>新的attributes<br> <code>[[fallthrough]]</code><br> <code>[[maybe_unused]]</code><br> <code>[[nodiscard]]</code>。一个 <a href="https://en.cppreference.com/w/cpp/language/expressions#Discarded-value_expressions" target="_blank" rel="noopener">Discarded value expression</a>表示我们执行它只是为了它的副作用而不是结果。如果我们不使用返回的结果，或者不<code>static_cast&lt;void&gt;(f)</code>(称为 cast to void)时，会产生一个警告</p>
 </li>
 <li><p>提供了<code>u8</code>来表示UTF-8编码的char，这是出于兼容性和擦屁股考虑的，因为仍然只有一个字节，所以只能放ASCII</p>
 </li>
@@ -539,9 +541,12 @@
 </li>
 <li><p><em><code>int std::uncaught_exceptions() noexcept</code>替换了<code>bool std::uncaught_exception() noexcept</code>，所以我们不只学会了英语的复数</em></p>
 </li>
-<li><p><em>容器</em><br>map系容器添加了两个方法<br>增加了统一的<code>std::size</code>、<code>std::empty</code>、<code>std::data</code>访问容器</p>
+<li><p><em>容器</em><br>map系容器添加了两个方法：extract 和 merge。<br>extract 通常被用来修改一个 map 的 key，但避免 reallocation</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">std</span>::<span class="built_in">map</span>&lt;<span class="keyword">int</span>, <span class="built_in">std</span>::<span class="built_in">string</span>&gt; m&#123;&#123;<span class="number">1</span>, <span class="string">"mango"</span>&#125;, &#123;<span class="number">2</span>, <span class="string">"papaya"</span>&#125;, &#123;<span class="number">3</span>, <span class="string">"guava"</span>&#125;&#125;;</span><br><span class="line"><span class="keyword">auto</span> nh = m.extract(<span class="number">2</span>);</span><br><span class="line">nh.key() = <span class="number">4</span>;</span><br><span class="line">m.insert(<span class="built_in">std</span>::move(nh));</span><br><span class="line"><span class="comment">// m == &#123;&#123;1, "mango"&#125;, &#123;3, "guava"&#125;, &#123;4, "papaya"&#125;&#125;</span></span><br></pre></td></tr></table></figure>
+
+<p>merge 用来将接受的参数中的 key 插入到自己之中(忽略重复的 key)。<br>增加了统一的<code>std::size</code>、<code>std::empty</code>、<code>std::data</code>访问容器</p>
 </li>
-<li><p><em>Definition of “contiguous iterators”</em></p>
+<li><p><em>Definition of “contiguous iterators”</em><br>一个 LegacyContiguousIterator 表示逻辑相邻的元素在物理上也是相邻的。</p>
 </li>
 <li><p><em>基于Boost的一个文件系统库</em></p>
 </li>
@@ -551,6 +556,8 @@
 </li>
 <li><p><em>逻辑运算<code>std::conjunction</code>、<code>std::disjunction</code>、<code>std::negation</code></em></p>
 </li>
+<li><p><em><code>std::scoped_lock</code></em><br>可以看做是 lock_guard 的超集。相比 lock_guard 能接受0/1个 mutex，scoped_lock 可以接受1-n个 mutex。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">std</span>::<span class="function">scoped_lock <span class="title">lock</span><span class="params">(e1.m, e2.m)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">// Equivalent code 1 (using std::lock and std::lock_guard)</span></span><br><span class="line"><span class="comment">// std::lock(e1.m, e2.m);</span></span><br><span class="line"><span class="comment">// std::lock_guard&lt;std::mutex&gt; lk1(e1.m, std::adopt_lock);</span></span><br><span class="line"><span class="comment">// std::lock_guard&lt;std::mutex&gt; lk2(e2.m, std::adopt_lock);</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// Equivalent code 2 (if unique_locks are needed, e.g. for condition variables)</span></span><br><span class="line"><span class="comment">// std::unique_lock&lt;std::mutex&gt; lk1(e1.m, std::defer_lock);</span></span><br><span class="line"><span class="comment">// std::unique_lock&lt;std::mutex&gt; lk2(e2.m, std::defer_lock);</span></span><br><span class="line"><span class="comment">// std::lock(lk1, lk2);</span></span><br></pre></td></tr></table></figure></li>
 </ol>
 <h1 id="限制类型特性"><a href="#限制类型特性" class="headerlink" title="限制类型特性"></a>限制类型特性</h1><h2 id="concepts前"><a href="#concepts前" class="headerlink" title="concepts前"></a>concepts前</h2><p>在concepts前，C++限制类型特性常可以通过<code>static_assert</code>对应traits或直接上SFINAE解决，这里还列出一些特殊的情形。</p>
 <ol>
@@ -576,6 +583,11 @@
 <li>内存碎片<br> 这个是一个复杂的问题。</li>
 </ol>
 <h1 id="右值"><a href="#右值" class="headerlink" title="右值"></a>右值</h1><p>有关右值可以查看我的文章<a href="/2017/02/11/C++-rvalue/">C++右值</a></p>
+<h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
+<li><a href="https://en.cppreference.com/w/cpp/11" target="_blank" rel="noopener">https://en.cppreference.com/w/cpp/11</a></li>
+<li><a href="https://en.cppreference.com/w/cpp/14" target="_blank" rel="noopener">https://en.cppreference.com/w/cpp/14</a></li>
+<li><a href="https://en.cppreference.com/w/cpp/17" target="_blank" rel="noopener">https://en.cppreference.com/w/cpp/17</a></li>
+</ol>
 
       
     </div>
@@ -730,7 +742,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">169</span>
+                <span class="site-state-item-count">175</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -743,7 +755,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">161</span>
+                <span class="site-state-item-count">162</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -836,7 +848,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#C-历史概述"><span class="nav-number">1.</span> <span class="nav-text">C++历史概述</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#史前时代"><span class="nav-number">1.1.</span> <span class="nav-text">史前时代</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#C-11"><span class="nav-number">1.2.</span> <span class="nav-text">C++11</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#C-14"><span class="nav-number">1.3.</span> <span class="nav-text">C++14</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#C-17"><span class="nav-number">1.4.</span> <span class="nav-text">C++17</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#限制类型特性"><span class="nav-number">2.</span> <span class="nav-text">限制类型特性</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#concepts前"><span class="nav-number">2.1.</span> <span class="nav-text">concepts前</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#concepts后"><span class="nav-number">2.2.</span> <span class="nav-text">concepts后</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#反射"><span class="nav-number">3.</span> <span class="nav-text">反射</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#内存管理"><span class="nav-number">4.</span> <span class="nav-text">内存管理</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#右值"><span class="nav-number">5.</span> <span class="nav-text">右值</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#C-历史概述"><span class="nav-number">1.</span> <span class="nav-text">C++历史概述</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#史前时代"><span class="nav-number">1.1.</span> <span class="nav-text">史前时代</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#C-11"><span class="nav-number">1.2.</span> <span class="nav-text">C++11</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#C-14"><span class="nav-number">1.3.</span> <span class="nav-text">C++14</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#C-17"><span class="nav-number">1.4.</span> <span class="nav-text">C++17</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#限制类型特性"><span class="nav-number">2.</span> <span class="nav-text">限制类型特性</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#concepts前"><span class="nav-number">2.1.</span> <span class="nav-text">concepts前</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#concepts后"><span class="nav-number">2.2.</span> <span class="nav-text">concepts后</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#反射"><span class="nav-number">3.</span> <span class="nav-text">反射</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#内存管理"><span class="nav-number">4.</span> <span class="nav-text">内存管理</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#右值"><span class="nav-number">5.</span> <span class="nav-text">右值</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">6.</span> <span class="nav-text">Reference</span></a></li></ol></div>
             
 
           </div>
