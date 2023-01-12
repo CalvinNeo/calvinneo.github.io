@@ -74,7 +74,7 @@
 <link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="分布式,数据库,raft,redis," />
+  <meta name="keywords" content="分布式,raft,数据库,redis," />
 
 
 
@@ -93,14 +93,14 @@
 
 
 <meta name="description" content="Sentinel(哨兵)监控Redis集群中Master状态，是Redis 的高可用性解决方案。它监视一系列Master-Slave集群（和其他Sentinel）。当某个Master下线时，自动将该Master下的某个Slave升级为Master。 Sentinel的代码阅读难度相对较大，这是因为它是时钟驱动的一个状态机，所以在逻辑上有点不是很连贯。本文使用的版本和Redis底层对象实现原理分析这">
-<meta name="keywords" content="分布式,数据库,raft,redis">
+<meta name="keywords" content="分布式,raft,数据库,redis">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Redis Sentinel实现原理分析">
 <meta property="og:url" content="http://www.calvinneo.com/2020/10/18/redis-sentinel/index.html">
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="Sentinel(哨兵)监控Redis集群中Master状态，是Redis 的高可用性解决方案。它监视一系列Master-Slave集群（和其他Sentinel）。当某个Master下线时，自动将该Master下的某个Slave升级为Master。 Sentinel的代码阅读难度相对较大，这是因为它是时钟驱动的一个状态机，所以在逻辑上有点不是很连贯。本文使用的版本和Redis底层对象实现原理分析这">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2021-08-18T07:29:00.938Z">
+<meta property="og:updated_time" content="2022-11-26T16:21:17.019Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Redis Sentinel实现原理分析">
 <meta name="twitter:description" content="Sentinel(哨兵)监控Redis集群中Master状态，是Redis 的高可用性解决方案。它监视一系列Master-Slave集群（和其他Sentinel）。当某个Master下线时，自动将该Master下的某个Slave升级为Master。 Sentinel的代码阅读难度相对较大，这是因为它是时钟驱动的一个状态机，所以在逻辑上有点不是很连贯。本文使用的版本和Redis底层对象实现原理分析这">
@@ -402,9 +402,11 @@
 <p>SDOWN表示主观下线，即被一个Sentinel认为下线。ODOWN是客观下线，表示被Sentinel集群认为下线。<br>如果另一个Sentinel觉得某个Master节点SDOWN了，那么它会通知我，并且让我把这个Master节点也设置为SDOWN么？是的，可以查看<code>sentinelAskMasterStateToOtherSentinels</code>函数。</p>
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SRI_S_DOWN (1&lt;&lt;3)   <span class="comment">/* Subjectively down (no quorum). */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SRI_O_DOWN (1&lt;&lt;4)   <span class="comment">/* Objectively down (confirmed by others). */</span></span></span><br></pre></td></tr></table></figure>
 
-<p><code>SRI_MASTER_DOWN</code>和<code>SRI_S_DOWN</code>有什么区别呢？<code>SRI_MASTER_DOWN</code>表示对方Sentinel关于Master有没有宕机的投票结果。<code>SRI_S_DOWN</code>表示我自己认为有没有SDOWN。</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SRI_MASTER_DOWN (1&lt;&lt;5) <span class="comment">/* A Sentinel with this flag set thinks that</span></span></span><br><span class="line"><span class="meta"><span class="comment">                                   its master is down. */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SRI_FAILOVER_IN_PROGRESS (1&lt;&lt;6) <span class="comment">/* Failover is in progress for</span></span></span><br><span class="line"><span class="meta"><span class="comment">                                           this master. */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SRI_PROMOTED (1&lt;&lt;7)            <span class="comment">/* Slave selected for promotion. */</span></span></span><br></pre></td></tr></table></figure>
-
+<p><code>SRI_MASTER_DOWN</code>和<code>SRI_S_DOWN</code>有什么区别呢？</p>
+<ol>
+<li><code>SRI_MASTER_DOWN</code>表示对方Sentinel关于Master有没有宕机的投票结果。用来统计生成ODOWN的结果。</li>
+<li><code>SRI_S_DOWN</code>表示我自己认为某个节点有没有SDOWN，包括Slave、Master、Sentinel。<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SRI_MASTER_DOWN (1&lt;&lt;5) <span class="comment">/* A Sentinel with this flag set thinks that</span></span></span><br><span class="line"><span class="meta"><span class="comment">                                   its master is down. */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SRI_FAILOVER_IN_PROGRESS (1&lt;&lt;6) <span class="comment">/* Failover is in progress for</span></span></span><br><span class="line"><span class="meta"><span class="comment">                                           this master. */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SRI_PROMOTED (1&lt;&lt;7)            <span class="comment">/* Slave selected for promotion. */</span></span></span><br></pre></td></tr></table></figure></li>
+</ol>
 <p>下面三个是和Reconf有关的Flag，我们在稍后进行考虑。</p>
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SRI_RECONF_SENT (1<span class="meta-string">&lt;&lt;8)     /* SLAVEOF &lt;newmaster&gt; sent. */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SRI_RECONF_INPROG (1&lt;&lt;9)   <span class="comment">/* Slave synchronization in progress. */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SRI_RECONF_DONE (1&lt;&lt;10)     <span class="comment">/* Slave synchronized with new master. */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SRI_FORCE_FAILOVER (1&lt;&lt;11)  <span class="comment">/* Force failover with master up. */</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SRI_SCRIPT_KILL_SENT (1&lt;&lt;12) <span class="comment">/* SCRIPT KILL already sent on -BUSY */</span></span></span><br></pre></td></tr></table></figure>
 
@@ -416,7 +418,7 @@
 </li>
 <li><p><code>name</code><br> <code>ri-&gt;runid</code>和<code>ri-&gt;name</code>是两个不同概念。<br> 对于Master节点来说，表示这个Sentinel中Master节点的名字，这个名字是在配置文件里面用<code>SENTINEL monitor</code>设置的。<br> 对于Slave和Sentinel节点来说，这个是自动设置的。在<code>createSentinelRedisInstance</code>中可以看到，Slave的<code>name</code>是<code>ip:port</code>;从<code>sentinelProcessHelloMessage</code>可以看到，Sentinel的<code>name</code>是runid。<br> <code>masters</code>、<code>slaves</code>、<code>sentinels</code>这三个<code>dict</code>的key是<code>name</code>。</p>
 </li>
-<li><p><code>parallel_syncs</code><br> 在执行故障转移操作时，可以同时对新的Master进行同步的Slave数量。通过下面命令进行设置。</p>
+<li><p><code>parallel_syncs</code><br> 在failover时，可以同时对新的Master进行同步的Slave数量。通过下面命令进行设置。</p>
  <figure class="highlight applescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SENTINEL parallel-syncs &lt;master-<span class="built_in">name</span>&gt; &lt;<span class="built_in">number</span>&gt;</span><br></pre></td></tr></table></figure></li>
 <li><p><code>leader</code><br> 如果这个Instance是Master，那么<code>leader</code>表示将负责对这个Master进行FailOver的Sentinel的runid。<br> 如果这个Instance是Sentinel，那么<code>leader</code>就是被选举出来的Sentinel Leader的runid。<br> 对于非<code>SRI_MASTER_DOWN</code>情况，这个不生效。</p>
 </li>
@@ -492,8 +494,10 @@
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">...</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> simfailure_flags; <span class="comment">/* Failures simulation. */</span></span><br><span class="line">    <span class="keyword">int</span> deny_scripts_reconfig; <span class="comment">/* Allow SENTINEL SET ... to change script</span></span><br><span class="line"><span class="comment">                                  paths at runtime? */</span></span><br><span class="line">&#125; sentinel;</span><br></pre></td></tr></table></figure>
 
 <h4 id="【辨析】sentinelState和sentinelRedisInstance的区别"><a href="#【辨析】sentinelState和sentinelRedisInstance的区别" class="headerlink" title="【辨析】sentinelState和sentinelRedisInstance的区别"></a>【辨析】sentinelState和sentinelRedisInstance的区别</h4><p>在阅读源码的过程中，有一个混淆点，也就是说具有<code>SRI_SENTINEL</code>标识的<code>sentinelRedisInstance</code>和<code>sentinelState</code>有什么区别呢？<br>其实，<code>sentinelState</code>表示这个Sentinel进程的描述的Sentinel的上下文，而各个<code>sentinelRedisInstance</code>表示这个Sentinel进程监视的所有实例，为了监视这些实例，需要从本进程创建连接。而具有<code>SRI_SENTINEL</code>标识的<code>sentinelRedisInstance</code>就表示这个进程监视的Sentinel实例。</p>
-<h4 id="初始化"><a href="#初始化" class="headerlink" title="初始化"></a>初始化</h4><h3 id="消息"><a href="#消息" class="headerlink" title="消息"></a>消息</h3><h4 id="INFO消息"><a href="#INFO消息" class="headerlink" title="INFO消息"></a>INFO消息</h4><p>这个消息是由哨兵节点发送给Master/Slave的，目的是：</p>
+<h4 id="初始化"><a href="#初始化" class="headerlink" title="初始化"></a>初始化</h4><h3 id="消息"><a href="#消息" class="headerlink" title="消息"></a>消息</h3><p>主要解决下面的问题：</p>
 <ol>
+<li>Sentinel 如何交流</li>
+<li>Sentinel 如何发现某个 Master 的所有 Slave<h4 id="INFO消息"><a href="#INFO消息" class="headerlink" title="INFO消息"></a>INFO消息</h4>这个消息是由哨兵节点发送给Master/Slave的，目的是：</li>
 <li>发现Slave节点</li>
 <li>确认主从关系</li>
 </ol>
@@ -613,7 +617,7 @@
 <li>发起的Sentinel处理投票消息<br> sentinelReceiveIsMasterDownReply</li>
 <li>发起的Sentinel统计票数<br> <code>sentinelHandleRedisInstance</code>里面的第二个<code>sentinelCheckObjectivelyDown</code><br> 如何判断是否ODOWN，实际上就是统计具有<code>SRI_MASTER_DOWN</code>标签的实例数量。</li>
 </ol>
- 【Q】如果是Slave/Sentinel，为什么不需要？我们判断ODOWN的目的是决定是否对一个节点进行FailOver操作。但是我们实际上并不需要对Slave和Sentinel进行FailOver。例如，一个Slave挂掉了，对于Sentinel的充其量无非就是不选择这个节点来promote了。</li>
+ 【Q】如果是Slave/Sentinel，为什么不需要？我们判断ODOWN的目的是决定是否对一个节点进行FailOver操作。所以并不需要对Slave和Sentinel进行FailOver。例如，一个Slave挂掉了，对于Sentinel的充其量无非就是不选择这个节点来promote了。</li>
 </ol>
 <h2 id="FailOver流程"><a href="#FailOver流程" class="headerlink" title="FailOver流程"></a>FailOver流程</h2><p>基于<a href="http://redisdoc.com/topic/sentinel.html" target="_blank" rel="noopener">官方文档</a>整理：</p>
 <ol>
@@ -628,7 +632,7 @@
 <li>如果竞选失败，则在<code>master-&gt;failover_timeout*2</code>之后，重新尝试竞选。 </li>
 <li>如果竞选成功，则<ol>
 <li>选出一个Slave，并将它升级为Master<br> 这个选出的Slave被存放到<code>promoted_slave</code>里面。<br> 详情见下面“选择合适的Slave”的说明。<br> 在选定Slave之后，FailOver状态切换为<code>SENTINEL_FAILOVER_STATE_SEND_SLAVEOF_NOONE</code>。</li>
-<li>向被选中的Slave即<code>promoted_slave</code>发送<code>SLAVEOF NO ONE</code>，让它转变为Master<br> 在发送完SLAVEOF之后，FailOver状态会被切换到<code>SENTINEL_FAILOVER_STATE_WAIT_PROMOTION</code>。<br> 然后，我们会在<code>sentinelRefreshInstanceInfo</code>中监听这个节点的变化，如果这个转换是成功的，那么我们会看到role的转换。那么我们就可以将状态切换到<code>SENTINEL_FAILOVER_STATE_RECONF_SLAVES</code>了。否则，在<code>sentinelFailoverWaitPromotion</code>中就会让这个FailOver过程失败掉。</li>
+<li>向被选中的Slave即<code>promoted_slave</code>发送<code>SLAVEOF NO ONE</code>，让它转变为Master<br> 在发送完SLAVEOF之后，FailOver状态会被切换到<code>SENTINEL_FAILOVER_STATE_WAIT_PROMOTION</code>。<br> 然后，我们会在<code>sentinelRefreshInstanceInfo</code>中监听这个节点的变化，如果这个转换是成功的，会看到role的转换。那么就可以将状态切换到<code>SENTINEL_FAILOVER_STATE_RECONF_SLAVES</code>了。否则，在<code>sentinelFailoverWaitPromotion</code>中就会让这个FailOver过程失败掉。</li>
 <li>通知所有Sentinel更新配置<br> 通过Pub/Sub，将更新后的配置传播给所有其他Sentinel，其他Sentinel对它们自己的配置进行更新。<br> 【Q】应该通过这个函数来处理<code>sentinelForceHelloUpdateForMaster</code>。</li>
 <li>通知所有Slave更新Master<br> 向已下线Master的其他Slave发送<code>SLAVEOF host port</code>命令，让它们去复制新的Master。<br> 【Q】应该是<code>sentinelFailoverReconfNextSlave</code></li>
 <li>当所有Slave都已经开始复制新的Master时，Leader终止这次FailOver操作。<br> 对应于<code>sentinelFailoverSwitchToPromotedSlave</code>。主要是重新设置<code>master</code>和<code>master-&gt;slaves</code>到新的地址。期间会调用到<code>sentinelResetMaster</code>，这个函数会重置<code>failover_state</code>。</li>
@@ -655,7 +659,7 @@
 <p>容易看出选举流程借鉴了Raft的思想，但其中还是有相当的区别：</p>
 <ol>
 <li><strong>Sentinel将选举和“RSM/日志”分开了，“维护RSM/日志”的是Master/Slave，而进行选举的是Sentinel</strong>。<br> 换句话说，<strong>Sentinel管的是别的集群的FailOver，而不是自己的</strong>。</li>
-<li>选举Sentinel Leader和选择合适的Slave是分开的逻辑。<ol>
+<li>选举Sentinel Leader和选择合适的Slave是分开的逻辑<ol>
 <li>Sentinel Leader选举只考虑epoch，并不需要在<code>is-master-down-by-addr</code>中附上自己要Select成为新Master的Slave。</li>
 <li>在Leader选举过程中，有两个共识需要达成：某个Master是否SDOWN/ODOWN；选择哪个Leader。</li>
 <li>当Sentinel Leader被选出来之后，由它<strong>独自处理FailOver流程</strong>，包含Select Slave部分。</li>
@@ -1386,9 +1390,9 @@
           
             <a href="/tags/分布式/" rel="tag"># 分布式</a>
           
-            <a href="/tags/数据库/" rel="tag"># 数据库</a>
-          
             <a href="/tags/raft/" rel="tag"># raft</a>
+          
+            <a href="/tags/数据库/" rel="tag"># 数据库</a>
           
             <a href="/tags/redis/" rel="tag"># redis</a>
           
@@ -1494,7 +1498,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">175</span>
+                <span class="site-state-item-count">184</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -1507,7 +1511,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">162</span>
+                <span class="site-state-item-count">144</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -1623,7 +1627,7 @@
         <div class="copyright">
   
   &copy;  2015 - 
-  <span itemprop="copyrightYear">2022</span>
+  <span itemprop="copyrightYear">2023</span>
   <span class="with-love">
     <i class="fa fa-heart"></i>
   </span>

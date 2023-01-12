@@ -100,7 +100,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="因为原《Redis底层对象实现原理分析》太大了，所以被拆解出来介绍Redis基础设施的相关实现，包括：  redisDb，以及在这上面的增删改查 Redis的expire和evict机制 Redis的事件机制 Redis的主从复制(一部分) 注意，很多实现在引入主从复制之后都变得非常复杂，有很多边边角角要考虑，这也导致Redis的代码相比3.0版本要难看很多。本文对主从复制的涉及，局限于帮助理解实">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2022-10-15T15:06:00.166Z">
+<meta property="og:updated_time" content="2022-10-29T07:34:18.735Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Redis基础机制分析">
 <meta name="twitter:description" content="因为原《Redis底层对象实现原理分析》太大了，所以被拆解出来介绍Redis基础设施的相关实现，包括：  redisDb，以及在这上面的增删改查 Redis的expire和evict机制 Redis的事件机制 Redis的主从复制(一部分) 注意，很多实现在引入主从复制之后都变得非常复杂，有很多边边角角要考虑，这也导致Redis的代码相比3.0版本要难看很多。本文对主从复制的涉及，局限于帮助理解实">
@@ -845,7 +845,7 @@
 </ol>
 <p>事实上<code>counter</code>的增长和访问次数是<strong>成对数关系</strong>的。所以这8 bits足够存储很大的命中次数。<br>在更新版本的<a href="https://github.com/redis/redis/blob/9ab873d9d35e789a228c5281d57c9c4fdc1e4ce1/redis.conf#L2156" target="_blank" rel="noopener">redis.conf</a>中，列出了不同<code>lfu_log_factor</code>取值下，若干次hit之后，counter增加的数量。</p>
 <p>因为r是随机取的，所以可能用数学计算挺困难的。</p>
-<figure class="highlight asciidoc"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="code">+--------+</span>------------<span class="code">+------------+</span>------------<span class="code">+------------+</span>------------+</span><br><span class="line">| factor | 100 hits   | 1000 hits  | 100K hits  | 1M hits    | 10M hits   |</span><br><span class="line"><span class="code">+--------+</span>------------<span class="code">+------------+</span>------------<span class="code">+------------+</span>------------+</span><br><span class="line">| 0      | 104        | 255        | 255        | 255        | 255        |</span><br><span class="line"><span class="code">+--------+</span>------------<span class="code">+------------+</span>------------<span class="code">+------------+</span>------------+</span><br><span class="line">| 1      | 18         | 49         | 255        | 255        | 255        |</span><br><span class="line"><span class="code">+--------+</span>------------<span class="code">+------------+</span>------------<span class="code">+------------+</span>------------+</span><br><span class="line">| 10     | 10         | 18         | 142        | 255        | 255        |</span><br><span class="line"><span class="code">+--------+</span>------------<span class="code">+------------+</span>------------<span class="code">+------------+</span>------------+</span><br><span class="line">| 100    | 8          | 11         | 49         | 143        | 255        |</span><br><span class="line"><span class="code">+--------+</span>------------<span class="code">+------------+</span>------------<span class="code">+------------+</span>------------+</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">+--------+------------+------------+------------+------------+------------+</span><br><span class="line">| factor | <span class="number">100</span> hits   | <span class="number">1000</span> hits  | <span class="number">100</span>K hits  | <span class="number">1</span>M hits    | <span class="number">10</span>M hits   |</span><br><span class="line">+--------+------------+------------+------------+------------+------------+</span><br><span class="line">| <span class="number">0</span>      | <span class="number">104</span>        | <span class="number">255</span>        | <span class="number">255</span>        | <span class="number">255</span>        | <span class="number">255</span>        |</span><br><span class="line">+--------+------------+------------+------------+------------+------------+</span><br><span class="line">| <span class="number">1</span>      | <span class="number">18</span>         | <span class="number">49</span>         | <span class="number">255</span>        | <span class="number">255</span>        | <span class="number">255</span>        |</span><br><span class="line">+--------+------------+------------+------------+------------+------------+</span><br><span class="line">| <span class="number">10</span>     | <span class="number">10</span>         | <span class="number">18</span>         | <span class="number">142</span>        | <span class="number">255</span>        | <span class="number">255</span>        |</span><br><span class="line">+--------+------------+------------+------------+------------+------------+</span><br><span class="line">| <span class="number">100</span>    | <span class="number">8</span>          | <span class="number">11</span>         | <span class="number">49</span>         | <span class="number">143</span>        | <span class="number">255</span>        |</span><br><span class="line">+--------+------------+------------+------------+------------+------------+</span><br></pre></td></tr></table></figure>
 
 <p>还需要特别介绍下<code>LFU_INIT_VAL</code>，每个对象在初始化时，对应的counter是<code>LFU_INIT_VAL</code>即5。没有这个，那么在<code>LFUDecrAndReturn</code>的时候，counter就会因为很小而被淘汰掉。但因为偏移了这个5，所以在<code>LFULogIncr</code>我们需要将它还原回实际的值。</p>
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// server.h</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> LFU_INIT_VAL 5</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// evict.c</span></span><br><span class="line"><span class="keyword">uint8_t</span> LFULogIncr(<span class="keyword">uint8_t</span> counter) &#123;</span><br><span class="line">    <span class="comment">// 确保不会回绕</span></span><br><span class="line">    <span class="keyword">if</span> (counter == <span class="number">255</span>) <span class="keyword">return</span> <span class="number">255</span>;</span><br><span class="line">    <span class="comment">// 随机数r</span></span><br><span class="line">    <span class="keyword">double</span> r = (<span class="keyword">double</span>)rand()/RAND_MAX;</span><br><span class="line">    <span class="keyword">double</span> baseval = counter - LFU_INIT_VAL;</span><br><span class="line">    <span class="keyword">if</span> (baseval &lt; <span class="number">0</span>) baseval = <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">double</span> p = <span class="number">1.0</span>/(baseval*server.lfu_log_factor+<span class="number">1</span>);</span><br><span class="line">    <span class="comment">// p小于该随机数r才增长</span></span><br><span class="line">    <span class="keyword">if</span> (r &lt; p) counter++;</span><br><span class="line">    <span class="keyword">return</span> counter;</span><br><span class="line">&#125;</span><br><span class="line"><span class="comment">// config.c</span></span><br><span class="line">createIntConfig(<span class="string">"lfu-log-factor"</span>, <span class="literal">NULL</span>, MODIFIABLE_CONFIG, <span class="number">0</span>, INT_MAX, server.lfu_log_factor, <span class="number">10</span>, INTEGER_CONFIG, <span class="literal">NULL</span>, <span class="literal">NULL</span>)</span><br></pre></td></tr></table></figure>
@@ -897,7 +897,7 @@
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">...</span><br><span class="line">        <span class="keyword">if</span> (k == <span class="number">0</span> &amp;&amp; pool[EVPOOL_SIZE<span class="number">-1</span>].key != <span class="literal">NULL</span>) &#123;</span><br><span class="line">            <span class="comment">/* Can't insert if the element is &lt; the worst element we have</span></span><br><span class="line"><span class="comment">             * and there are no empty buckets. */</span></span><br><span class="line">            <span class="keyword">continue</span>;</span><br><span class="line">        &#125; <span class="keyword">else</span> <span class="keyword">if</span> (k &lt; EVPOOL_SIZE &amp;&amp; pool[k].key == <span class="literal">NULL</span>) &#123;</span><br><span class="line">            <span class="comment">/* Inserting into empty position. No setup needed before insert. */</span></span><br><span class="line">        &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
 
 <p>注意，因为<code>key</code>和<code>cache</code>有点类似于<strong>自引用结构</strong>的关系，但其实不是。因为key和cached实际上都是sds，也就是个<code>char*</code>。移动或者复制sds，并没有改变sds指向的内容。所以，我们只需要保证<strong>只要它不释放就行</strong>。<br>当然，发散一下，如果<code>key</code>是一个指向<code>cached</code>的<code>sds*</code>，那就真的是自引用结构了。但也并不需要绑定<code>key</code>和它可能指向的<code>cached</code>在一个结构中，因为这两个是一一对应的</p>
-<figure class="highlight gherkin"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">|<span class="string"> key 1 </span>|<span class="string"> key 2 </span>|<span class="string"> key 3 </span>|<span class="string"> nul k </span>|</span><br><span class="line">|<span class="string"> nul c </span>|<span class="string"> cac 3 </span>|<span class="string"> cac 2 </span>|<span class="string"> cac 1 </span>|</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">| key <span class="number">1</span> | key <span class="number">2</span> | key <span class="number">3</span> | nul k |</span><br><span class="line">| nul c | cac <span class="number">3</span> | cac <span class="number">2</span> | cac <span class="number">1</span> |</span><br></pre></td></tr></table></figure>
 
 <p>此时<code>k</code>是第一个满足<code>idle &lt;= pool[k].idle</code>，我们的新entry应该插入在<code>k</code>之前。下面就插入排序，把待插入的<code>de</code>插入，然后把原来<code>k</code>以及之后的数字往右边移动。这里使用了memmove，它能自动检测src内存和dest内存重叠的情况并处理，所以是更安全的memcpy。<br>分为两种情况：</p>
 <ol>
@@ -1106,6 +1106,10 @@
 
           <div class="post-nav-prev post-nav-item">
             
+              <a href="/2022/10/25/C++-auto/" rel="prev" title="C++中auto关键字的用法">
+                C++中auto关键字的用法 <i class="fa fa-chevron-right"></i>
+              </a>
+            
           </div>
         </div>
       
@@ -1183,7 +1187,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">175</span>
+                <span class="site-state-item-count">184</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -1196,7 +1200,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">162</span>
+                <span class="site-state-item-count">144</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -1312,7 +1316,7 @@
         <div class="copyright">
   
   &copy;  2015 - 
-  <span itemprop="copyrightYear">2022</span>
+  <span itemprop="copyrightYear">2023</span>
   <span class="with-love">
     <i class="fa fa-heart"></i>
   </span>
