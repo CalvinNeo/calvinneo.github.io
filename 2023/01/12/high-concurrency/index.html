@@ -92,18 +92,18 @@
 
 
 
-<meta name="description" content="WIP 介绍高并发场景下的 design 和 troubleshotting。">
+<meta name="description" content="WIP 介绍高并发场景下的 design 和 troubleshotting。 如果将普通的程序比作是经典力学，那么研究高并发系统有点类似于研究热力学。当成千上万个过程彼此交互、竞争、等待，在有限的集群资源中将会产生不一样的场景。">
 <meta name="keywords" content="高并发">
 <meta property="og:type" content="article">
 <meta property="og:title" content="高并发场景">
 <meta property="og:url" content="http://www.calvinneo.com/2023/01/12/high-concurrency/index.html">
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
-<meta property="og:description" content="WIP 介绍高并发场景下的 design 和 troubleshotting。">
+<meta property="og:description" content="WIP 介绍高并发场景下的 design 和 troubleshotting。 如果将普通的程序比作是经典力学，那么研究高并发系统有点类似于研究热力学。当成千上万个过程彼此交互、竞争、等待，在有限的集群资源中将会产生不一样的场景。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2023-01-12T15:49:22.049Z">
+<meta property="og:updated_time" content="2023-01-16T15:49:50.663Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="高并发场景">
-<meta name="twitter:description" content="WIP 介绍高并发场景下的 design 和 troubleshotting。">
+<meta name="twitter:description" content="WIP 介绍高并发场景下的 design 和 troubleshotting。 如果将普通的程序比作是经典力学，那么研究高并发系统有点类似于研究热力学。当成千上万个过程彼此交互、竞争、等待，在有限的集群资源中将会产生不一样的场景。">
 
 
 
@@ -377,9 +377,15 @@
 
       
         <p>WIP 介绍高并发场景下的 design 和 troubleshotting。</p>
+<p>如果将普通的程序比作是经典力学，那么研究高并发系统有点类似于研究热力学。当成千上万个过程彼此交互、竞争、等待，在有限的集群资源中将会产生不一样的场景。</p>
 <a id="more"></a>
 
-<h1 id="Tools"><a href="#Tools" class="headerlink" title="Tools"></a>Tools</h1><h2 id="Trace-任意函数的执行时间"><a href="#Trace-任意函数的执行时间" class="headerlink" title="Trace 任意函数的执行时间"></a>Trace 任意函数的执行时间</h2><p>该方案整理自某同事的 idea。</p>
+
+<h1 id="Tools"><a href="#Tools" class="headerlink" title="Tools"></a>Tools</h1><p>这些工具主要是：</p>
+<ol>
+<li>O11y</li>
+</ol>
+<h2 id="Trace-任意函数的执行时间"><a href="#Trace-任意函数的执行时间" class="headerlink" title="Trace 任意函数的执行时间"></a>Trace 任意函数的执行时间</h2><p>该方案整理自某同事的 idea。</p>
 <p>考虑下面的场景，我们需要查看某动态链接库 <code>/path/to/libtiflash_proxy.so</code> 中 <code>handle_pending_applies</code> 函数每次调用的耗时。</p>
 <figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">perf probe --del <span class="string">'probe_libtiflash_proxy:*'</span></span><br><span class="line">BIN=/path/to/libtiflash_proxy.so</span><br><span class="line">TOKEN=handle_pending_applies</span><br><span class="line">ITER=0</span><br><span class="line">objdump <span class="variable">$BIN</span> --syms | grep <span class="variable">$TOKEN</span> | awk <span class="string">'&#123;print $6&#125;'</span> | <span class="keyword">while</span> <span class="built_in">read</span> -r tok ; <span class="keyword">do</span></span><br><span class="line">    ITER=$(expr <span class="variable">$ITER</span> + 1)</span><br><span class="line">    NAME=<span class="variable">$TOKEN</span>\_<span class="variable">$ITER</span></span><br><span class="line">    <span class="built_in">echo</span> <span class="variable">$NAME</span>, <span class="variable">$TOKEN</span>, <span class="variable">$ITER</span>, <span class="variable">$TOKEN</span>\_<span class="variable">$ITER</span></span><br><span class="line">    perf probe -x <span class="variable">$BIN</span> --no-demangle <span class="variable">$NAME</span>=<span class="variable">$tok</span></span><br><span class="line">    perf probe -x <span class="variable">$BIN</span> --no-demangle <span class="variable">$NAME</span>=<span class="variable">$tok</span>%<span class="built_in">return</span></span><br><span class="line"><span class="keyword">done</span></span><br><span class="line">perf record -e probe_libtiflash_proxy:\* -aR sleep 10</span><br><span class="line">perf script -s perf-script.py</span><br></pre></td></tr></table></figure>
 
@@ -456,6 +462,10 @@
           <span class="post-nav-divider"></span>
 
           <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2023/01/26/valgrind-usage/" rel="prev" title="valgrind 用法">
+                valgrind 用法 <i class="fa fa-chevron-right"></i>
+              </a>
             
           </div>
         </div>
@@ -534,7 +544,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">184</span>
+                <span class="site-state-item-count">190</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -547,7 +557,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">144</span>
+                <span class="site-state-item-count">146</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

@@ -100,7 +100,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="libutp是uTorrent使用的类似TCP的传输层实现。它基于UDP提供可信的、有序的点对点的传输，并具有最少的时延。需要注意的是utp和另一个基于UDP的传输协议QUIC的实现思路和优势并不一样，例如QUIC更强调连接建立的快速性，建立连接时只需要1至2次握手，又如QUIC将TLS整合到协议中，实现了0RTT，而基于HTTP2的协议需要2/3RTT。QUIC还允许在用户层面配置各种拥塞控制算">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2020-10-15T14:57:06.610Z">
+<meta property="og:updated_time" content="2023-02-04T15:23:10.204Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="libutp源码简析">
 <meta name="twitter:description" content="libutp是uTorrent使用的类似TCP的传输层实现。它基于UDP提供可信的、有序的点对点的传输，并具有最少的时延。需要注意的是utp和另一个基于UDP的传输协议QUIC的实现思路和优势并不一样，例如QUIC更强调连接建立的快速性，建立连接时只需要1至2次握手，又如QUIC将TLS整合到协议中，实现了0RTT，而基于HTTP2的协议需要2/3RTT。QUIC还允许在用户层面配置各种拥塞控制算">
@@ -453,7 +453,7 @@
 </li>
 <li><p><code>connid</code><br> <code>connid</code>的用途已在前面的<code>utp_context</code>进行了论述。</p>
 </li>
-<li><p><code>tv_usec</code><br> <code>tv_usec</code>是一个时间戳，表示数据包的发送时间，在<code>send_data</code>中被设置。我们看到相比TCP则保守地用了TCP Timestamps Option这个选项，UTP中强制将其整合了进来。其实时间戳的作用是非常大的，例如借助于时间戳可以更精确地计算出RTT。否则我们只能对非重传的数据包进行采样。时间戳还能方便我们对高带宽下序号迅速耗尽进行PAWS(Protect Againest Wrapped Sequence numbers)防范，不过我检查下代码发现UTP里面并没有PAWS的机制（详见后面收包的部分）。</p>
+<li><p><code>tv_usec</code><br> <code>tv_usec</code>是一个时间戳，表示数据包的发送时间，在<code>send_data</code>中被设置。我们看到相比TCP则保守地用了TCP Timestamps Option这个选项，UTP中强制将其整合了进来。其实时间戳的作用是非常大的，例如借助于时间戳可以更精确地计算出RTT。否则我们只能对非重传的数据包进行采样(Karn算法)。时间戳还能方便我们对高带宽下序号迅速耗尽进行PAWS(Protect Againest Wrapped Sequence numbers)防范，不过我检查下代码发现UTP里面并没有PAWS的机制（详见后面收包的部分）。</p>
 </li>
 <li><p><code>reply_micro</code><br> <code>reply_micro</code>在<code>utp_process_incoming</code>中被设置，当A发送数据包给B时，B提取收到数据包中的<code>tv_usec</code>字段并和自己的本地时间作差，得到更新的<code>reply_micro</code>。这个值会随着下一个数据包被传送给对端（<code>send_data</code>函数）。</p>
 </li>
@@ -570,7 +570,7 @@
 <h1 id="连接的异常终止"><a href="#连接的异常终止" class="headerlink" title="连接的异常终止"></a>连接的异常终止</h1><h2 id="重传失败"><a href="#重传失败" class="headerlink" title="重传失败"></a>重传失败</h2><p>在Linux中使用<code>tcp_retries1 = 3</code>和<code>tcp_retries2 = 15</code>（计算得到的一个时间戳）来限定普通包的重传次数。<br>特别地，在握手时设有专门的<code>tcp_syn_retries</code>，这是由于对于连接建立时的重传需要精心设计以防止可能的SYN Flood攻击。<br>在UTP中的重传失败机制比较简单。</p>
 <figure class="highlight pf"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">if (retransmit_count &gt;= <span class="number">4</span> || (<span class="keyword">state</span> == CS_SYN_SENT &amp;&amp; retransmit_count &gt;= <span class="number">2</span>)) &#123;</span><br><span class="line">    // <span class="number">4</span> consecutive transmissions have timed <span class="keyword">out</span>. Kill it. If we</span><br><span class="line">    // haven't even connected yet, give up after only <span class="number">2</span> consecutive</span><br><span class="line">    // failed transmissions.</span><br><span class="line">    if (<span class="keyword">state</span> == CS_FIN_SENT)</span><br><span class="line">        <span class="keyword">state</span> = CS_DESTROY;</span><br><span class="line">    else</span><br><span class="line">        <span class="keyword">state</span> = CS_RESET;</span><br><span class="line">    utp_call_on_error(ctx, this, UTP_ETIMEDOUT);</span><br><span class="line">    return;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
-<h2 id="连接重置"><a href="#连接重置" class="headerlink" title="连接重置"></a>连接重置</h2><h2 id="保活定时器"><a href="#保活定时器" class="headerlink" title="保活定时器"></a>保活定时器</h2><p>从TCP对长连接的管理上来讲，服务器通常会对其的对端启用保活定时器，以避免在对端意外崩溃下连接的浪费。我们看到TCP是非常珍惜服务器端的连接资源的，这还体现在TCP往往鼓励客户端主动关闭，从而让客户端而不是服务端等待2MSL。TCP规定当给定的连接在两个小时之内无任何动作，则服务器向对端发送探测包。根据客户端的状态会分为四种情况：1. 当客户端和网络都正常时，那么服务器能够得到正常响应，于是复位保活定时器。2. 当客户主机崩溃（关闭或重启中）时，客户端没有响应，服务器会等待10次75秒的超时，直到关闭连接。3. 当客户主机从崩溃中恢复后，服务器将受到来自客户端的RESET。4. 当客户端正常运行，但网络异常，类似网络分区状况，这种情况类似2。<br>在libutp中设定了一个<code>KEEPALIVE_INTERVAL 29000</code>的阈值，表示29秒后会启动保活探测，它同时指出这个阈值来自对很多家庭NAT设备的计量。保活探测很简单，就是发送一个重复的ACK。</p>
+<h2 id="连接重置"><a href="#连接重置" class="headerlink" title="连接重置"></a>连接重置</h2><h2 id="保活定时器"><a href="#保活定时器" class="headerlink" title="保活定时器"></a>保活定时器</h2><p>TCP 的保活机制详见<a href="/2017/12/05/tcp-send/">TCP的可靠传输</a>.<br>在libutp中设定了一个<code>KEEPALIVE_INTERVAL 29000</code>的阈值，表示29秒后会启动保活探测，它同时指出这个阈值来自对很多家庭NAT设备的计量。保活探测很简单，就是发送一个重复的ACK。</p>
 <figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">void</span> UTPSocket::send_keep_alive()</span><br><span class="line">&#123;</span><br><span class="line">    ack_nr--;</span><br><span class="line"></span><br><span class="line">    <span class="meta">#<span class="meta-keyword">if</span> UTP_DEBUG_LOGGING</span></span><br><span class="line">    <span class="built_in">log</span>(UTP_LOG_DEBUG, <span class="string">"Sending KeepAlive ACK %u [%u]"</span>, ack_nr, conn_id_send);</span><br><span class="line">    <span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"></span><br><span class="line">    send_ack();</span><br><span class="line">    ack_nr++;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
 <h1 id="流量控制和拥塞控制"><a href="#流量控制和拥塞控制" class="headerlink" title="流量控制和拥塞控制"></a>流量控制和拥塞控制</h1><h2 id="TCP的流量控制以及拥塞控制算法"><a href="#TCP的流量控制以及拥塞控制算法" class="headerlink" title="TCP的流量控制以及拥塞控制算法"></a>TCP的流量控制以及拥塞控制算法</h2><p><a href="/2017/12/05/tcp-window/">被迁移到这一篇文章中</a></p>
@@ -678,8 +678,8 @@
         <div class="post-nav">
           <div class="post-nav-next post-nav-item">
             
-              <a href="/2017/12/05/tcp-window/" rel="next" title="TCP的流量控制和拥塞控制">
-                <i class="fa fa-chevron-left"></i> TCP的流量控制和拥塞控制
+              <a href="/2017/12/05/tcp-send/" rel="next" title="TCP的可靠传输">
+                <i class="fa fa-chevron-left"></i> TCP的可靠传输
               </a>
             
           </div>
@@ -769,7 +769,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">184</span>
+                <span class="site-state-item-count">190</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -782,7 +782,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">144</span>
+                <span class="site-state-item-count">146</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
