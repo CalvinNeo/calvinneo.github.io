@@ -100,7 +100,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="在Redis Sentinel实现原理分析这篇文。Sentinel是为主从复制服务的，所以在这篇文章里面，我们反过来讲一下主从复制的实现。 主从复制涉及到RDB等机制，其中持久化部分在Redis持久化机制实现中介绍。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2021-08-18T07:28:35.760Z">
+<meta property="og:updated_time" content="2023-04-26T04:12:56.799Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Redis主从复制">
 <meta name="twitter:description" content="在Redis Sentinel实现原理分析这篇文。Sentinel是为主从复制服务的，所以在这篇文章里面，我们反过来讲一下主从复制的实现。 主从复制涉及到RDB等机制，其中持久化部分在Redis持久化机制实现中介绍。">
@@ -379,30 +379,30 @@
         <p>在<a href="/2020/10/18/redis-sentinel/">Redis Sentinel实现原理分析</a>这篇文。Sentinel是为主从复制服务的，所以在这篇文章里面，我们反过来讲一下主从复制的实现。</p>
 <p>主从复制涉及到RDB等机制，其中持久化部分在<a href="/2021/03/13/redis-persist/">Redis持久化机制实现</a>中介绍。</p>
 <a id="more"></a>
-<h1 id="Redis主从复制流程简介"><a href="#Redis主从复制流程简介" class="headerlink" title="Redis主从复制流程简介"></a>Redis主从复制流程简介</h1><p>Redis Sentinel是对主从复制流程而言的，所以我们先要理解主从复制的大概流程。这里需要注意，主从复制并不是Redis Cluster。</p>
+<h1 id="Redis主从复制流程简介"><a href="#Redis主从复制流程简介" class="headerlink" title="Redis主从复制流程简介"></a>Redis主从复制流程简介</h1><p>Redis Sentinel 是对主从复制流程而言的，所以先要理解主从复制的大概流程。这里需要注意，主从复制并不是 Redis Cluster。</p>
 <ol>
-<li>Slave接受到SLAVEOF命令</li>
-<li>Slave连接Master</li>
+<li>Slave 接受到 SLAVEOF 命令</li>
+<li>Slave 连接 Master</li>
 <li>Slave PING Master</li>
 <li>鉴权</li>
-<li>Slave发送SYNC/PSYNC命令</li>
+<li>Slave 发送 SYNC/PSYNC 命令</li>
 </ol>
-<h2 id="PSYNC命令用法"><a href="#PSYNC命令用法" class="headerlink" title="PSYNC命令用法"></a>PSYNC命令用法</h2><p>PSYNC命令如下所示，其中：</p>
+<h2 id="PSYNC命令用法"><a href="#PSYNC命令用法" class="headerlink" title="PSYNC命令用法"></a>PSYNC命令用法</h2><p>PSYNC 命令如下所示，其中：</p>
 <ol>
-<li>replicationid表示我们断线重连前Master服务器的id</li>
-<li>offset表示Slave接受到最后命令的偏移量，以字节计算</li>
+<li>replicationid 表示我们断线重连前 Master 服务器的 id</li>
+<li>offset 表示 Slave 接受到最后命令的偏移量，以字节计算</li>
 </ol>
 <figure class="highlight glsl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 旧</span></span><br><span class="line">PSYNC runid <span class="keyword">offset</span></span><br><span class="line"><span class="comment">// 新</span></span><br><span class="line">PSYNC replicationid <span class="keyword">offset</span></span><br></pre></td></tr></table></figure>
 
 <p>这里还有个特殊用法，表示我们要触发一次全量复制。</p>
 <figure class="highlight lsl"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">PSYNC ? <span class="number">-1</span></span><br></pre></td></tr></table></figure>
 
-<p>在Redis 2.8后，提供了PSYNC，这个命令能够支持全量复制和部分复制。这样在Slave断线重连之后，就可以部分复制，从而节省Master的计算资源和带宽。<br>在Redis 4.0版本后，优化了增量复制，主要包括：</p>
+<p>在 Redis 2.8后，提供了 PSYNC，这个命令能够支持全量复制和部分复制。这样在 Slave 断线重连之后，就可以部分复制，从而节省 Master 的计算资源和带宽。<br>在 Redis 4.0 版本后，优化了增量复制，主要包括：</p>
 <ol>
-<li>重启后，也可以进行部分复制<br> 之前这种情况，重启后会丢失runid，从而触发<code>PSYNC ? -1</code></li>
-<li>当Slave被promote称为Master后，其他Slave可以从新Master处复制</li>
+<li>重启后，也可以进行部分复制<br> 之前这种情况，重启后会丢失 runid，从而触发 <code>PSYNC ? -1</code></li>
+<li>当 Slave 被 promote 称为 Master 后，其他 Slave 可以从新 Master 处复制</li>
 </ol>
-<h1 id="主要流程"><a href="#主要流程" class="headerlink" title="主要流程"></a>主要流程</h1><h2 id="主要类以及常数"><a href="#主要类以及常数" class="headerlink" title="主要类以及常数"></a>主要类以及常数</h2><p>在服务器类中定义了<code>masterhost</code>，表示Master节点的地址。如果是NULL，表示自己就是Master。所以这个字段<strong>会被用来判断是MAster还是Slave</strong>。</p>
+<h1 id="主要流程"><a href="#主要流程" class="headerlink" title="主要流程"></a>主要流程</h1><h2 id="主要类以及常数"><a href="#主要类以及常数" class="headerlink" title="主要类以及常数"></a>主要类以及常数</h2><p>在服务器类中定义了 <code>masterhost</code>，表示 Master 节点的地址。如果是 NULL，表示自己就是 Master。所以这个字段<strong>会被用来判断是 Master 还是 Slave</strong>。</p>
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// server.h</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">redisServer</span> &#123;</span></span><br><span class="line">    <span class="keyword">char</span> *masteruser;               <span class="comment">/* AUTH with this user and masterauth with master */</span></span><br><span class="line">    <span class="keyword">char</span> *masterauth;               <span class="comment">/* AUTH with this password with master */</span></span><br><span class="line">    <span class="keyword">char</span> *masterhost;               <span class="comment">/* Hostname of master */</span></span><br><span class="line">    <span class="keyword">int</span> masterport;                 <span class="comment">/* Port of master */</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
 <p>介绍下<code>repl_state</code>的状态：</p>
@@ -723,7 +723,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">195</span>
+                <span class="site-state-item-count">196</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -736,7 +736,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">143</span>
+                <span class="site-state-item-count">144</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

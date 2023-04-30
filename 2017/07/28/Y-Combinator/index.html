@@ -74,7 +74,7 @@
 <link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="Haskell,lambda,函数式," />
+  <meta name="keywords" content="Haskell,函数式,lambda," />
 
 
 
@@ -92,18 +92,18 @@
 
 
 
-<meta name="description" content="不管怎样，可以把lambda当做一个匿名函数来看待，那么这个匿名函数如何在递归调用的时候引用自己呢？Haskell B. Curry给出了Y不动点组合子(Y Combinator, 当然不是那个著名的公司啦)可以解决这个问题。在本文中将介绍  什么是不动点组合子 如何计算出函数的不动点fix f 基于Haskell实现的不动点组合子 在其他语言中，如何解决Lazy Evaluation的问题 自定">
-<meta name="keywords" content="Haskell,lambda,函数式">
+<meta name="description" content="不管怎样，可以把 lambda 当做一个匿名函数来看待，那么这个匿名函数如何在递归调用的时候引用自己呢？Haskell B. Curry给出了Y不动点组合子(Y Combinator，当然不是那个著名的公司啦)可以解决这个问题。在本文中：  基于 Haskell 如何在匿名函数中调用自己 在其他语言中，如何解决 Lazy Evaluation 的问题 自定义的 fix 中，如何避免递归调用 fix">
+<meta name="keywords" content="Haskell,函数式,lambda">
 <meta property="og:type" content="article">
 <meta property="og:title" content="不动点组合子Y-Combinator">
 <meta property="og:url" content="http://www.calvinneo.com/2017/07/28/Y-Combinator/index.html">
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
-<meta property="og:description" content="不管怎样，可以把lambda当做一个匿名函数来看待，那么这个匿名函数如何在递归调用的时候引用自己呢？Haskell B. Curry给出了Y不动点组合子(Y Combinator, 当然不是那个著名的公司啦)可以解决这个问题。在本文中将介绍  什么是不动点组合子 如何计算出函数的不动点fix f 基于Haskell实现的不动点组合子 在其他语言中，如何解决Lazy Evaluation的问题 自定">
+<meta property="og:description" content="不管怎样，可以把 lambda 当做一个匿名函数来看待，那么这个匿名函数如何在递归调用的时候引用自己呢？Haskell B. Curry给出了Y不动点组合子(Y Combinator，当然不是那个著名的公司啦)可以解决这个问题。在本文中：  基于 Haskell 如何在匿名函数中调用自己 在其他语言中，如何解决 Lazy Evaluation 的问题 自定义的 fix 中，如何避免递归调用 fix">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2023-01-12T16:11:35.474Z">
+<meta property="og:updated_time" content="2023-04-24T14:25:05.506Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="不动点组合子Y-Combinator">
-<meta name="twitter:description" content="不管怎样，可以把lambda当做一个匿名函数来看待，那么这个匿名函数如何在递归调用的时候引用自己呢？Haskell B. Curry给出了Y不动点组合子(Y Combinator, 当然不是那个著名的公司啦)可以解决这个问题。在本文中将介绍  什么是不动点组合子 如何计算出函数的不动点fix f 基于Haskell实现的不动点组合子 在其他语言中，如何解决Lazy Evaluation的问题 自定">
+<meta name="twitter:description" content="不管怎样，可以把 lambda 当做一个匿名函数来看待，那么这个匿名函数如何在递归调用的时候引用自己呢？Haskell B. Curry给出了Y不动点组合子(Y Combinator，当然不是那个著名的公司啦)可以解决这个问题。在本文中：  基于 Haskell 如何在匿名函数中调用自己 在其他语言中，如何解决 Lazy Evaluation 的问题 自定义的 fix 中，如何避免递归调用 fix">
 
 
 
@@ -376,44 +376,70 @@
       
 
       
-        <p>不管怎样，可以把lambda当做一个匿名函数来看待，那么这个匿名函数如何在<strong>递归调用</strong>的时候引用自己呢？Haskell B. Curry给出了Y不动点组合子(Y Combinator, 当然不是那个著名的公司啦)可以解决这个问题。在本文中将介绍</p>
+        <p>不管怎样，可以把 lambda 当做一个匿名函数来看待，那么这个匿名函数如何在<strong>递归调用</strong>的时候引用自己呢？Haskell B. Curry给出了Y不动点组合子(Y Combinator，当然不是那个著名的公司啦)可以解决这个问题。在本文中：</p>
 <ol>
-<li>什么是不动点组合子</li>
-<li>如何计算出函数的不动点<code>fix f</code></li>
-<li>基于Haskell实现的不动点组合子<ol>
-<li>在其他语言中，如何解决Lazy Evaluation的问题</li>
-<li>自定义的fix中，如何避免递归调用fix</li>
+<li>基于 Haskell 如何在匿名函数中调用自己<ol>
+<li>在其他语言中，如何解决 Lazy Evaluation 的问题</li>
+<li>自定义的 fix 中，如何避免递归调用 fix</li>
 </ol>
 </li>
-<li>证明Curry的Y-Combinator满足<code>Y f = f (Y f)</code></li>
+<li>基于 Python 的 Demo<ol>
+<li>Python 如何在匿名函数中调用自己</li>
+<li>Python 中的 Y Combinator</li>
+<li>Z Combinator</li>
 </ol>
-<p>同时还会介绍Z Combinator。</p>
+</li>
+<li>基于 C++ 的 Demo</li>
+<li>为什么通过找不动点可以解决自我调用的问题<ol>
+<li>什么是不动点</li>
+<li>不动点和本问题的联系</li>
+</ol>
+</li>
+<li>简单的 lambda 演算</li>
+<li>证明 Y-Combinator 的性质 <code>Y f = f (Y f)</code><br> 讨论 Y-Combinator 的类型</li>
+</ol>
 <a id="more"></a>
 
 <h1 id="基于-Haskell-的-demo"><a href="#基于-Haskell-的-demo" class="headerlink" title="基于 Haskell 的 demo"></a>基于 Haskell 的 demo</h1><figure class="highlight coq"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">fix</span> f = f (<span class="built_in">fix</span> f)</span><br><span class="line">fact = <span class="built_in">fix</span> $ \ f n -&gt; <span class="keyword">if</span> (n == <span class="number">0</span>) <span class="keyword">then</span> <span class="number">1</span> <span class="keyword">else</span> n * f (n - <span class="number">1</span>)</span><br></pre></td></tr></table></figure>
 
-<p>这里的fact的签名依然是<code>fact :: (Eq p, Num p) =&gt; p -&gt; p</code>。</p>
+<p>这里的 fact 的签名依然是 <code>fact :: (Eq p, Num p) =&gt; p -&gt; p</code>。</p>
+<h2 id="fix-函数和递归"><a href="#fix-函数和递归" class="headerlink" title="fix 函数和递归"></a>fix 函数和递归</h2><p>fix 定义如下</p>
+<figure class="highlight nix"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">fix <span class="attr">f</span> = <span class="keyword">let</span> &#123;<span class="attr">x</span> = f x&#125; <span class="keyword">in</span> x</span><br></pre></td></tr></table></figure>
+
+<p>可以直接import</p>
+<figure class="highlight css"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="selector-pseudo">:m</span> <span class="selector-tag">Control</span><span class="selector-class">.Monad</span><span class="selector-class">.Fix</span></span><br></pre></td></tr></table></figure>
+
+<p>可以直接用它来实现不动点组合子</p>
+<figure class="highlight coq"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">fix</span> (\self n -&gt; <span class="keyword">if</span> n == <span class="number">0</span> <span class="keyword">then</span> <span class="number">1</span> <span class="keyword">else</span> n * self (n<span class="number">-1</span>)) <span class="number">5</span></span><br></pre></td></tr></table></figure>
+
+<p>对于一个发散函数，它的不动点是 <code>_|_</code>。</p>
+<figure class="highlight coffeescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Prelude&gt; (<span class="number">2</span>+) <span class="literal">undefined</span></span><br><span class="line">*** Exception: Prelude.<span class="literal">undefined</span></span><br></pre></td></tr></table></figure>
+
+<p>注意到，对于有的函数，例如 <code>(*3)</code>，是存在不动点0的，但是 <code>fix (*3)</code> 仍然发散。这是因为 fix 找的是 least-defined 的不动点。</p>
+<p>可以用 fix 函数来解方程</p>
+<figure class="highlight ocaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">fix (\next guess tol <span class="keyword">val</span> -&gt; <span class="keyword">if</span> abs(guess^<span class="number">2</span>-<span class="keyword">val</span>) &lt; tol <span class="keyword">then</span> guess <span class="keyword">else</span></span><br><span class="line">                     next ((guess + <span class="keyword">val</span> / guess) / <span class="number">2.0</span>) tol <span class="keyword">val</span>) <span class="number">2.0</span> <span class="number">0.0001</span> <span class="number">25.0</span></span><br></pre></td></tr></table></figure>
+
 <p>这有两个问题</p>
 <ol>
-<li>只能lazy evaluation</li>
-<li>fix的定义是递归的<br> 如下所示，我们的Y函数满足fix的要求，但是它定义中出现了Y自己，而这在一些语言中是不被允许的</li>
+<li>只能 lazy evaluation</li>
+<li>fix 的定义是递归的<br> 如下所示，我们的 Y 函数满足 fix 的要求，但是它定义中出现了 Y 自己，而这在一些语言中是不被允许的</li>
 </ol>
-<h2 id="如何解决-lazy-evaluation-问题"><a href="#如何解决-lazy-evaluation-问题" class="headerlink" title="如何解决 lazy evaluation 问题"></a>如何解决 lazy evaluation 问题</h2><p><strong>通过η-变换</strong>。<br>为了防止下面代码中的<code>Y f</code>被eager计算</p>
+<h2 id="如何解决-lazy-evaluation-问题"><a href="#如何解决-lazy-evaluation-问题" class="headerlink" title="如何解决 lazy evaluation 问题"></a>如何解决 lazy evaluation 问题</h2><p><strong>通过η-变换</strong>。<br>为了防止下面代码中的 <code>Y f</code> 被 eager 计算</p>
 <figure class="highlight scheme"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">(<span class="name"><span class="builtin-name">define</span></span> Y</span><br><span class="line">  (<span class="name"><span class="builtin-name">lambda</span></span> (f)</span><br><span class="line">    (<span class="name">f</span> (<span class="name">Y</span> f))))</span><br><span class="line"></span><br><span class="line">(<span class="name"><span class="builtin-name">define</span></span> F</span><br><span class="line">  (<span class="name"><span class="builtin-name">lambda</span></span> (f)</span><br><span class="line">    (<span class="name"><span class="builtin-name">lambda</span></span> (n) </span><br><span class="line">      (<span class="name"><span class="builtin-name">cond</span></span></span><br><span class="line">        ((<span class="name"><span class="builtin-name">eq?</span></span> n <span class="number">0</span>) <span class="number">1</span>)</span><br><span class="line">        (<span class="name"><span class="builtin-name">else</span></span> (<span class="name"><span class="builtin-name">*</span></span> n (<span class="name">f</span> (<span class="name"><span class="builtin-name">-</span></span> n <span class="number">1</span>))))))))</span><br><span class="line"> </span><br><span class="line">(<span class="name"><span class="builtin-name">define</span></span> fact (<span class="name">Y</span> F))</span><br></pre></td></tr></table></figure>
 
-<p>我们对<code>Y f</code>做η-变换。这里注意到<code>Y f</code>是<code>Int -&gt; Int</code></p>
+<p>我们对 <code>Y f</code> 做η-变换。这里注意到 <code>Y f</code> 是 <code>Int -&gt; Int</code></p>
 <figure class="highlight scheme"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">(<span class="name"><span class="builtin-name">define</span></span> Y</span><br><span class="line">  (<span class="name"><span class="builtin-name">lambda</span></span> (f)</span><br><span class="line">    (<span class="name">f</span> (<span class="name"><span class="builtin-name">lambda</span></span> (x) ((<span class="name">Y</span> f) x)) )))</span><br></pre></td></tr></table></figure>
 
-<p>但这个定义中，同样无法避免递归调用Y</p>
-<h2 id="如何解决递归调用Y"><a href="#如何解决递归调用Y" class="headerlink" title="如何解决递归调用Y"></a>如何解决递归调用Y</h2><p><strong>通过引入Curry的Y-Combinator的定义</strong>，即</p>
+<p>但这个定义中，同样无法避免递归调用 Y</p>
+<h2 id="如何解决递归调用Y"><a href="#如何解决递归调用Y" class="headerlink" title="如何解决递归调用Y"></a>如何解决递归调用Y</h2><p><strong>通过引入 Curry 的 Y-Combinator 的定义</strong>，即</p>
 <figure class="highlight llvm"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Y = λf.(λ<span class="keyword">x</span>.f (<span class="keyword">x</span> <span class="keyword">x</span>)) (λ<span class="keyword">x</span>.f (<span class="keyword">x</span> <span class="keyword">x</span>))</span><br></pre></td></tr></table></figure>
 
-<h1 id="基于C-的demo"><a href="#基于C-的demo" class="headerlink" title="基于C++的demo"></a>基于C++的demo</h1><h1 id="基于Python的Demo"><a href="#基于Python的Demo" class="headerlink" title="基于Python的Demo"></a>基于Python的Demo</h1><p>Python中的lambda用起来还是很爽的，不过坑也有很多，比如说<a href="http://stackoverflow.com/questions/5190146/how-does-a-lambda-function-refer-to-its-parameters-in-python" target="_blank" rel="noopener">这个early binding和late binding的问题</a>，或者lambda中只能有一个语句(实际上是表达式)。</p>
-<p>考虑计算阶乘函数，Python可以很容易写出下面的代码：</p>
+<h1 id="基于C-的demo"><a href="#基于C-的demo" class="headerlink" title="基于C++的demo"></a>基于C++的demo</h1><h1 id="基于Python的Demo"><a href="#基于Python的Demo" class="headerlink" title="基于Python的Demo"></a>基于Python的Demo</h1><p>Python 中的 lambda 用起来还是很爽的，不过坑也有很多，比如说<a href="http://stackoverflow.com/questions/5190146/how-does-a-lambda-function-refer-to-its-parameters-in-python" target="_blank" rel="noopener">这个early binding和late binding的问题</a>，或者 lambda 中只能有一个语句(实际上是表达式)。</p>
+<p>考虑计算阶乘函数，Python 可以很容易写出下面的代码：</p>
 <figure class="highlight maxima"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">factor</span> = <span class="built_in">lambda</span> x: <span class="number">1</span> <span class="keyword">if</span> x &lt;= <span class="number">1</span> <span class="keyword">else</span> x * <span class="built_in">factor</span>(x - <span class="number">1</span>)</span><br></pre></td></tr></table></figure>
 
-<p>我们注意到在lambda中存在对自己的引用<code>factor</code>。不过对于某些其他的语言，例如<a href="http://www.cnblogs.com/JeffreyZhao/archive/2009/08/31/recursive-lambda-expressions.html" target="_blank" rel="noopener">C#</a>或者Rust，于是我们希望有一个类似<code>this</code>指针的东西，能够在lambda函数体中用来表示自己。</p>
-<h2 id="一个简易的递归调用方法"><a href="#一个简易的递归调用方法" class="headerlink" title="一个简易的递归调用方法"></a>一个简易的递归调用方法</h2><p>想一想，核心是如何在函数内部引用自己。一个简单的方案是把自己作为参数传进来</p>
+<p>注意到在 lambda 中存在对自己的引用 <code>factor</code>。不过对于某些其他的语言，例如<a href="http://www.cnblogs.com/JeffreyZhao/archive/2009/08/31/recursive-lambda-expressions.html" target="_blank" rel="noopener">C#</a>或者 Rust，则不存在这样的机制。于是我们希望有一个类似 <code>this</code> 指针的东西，能够在 lambda 函数体中用来表示自己。</p>
+<h2 id="简易做法"><a href="#简易做法" class="headerlink" title="简易做法"></a>简易做法</h2><p>想一想，核心是如何在函数内部引用自己。一个简单的方案是<strong>把自己作为参数</strong>传进来</p>
 <figure class="highlight crystal"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">fac = lambda <span class="keyword">self</span>, <span class="symbol">x:</span> <span class="number">1</span> <span class="keyword">if</span> x &lt;= <span class="number">1</span> <span class="keyword">else</span> x * <span class="keyword">self</span>(<span class="keyword">self</span>, x - <span class="number">1</span>)</span><br></pre></td></tr></table></figure>
 
 <p>可以按照下面的方式调用</p>
@@ -421,149 +447,134 @@
 
 <p>可以编译的原因是：</p>
 <ol>
-<li>最先开始被当做参数传进来的fac实际上是有定义的</li>
-<li>Python可以自己推导类型<br> 考虑C++，如果一个函数fac接受自己作为参数，它的类型是什么呢？不如假设内部fac的类型是<code>F</code>，则外部fac的类型是<code>(F,int) -&gt; ()</code>，如果再套一层就是<code>F((F,int) -&gt; (), int) -&gt; ()</code>。</li>
+<li>最先开始被当做参数传进来的 fac 实际上是有定义的</li>
+<li>Python 可以自己推导类型<br> 考虑 C++，如果一个函数 fac 接受自己作为参数，它的类型是什么呢？不如假设内部 fac 的类型是 <code>F</code>，则外部 fac 的类型是 <code>(F,int) -&gt; ()</code>，如果再套一层就是 <code>F((F,int) -&gt; (), int) -&gt; ()</code>。</li>
 </ol>
 <h2 id="太丑了"><a href="#太丑了" class="headerlink" title="太丑了"></a>太丑了</h2><h3 id="解决方案"><a href="#解决方案" class="headerlink" title="解决方案"></a>解决方案</h3><p>太丑了，能不能去掉self这个参数呢？</p>
 <figure class="highlight stata"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">fact</span> = lambda x: <span class="keyword">fac</span>(<span class="keyword">fac</span>, x)</span><br></pre></td></tr></table></figure>
 
-<p>这样就OK了。我们还可以用柯里化把这个fac提出来</p>
-<figure class="highlight stata"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">fac</span> = (lambda self: lambda x: 1 <span class="keyword">if</span> x &lt;= 1 <span class="keyword">else</span> x * self(self)(x - 1))</span><br><span class="line"><span class="keyword">fact</span> = <span class="keyword">fac</span>(<span class="keyword">fac</span>)</span><br></pre></td></tr></table></figure>
+<p>这样就OK了。我们还可以用柯里化把这个 fac 提出来</p>
+<figure class="highlight stata"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">fac</span> = (lambda self: lambda x: 1 <span class="keyword">if</span> x &lt;= 1 <span class="keyword">else</span> x * self(self)(x - 1))</span><br><span class="line"><span class="keyword">fact</span> = <span class="keyword">fac</span>(<span class="keyword">fac</span>)</span><br><span class="line"><span class="keyword">fact</span>(10) # 3628800</span><br></pre></td></tr></table></figure>
 
-<p><code>fac(fac)</code>结构引起了我们的兴趣：</p>
+<p><code>fac(fac)</code> 结构引起了我们的兴趣：</p>
 <ol>
-<li>为啥一个函数会接受自己作为参数？<br> 稍后可以看到，目的是为了在函数体里面干掉f，实现递归。</li>
-<li>为什么这个函数是递归的？<br> 因为fac本身是递归的了，但我们直接用的话需要传两个参数，很麻烦。</li>
+<li>为啥一个函数会接受自己作为参数？<br> 稍后可以看到，目的是为了在函数体里面干掉 f，实现递归。</li>
+<li>为什么这个函数是递归的？<br> 因为 fac 本身是递归的了，但我们直接用的话需要传两个参数，很麻烦。</li>
 </ol>
-<h4 id="原理1：实现递归"><a href="#原理1：实现递归" class="headerlink" title="原理1：实现递归"></a>原理1：实现递归</h4><p>为了解释，首先查看下面的代码。这里<code>f</code>是一个很典型的递归函数，我们调用<code>f</code>会产生对<code>f</code>的无限递归。</p>
+<p>下面来解释这个做法。</p>
+<h4 id="原理1：实现递归"><a href="#原理1：实现递归" class="headerlink" title="原理1：实现递归"></a>原理1：实现递归</h4><p>这里 <code>f</code> 是一个很典型的递归函数，调用 <code>f</code> 会产生对 <code>f</code> 的无限递归。</p>
 <figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">f</span><span class="params">()</span>:</span></span><br><span class="line">    print(<span class="string">"in f"</span>)</span><br><span class="line">    <span class="keyword">return</span> f()</span><br></pre></td></tr></table></figure>
 
-<p>我们可以通过加入一个lambda来实现lazy evaluation。<code>f()()()()</code>，我们可以这样进行调用，每一次调用会打印一行。</p>
+<p>可以通过返回一个 lambda 来实现 lazy evaluation。如果按照 <code>f()()()()</code> 进行调用，每一次调用会打印一行。</p>
 <figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">f</span><span class="params">()</span>:</span></span><br><span class="line">    print(<span class="string">"in f"</span>)</span><br><span class="line">    <span class="keyword">return</span> <span class="keyword">lambda</span>: f()</span><br></pre></td></tr></table></figure>
 
-<h4 id="原理2：在函数体内干掉f"><a href="#原理2：在函数体内干掉f" class="headerlink" title="原理2：在函数体内干掉f"></a>原理2：在函数体内干掉f</h4><p>我们对下面的代码调用<code>f(f)</code>，会打印，调用<code>f(f)()</code>会打印两次。这个函数和上面实现的效果是一样的，但是函数体里面没有<code>f</code>了</p>
+<h4 id="原理2：在函数体内干掉f"><a href="#原理2：在函数体内干掉f" class="headerlink" title="原理2：在函数体内干掉f"></a>原理2：在函数体内干掉f</h4><p>我们对下面的代码调用 <code>f(f)</code>，会打印一次。调用 <code>f(f)()</code> 会打印两次。这个函数和上面实现的效果是一样的，但是函数体里面没有 <code>f</code> 了</p>
 <figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">f</span><span class="params">(g)</span>:</span></span><br><span class="line">    print(<span class="string">"in f"</span>)</span><br><span class="line">    <span class="keyword">return</span> <span class="keyword">lambda</span>: g(g)</span><br></pre></td></tr></table></figure>
 
 <h4 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h4><p>现在实现递归分为两步：</p>
 <ol>
-<li><p>递归函数主体fac<br> 定义如下，其中F是函数的具体实现，在这里面引用self就等于引用fac自己。</p>
+<li><p>递归函数主体 fac<br> 定义如下，其中 F 是函数的具体实现，在这里面引用 self 就等于引用 fac 自己。</p>
  <figure class="highlight ini"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">fac</span> = lambda self: F</span><br></pre></td></tr></table></figure></li>
 <li><p>封装fac</p>
  <figure class="highlight stata"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">fact</span> = <span class="keyword">fac</span>(<span class="keyword">fac</span>)</span><br></pre></td></tr></table></figure></li>
 </ol>
-<p>但是现在还有缺憾，就是我们得一开始<code>fac(self)</code>一下，另外我们多一个<code>fac(fac)</code>这种让人感觉很奇怪的封装。不过仔细思考一下，似乎<code>fac(self)</code>和<code>fac(fac)</code>最终是一个东西啊。</p>
-<h1 id="函数的不动点"><a href="#函数的不动点" class="headerlink" title="函数的不动点"></a>函数的不动点</h1><h2 id="不动点的数学定义"><a href="#不动点的数学定义" class="headerlink" title="不动点的数学定义"></a>不动点的数学定义</h2><p>如果<code>f(x) = x</code>那么<code>x</code>是<code>f</code>的不动点，即不动点指那些被函数仍然映射到自身的点。当然并不是所有函数都有不动点，因为上面给出的方程不一定有解。</p>
-<p>容易发现不动点和我们的问题之间有明显的关联性，比如，假设<code>x</code>是一个函数，那么<code>f(x)</code>的结果是<code>x</code>，发现还是一个函数，那感觉递归就呼之欲出了。</p>
-<p>当然，实际上是要在函数<code>fac</code>中<strong>递归</strong>地调用<code>fac</code>，因此函数调用的形式是<code>fac(fac(...))</code>这样的，如何和这个<code>x</code>扯上关系呢？我们往下看</p>
-<h2 id="从不动点的视角回顾Demo"><a href="#从不动点的视角回顾Demo" class="headerlink" title="从不动点的视角回顾Demo"></a>从不动点的视角回顾Demo</h2><p>继续来看阶乘这个例子</p>
-<figure class="highlight armasm"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="symbol">fac</span> = lambda <span class="keyword">self: </span><span class="number">1</span> <span class="meta">if</span> x &lt;= <span class="number">1</span> <span class="meta">else</span> x * <span class="keyword">self(x </span>- <span class="number">1</span>)</span><br></pre></td></tr></table></figure>
-
-<p>我们将fac柯里化，得到F。这里的F看做是接受参数self，并且返回一个用来计算阶乘的函数。</p>
-<figure class="highlight armasm"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">F = lambda <span class="keyword">self: </span>lambda x: <span class="number">1</span> <span class="meta">if</span> x &lt;= <span class="number">1</span> <span class="meta">else</span> x * <span class="keyword">self(x </span>- <span class="number">1</span>)</span><br></pre></td></tr></table></figure>
-
-<p>从最里面函数的角度：<strong>self就是自己(即<code>lambda x:...</code>)<strong>，但是从外面被传进来的。<br>从最外面的角度：</strong><code>F</code>是已知的，因为它是被定义出来的。</strong>，先需要传一个self进去，但我们又不知道self是啥。<br>如何知道self是什么呢？我们注意到<code>F(self)</code>实际上就是<code>lambda x:...</code>，而它就是self。所以，<strong>实际上<code>F</code>和<code>self</code>构成下面的方程</strong>：</p>
-<figure class="highlight stylus"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="title">F</span><span class="params">(self)</span></span> = self</span><br></pre></td></tr></table></figure>
-
-<p>因此这个<code>self</code>函数实际上就是F的<strong>不动点</strong>。借助于Y不动点组合子，可以求得不动点。因为它满足下面的特性：<strong>对于任意的函数<code>F</code>，存在<code>Y F</code>是<code>F</code>的不动点</strong>。也就是如下所示</p>
-<figure class="highlight lisp"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">F (<span class="name">Y</span> F) = (<span class="name">Y</span> F)</span><br></pre></td></tr></table></figure>
-
-<p>也就是说，我们令<code>self</code>为<code>Y F</code>即可。这个时候，我们也同时甩掉了F的两参数的包袱，因为：</p>
-<ol>
-<li>在使用时，可以直接令self(10)这样调用</li>
-<li>但在定义时，我们又能获取到参数self</li>
-</ol>
-<h3 id="Y-Combinator"><a href="#Y-Combinator" class="headerlink" title="Y-Combinator"></a>Y-Combinator</h3><p>Eager版本</p>
+<p>但是现在还有缺憾，就是得一开始 <code>fac(self)</code> 一下，另外我们多一个 <code>fac(fac)</code> 这种让人感觉很奇怪的封装。</p>
+<h2 id="Y-Combinator-的实现"><a href="#Y-Combinator-的实现" class="headerlink" title="Y-Combinator 的实现"></a>Y-Combinator 的实现</h2><p>Eager 版本</p>
 <figure class="highlight ruby"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">Y</span><span class="params">(F)</span></span><span class="symbol">:</span></span><br><span class="line">    f_gen = lambda <span class="symbol">self:</span> F(<span class="keyword">self</span>(<span class="keyword">self</span>))</span><br><span class="line">    <span class="comment"># will eager evaluated</span></span><br><span class="line">    <span class="keyword">return</span> f_gen(f_gen)</span><br></pre></td></tr></table></figure>
 
-<p>Lazy版本</p>
+<p>Lazy 版本</p>
 <figure class="highlight lisp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">gen2_lazy = (<span class="name">lambda</span> g:</span><br><span class="line">  ( <span class="name">lambda</span> self: g(<span class="name">self</span>(<span class="name">self</span>)) )</span><br><span class="line">  ( <span class="name">lambda</span> self: g(<span class="name">self</span>(<span class="name">self</span>)) ))</span><br></pre></td></tr></table></figure>
 
 <h2 id="通过Z-不动点来美化"><a href="#通过Z-不动点来美化" class="headerlink" title="通过Z-不动点来美化"></a>通过Z-不动点来美化</h2><p>首先，可以提出来一个<code>gen</code></p>
 <figure class="highlight stata"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">gen</span> = lambda f: <span class="built_in">f</span>(f)</span><br><span class="line"><span class="keyword">fact</span> = <span class="keyword">gen</span>(lambda self: lambda x: 1 <span class="keyword">if</span> x &lt;= 1 <span class="keyword">else</span> x * self(self)(x - 1))</span><br></pre></td></tr></table></figure>
 
-<p>然后研究去掉<code>fac(fac)</code>，也就是我们需要一个函数<code>gen2</code>，满足</p>
+<p>然后研究去掉 <code>fac(fac)</code>，也就是我们需要一个函数<code>gen2</code>，满足</p>
 <figure class="highlight armasm"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="symbol">fact</span> = gen2(lambda <span class="keyword">self: </span>lambda x: <span class="number">1</span> <span class="meta">if</span> x &lt;= <span class="number">1</span> <span class="meta">else</span> x * <span class="keyword">self(x </span>- <span class="number">1</span>))</span><br></pre></td></tr></table></figure>
 
-<p>这个<code>gen2</code>就是</p>
+<p>这个 <code>gen2</code> 就是</p>
 <figure class="highlight groovy"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">gen2 = lambda <span class="string">g:</span> gen(lambda <span class="string">self:</span> g(lambda <span class="string">y:</span> self(self)(y)))</span><br></pre></td></tr></table></figure>
 
-<p>理解的最好方式是自己带入算一算。<br>首先用beta做代换，得到</p>
+<p>理解的最好方式是自己带入算一算。<br>首先用 beta 做代换，得到</p>
 <figure class="highlight lisp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">fact = (<span class="name">lambda</span> g: gen(<span class="name">lambda</span> self: g(<span class="name">lambda</span> y: self(<span class="name">self</span>)(<span class="name">y</span>)))) (<span class="name">g</span>)</span><br><span class="line">     = gen(<span class="name">lambda</span> self: g(<span class="name">lambda</span> y: self(<span class="name">self</span>)(<span class="name">y</span>)))</span><br></pre></td></tr></table></figure>
 
-<p>这个时候，我们不能像下面一样beta代换把gen也消掉，这样是结束不了这个代换的。我们把g进行代换</p>
+<p>此时不能像下面一样 beta 代换把 gen 也消掉，这样是结束不了这个代换的。而是把 g 进行代换</p>
 <figure class="highlight lasso"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">fact = gen(lambda <span class="built_in">self</span>: (lambda <span class="built_in">self</span>: lambda x: <span class="number">1</span> <span class="keyword">if</span> x &lt;= <span class="number">1</span> <span class="keyword">else</span> x * <span class="built_in">self</span>(x - <span class="number">1</span>)) (lambda y: <span class="built_in">self</span>(<span class="built_in">self</span>)(y)))</span><br></pre></td></tr></table></figure>
 
-<p>下面，我们把<code>(lambda y: self(self)(y))</code>代换，这样可以去掉一个<code>lambda self</code></p>
+<p>下面，把 <code>(lambda y: self(self)(y))</code> 代换，这样可以去掉一个 <code>lambda self</code></p>
 <figure class="highlight groovy"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">fact = gen(lambda <span class="string">self:</span> (lambda <span class="string">x:</span> <span class="number">1</span> <span class="keyword">if</span> x &lt;= <span class="number">1</span> <span class="keyword">else</span> x * (lambda <span class="string">y:</span> self(self)(y))(x - <span class="number">1</span>))  )</span><br></pre></td></tr></table></figure>
 
-<p>再把<code>x - 1</code>带入，我们发现得到了和一开始一样的，带有<code>self(self)</code>的式子</p>
+<p>再把 <code>x - 1</code> 带入，发现得到了和开始一样的，带有 <code>self(self)</code> 的式子</p>
 <figure class="highlight lasso"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">fact = gen(lambda <span class="built_in">self</span>: (lambda x: <span class="number">1</span> <span class="keyword">if</span> x &lt;= <span class="number">1</span> <span class="keyword">else</span> x * <span class="built_in">self</span>(<span class="built_in">self</span>)(x - <span class="number">1</span>)) )</span><br></pre></td></tr></table></figure>
 
-<p>其实这就是Z-Combinator</p>
+<p>其实这就是 Z-Combinator</p>
 <figure class="highlight lisp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">gen2 = (<span class="name">lambda</span> g:</span><br><span class="line">  ( <span class="name">lambda</span> self: g(<span class="name">lambda</span> y: self(<span class="name">self</span>)(<span class="name">y</span>)) )</span><br><span class="line">  ( <span class="name">lambda</span> self: g(<span class="name">lambda</span> y: self(<span class="name">self</span>)(<span class="name">y</span>)) ))</span><br></pre></td></tr></table></figure>
 
-<h1 id="定义lambda演算"><a href="#定义lambda演算" class="headerlink" title="定义lambda演算"></a>定义lambda演算</h1><p>为了能够将上面的数学思路推广到lambda中，首先需要简单了解lambda演算(Lambda Calculus)。lambda演算是图灵完备的，邱奇利用lambda演算证伪了可判定性问题。</p>
+<h1 id="通过引入不动点解决问题"><a href="#通过引入不动点解决问题" class="headerlink" title="通过引入不动点解决问题"></a>通过引入不动点解决问题</h1><h2 id="不动点的数学定义"><a href="#不动点的数学定义" class="headerlink" title="不动点的数学定义"></a>不动点的数学定义</h2><p>如果 <code>f(x) = x</code> 那么 <code>x</code> 是 <code>f</code> 的不动点，即不动点指那些被函数仍然映射到自身的点。当然并不是所有函数都有不动点，因为上面给出的方程不一定有解。</p>
+<p>容易发现不动点和我们的问题之间有关联。比如设 <code>g</code> 是一个函数，那么 <code>f(g)</code> 的结果是 <code>g</code>，发现还是一个函数。</p>
+<p>进一步地，有 <code>g(f(g)) = f(g)</code>。可是这个式子是如何和“自己调用自己”扯上关系的呢？</p>
+<h2 id="从不动点的视角回顾Demo"><a href="#从不动点的视角回顾Demo" class="headerlink" title="从不动点的视角回顾Demo"></a>从不动点的视角回顾Demo</h2><p>继续来看阶乘这个例子</p>
+<figure class="highlight armasm"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="symbol">fac</span> = lambda <span class="keyword">self: </span><span class="number">1</span> <span class="meta">if</span> x &lt;= <span class="number">1</span> <span class="meta">else</span> x * <span class="keyword">self(x </span>- <span class="number">1</span>)</span><br></pre></td></tr></table></figure>
+
+<p>我们将 fac 柯里化，得到 F。这里的 F 看做是接受参数 self，并且返回一个用来计算阶乘的函数。</p>
+<figure class="highlight armasm"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">F = lambda <span class="keyword">self: </span>lambda x: <span class="number">1</span> <span class="meta">if</span> x &lt;= <span class="number">1</span> <span class="meta">else</span> x * <span class="keyword">self(x </span>- <span class="number">1</span>)</span><br></pre></td></tr></table></figure>
+
+<p>从最里面函数的角度：<strong>self就是自己(即<code>lambda x:...</code>)<strong>，但是从外面被传进来的。<br>从最外面的角度：</strong><code>F</code>是已知的，因为它是被定义出来的。</strong>，先需要传一个 self 进去，但我们又不知道 self 是啥。<br>如何知道 self 是什么呢？注意到 <code>F(self)</code> 实际上就是 <code>lambda x:...</code>，即 self。所以，<strong>实际上<code>F</code>和<code>self</code>构成下面的方程</strong>：</p>
+<figure class="highlight stylus"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="title">F</span><span class="params">(self)</span></span> = self</span><br></pre></td></tr></table></figure>
+
+<p>因此这个 <code>self</code> 函数实际上就是 F 的<strong>不动点</strong>。借助于 Y 不动点组合子，可以求得不动点。因为它满足下面的特性：<strong>对于任意的函数<code>F</code>，存在<code>Y F</code>是<code>F</code>的不动点</strong>。也就是如下所示</p>
+<figure class="highlight lisp"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">F (<span class="name">Y</span> F) = (<span class="name">Y</span> F)</span><br></pre></td></tr></table></figure>
+
+<p>也就是说，<strong>在需要访问 self 的时候，<code>Y F</code> 便是了</strong>。这样也同时甩掉了 F 的两参数的包袱，因为：</p>
+<ol>
+<li>在使用时，可以直接令 self(10) 这样调用</li>
+<li>但在定义时，又能获取到参数 self</li>
+</ol>
+<h1 id="lambda演算简介"><a href="#lambda演算简介" class="headerlink" title="lambda演算简介"></a>lambda演算简介</h1><p>为了能够将上面的数学思路推广到lambda中，首先需要简单了解lambda演算(Lambda Calculus)。lambda演算是图灵完备的，邱奇利用lambda演算证伪了可判定性问题。</p>
 <h2 id="形式化定义"><a href="#形式化定义" class="headerlink" title="形式化定义"></a>形式化定义</h2><p>lambda演算文法非常简单，只由下面三个lambda term组成</p>
 <ol>
 <li><p>引用标识符(Variable)<br> $a$</p>
 </li>
 <li><p>定义函数(Abstraction)<br> $(\lambda x. M)$，括号可省略。<br> 此时变量$x$被绑定到了这个lambda表达式，而这个绑定的作用域便以括号为界。</p>
 </li>
-<li><p>应用函数(Application)<br> $(M \, N)$<br> 在lambda演算中函数作用是<strong>左结合</strong>的，即$s\,t\,x$实际上是$(s\,t)x$。<br> 例如$\omega$组合子$\lambda x.x\,x$，它可以被看做$(\lambda x.x) (x)$，而不是$\lambda x.(x\,x)$</p>
+<li><p>应用函数(Application)<br> $(M \, N)$<br> 在lambda演算中函数作用是<strong>左结合</strong>的，即 $s\,t\,x$ 实际上是 $(s\,t)x$。<br> 例如 $\omega$ 组合子 $\lambda x.x\,x$，它可以被看做 $(\lambda x.x) (x)$，而不是$\lambda x.(x\,x)$。</p>
 </li>
 </ol>
 <h3 id="括号"><a href="#括号" class="headerlink" title="括号"></a>括号</h3><p>lambda演算中的括号在无歧义的情况下是可以省略的。因此式子$(\lambda x.x \, x)(\lambda y.y)$可以写成$\lambda(x.x\,x) \lambda y.\,y$。<br>式子$\lambda x.((\lambda x.x)x)$和式子$(\lambda x.(\lambda x.x))x$并不能作为同一个lambda term。其中第一个式子中外面的lambda是返回的一个值，而第二个式子中外面的lambda是返回的一个lambda。</p>
-<h2 id="绑定"><a href="#绑定" class="headerlink" title="绑定"></a>绑定</h2><p>一个合法的lambda函数不应当出现自由变量。如$\lambda x.(x\,y)$中，$x$是被绑定的，但是$y$没有被绑定到在表达式中的<strong>任何一个</strong>$\lambda$上。</p>
+<h2 id="绑定"><a href="#绑定" class="headerlink" title="绑定"></a>绑定</h2><p>一个合法的 lambda 函数不应当出现自由变量。如 $\lambda x.(x\,y)$ 中，$x$ 是被绑定的，但是 $y$ 没有被绑定到在表达式中的<strong>任何一个</strong> $\lambda$ 上。</p>
 <h2 id="lambda演算规则"><a href="#lambda演算规则" class="headerlink" title="lambda演算规则"></a>lambda演算规则</h2><p>首先定义$E[V:=W]$，这表示一个表达式$E$，这个表达式中的所有$V$的自由出现都替换成$W$。</p>
 <h3 id="α-转换-Alpha-equivalence"><a href="#α-转换-Alpha-equivalence" class="headerlink" title="α-转换(Alpha equivalence)"></a>α-转换(Alpha equivalence)</h3><p>这个变换的意义是被绑定变量的名称是不重要的，所以我们可以用任何的其他名字来替换，其定义为$\lambda V.E = \lambda W.E[V:=W]$。<br>当然，前提是首先要是<strong>被绑定的</strong>，我们看前面的一个例子$\lambda x.x\,x$，它相当于$(\lambda x.x) (x)$。这里面有两个$x$，但这两个变量却不是一个变量，因为只有前一个变量被绑定到了$\lambda$上，而后一个是自由变量</p>
-<h3 id="β-归约-Beta-reduction"><a href="#β-归约-Beta-reduction" class="headerlink" title="β-归约(Beta reduction)"></a>β-归约(Beta reduction)</h3><p>这个类似于C等语言中的传参，或者数学里面的代入。其定义是$\lambda x.t$能够归约成$t[x:=s]$，这个beta reduce过程表示为$(\lambda x.t)s \rightarrow t[x:=s]$。在这时，相当于我们将$x$的值赋为了$s$。这个过程必须要确保$E’$再替换后仍然是自由的。</p>
-<h4 id="绑定与自由"><a href="#绑定与自由" class="headerlink" title="绑定与自由"></a>绑定与自由</h4><p>例如$\lambda z.(\lambda x . x + z)(x + 2)$，和我们在α-转换中看到的例子一样，$(\lambda x . x + z)$中出现的$x$是绑定的，但是$x + 2$中的却是自由的，因此我们不能直接把这个自由的$x$代入到绑定的$x$里面去。<br>如对于任意的“自变量”$s$，有$(\lambda x.x)s \rightarrow x[x:=s] = s$，因此该函数是个恒等函数。又如$(\lambda x.y)s \rightarrow y[x:=s] = y$，这说明$\lambda x.y$是个常量函数。</p>
+<h3 id="β-归约-Beta-reduction"><a href="#β-归约-Beta-reduction" class="headerlink" title="β-归约(Beta reduction)"></a>β-归约(Beta reduction)</h3><p>这个类似于C等语言中的传参，或者数学里面的代入。其定义是 $\lambda x.t$ 能够归约成 $t[x:=s]$，这个 beta reduce 过程表示为 $(\lambda x.t)s \rightarrow t[x:=s]$。在这时，相当于我们将 $x$ 的值赋为了 $s$。这个过程必须要确保 $E’$ 再替换后仍然是自由的。</p>
+<h4 id="绑定与自由"><a href="#绑定与自由" class="headerlink" title="绑定与自由"></a>绑定与自由</h4><p>例如 $\lambda z.(\lambda x . x + z)(x + 2)$，和我们在 α-转换中看到的例子一样，$(\lambda x . x + z)$ 中出现的 $x$ 是绑定的，但是 $x + 2$ 中的却是自由的，因此不能直接把这个自由的 $x$ 代入到绑定的 $x$ 里面去。<br>如对于任意的“自变量” $s$，有 $(\lambda x.x)s \rightarrow x[x:=s] = s$，因此该函数是个恒等函数。又如 $(\lambda x.y)s \rightarrow y[x:=s] = y$，这说明 $\lambda x.y$ 是个常量函数。</p>
 <h3 id="通常形式"><a href="#通常形式" class="headerlink" title="通常形式"></a>通常形式</h3><p>beta可归约式(redex)具有以下的形式$((\lambda x.A(x))t)$。例如$(\lambda x.x\,x)(\lambda y.z) \leftarrow (\lambda y.z)(\lambda y.z)$<br>对于无类型的lambda演算来说，这个规约过程还可能是无法终止的。考虑下面的$\Omega$算子$\Omega = (\lambda x.x\,x)(\lambda x.x\,x)$</p>
 <p>$$<br>\begin{equation}\begin{split}<br>&amp; (\lambda x.x\,x)(\lambda x.x\,x) \\<br>\rightarrow &amp; (x\,x)[x:=\lambda x.x\,x] \\<br>= &amp; (x[x:=\lambda x.x\,x])(x[x:=\lambda x.x\,x]) \\<br>= &amp; (\lambda x.x\,x)(\lambda x.x\,x)<br>\end{split}\end{equation}<br>$$</p>
 <h3 id="η-变换-Eta-conversion"><a href="#η-变换-Eta-conversion" class="headerlink" title="η-变换(Eta conversion)"></a>η-变换(Eta conversion)</h3><p>η-变换体现了外延性(extensionality)的思想，即两个数学对象是相等的，如果没有区分它们的检验。对于lambda中的函数来说，如果两个函数对于任意的输入都能产生相同的行为（即返回相同的结果），那么可以认为这两个函数是相等的。<br>η-变换的一个用途是$\lambda x.f\,x$和$f$是等价的（注意它们不一定性能相同，<a href="/2017/02/28/haskell%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/">详见Haskel里有关where的一个例子</a>），只要$x$不是$f$中的自由出现。</p>
-<h1 id="Y-Combinator的实现"><a href="#Y-Combinator的实现" class="headerlink" title="Y Combinator的实现"></a>Y Combinator的实现</h1><p>Curry的<strong>Y Combinator</strong>定义为<br>$$<br>Y = \lambda f . (\lambda x. f(x \, x)) (\lambda x. f(x \, x))<br>$$</p>
-<p>我们在前面介绍了Python的Lazy和Eager的实现。</p>
-<h2 id="证明"><a href="#证明" class="headerlink" title="证明"></a>证明</h2><p>下面证明这样的$Y$满足<br>$$<br>(Y g) = g (Y g)<br>$$<br>首先我们根据beta归约，将函数$g$带入<br>$$<br>Y g = (\lambda x . g (x \, x)) (\lambda x . g (x \, x))<br>$$<br>下面我们使用alpha法则来修改一下绑定的变量名字，以便后面的带入，有<br>$$<br>Y g = (\lambda y . g (y \, y)) (\lambda x . g (x \, x))<br>$$<br>下面我们将所有的$y$替换成$(\lambda x . g (x x))$，同样是根据beta法则<br>$$<br>Y g = g ((\lambda x . g (x \, x)) (\lambda x . g (x \, x)))<br>$$<br>而后面的又是一个$Y g$，于是得证。</p>
-<h2 id="Y-Combinator的类型"><a href="#Y-Combinator的类型" class="headerlink" title="Y Combinator的类型"></a>Y Combinator的类型</h2><p>下面进一步探究一下为什么这样的构造能得到一个递归。<code>y</code>接受一个函数，返回这个函数的不动点，因此类型应该是这样的。</p>
+<h1 id="Y-Combinator的实现"><a href="#Y-Combinator的实现" class="headerlink" title="Y Combinator的实现"></a>Y Combinator的实现</h1><p>Curry 的 <strong>Y Combinator</strong> 定义为<br>$$<br>Y = \lambda f . (\lambda x. f(x \, x)) (\lambda x. f(x \, x))<br>$$</p>
+<p>我们在前面介绍了 Python 的 Lazy 和 Eager 的实现。</p>
+<h2 id="证明-Y-Combinator-的性质"><a href="#证明-Y-Combinator-的性质" class="headerlink" title="证明 Y Combinator 的性质"></a>证明 Y Combinator 的性质</h2><p>下面证明这样的$Y$满足<br>$$<br>(Y g) = g (Y g)<br>$$<br>首先根据 beta 归约，将函数 $g$ 带入<br>$$<br>Y g = (\lambda x . g (x \, x)) (\lambda x . g (x \, x))<br>$$<br>下面使用 alpha 法则来修改一下绑定的变量名字，以便后面的带入，有<br>$$<br>Y g = (\lambda y . g (y \, y)) (\lambda x . g (x \, x))<br>$$<br>下面将所有的 $y$ 替换成 $(\lambda x . g (x \, x))$，也就是将左边的 lambda 应用在右边，这同样是根据 beta 法则<br>$$<br>Y g = g ((\lambda x . g (x \, x)) (\lambda x . g (x \, x)))<br>$$<br>而后面的又是一个 $Y g$，于是得证。</p>
+<h2 id="Y-Combinator的类型"><a href="#Y-Combinator的类型" class="headerlink" title="Y Combinator的类型"></a>Y Combinator的类型</h2><p>下面进一步探究一下为什么这样的构造能得到一个递归。<code>y</code> 接受一个函数，返回这个函数的不动点，因此类型应该是这样的。</p>
 <figure class="highlight mizar"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">y <span class="comment">:: (a -&gt; a) -&gt; a</span></span><br></pre></td></tr></table></figure>
 
-<p>把<code>\x -&gt; f (x x)</code>作为一个整体<code>g</code>，那么<code>y</code>的工作就是将<code>g</code>作为唯一参数来调用自己，这有点像我们证明停机问题的时候的操作。</p>
+<p>把<code>\x -&gt; f (x x)</code>作为一个整体 <code>g</code>，那么 <code>y</code> 的工作就是将 <code>g</code> 作为唯一参数来调用自己，这有点像我们证明停机问题的时候的操作。</p>
 <figure class="highlight ini"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">y</span> = \f -&gt; g g</span><br></pre></td></tr></table></figure>
 
-<p>现在我们查看这个<code>g</code>，它接受一个**可调用的<code>x</code>**作为参数，并且做<code>f (x x)</code>这样的调用。首先我们令<code>x x</code>的类型是a，即</p>
+<p>查看这个 <code>g</code>，它接受一个<strong>可调用的</strong> <code>x</code>作为参数，并且做 <code>f (x x)</code> 这样的调用。首先令 <code>x x</code> 的类型是 <code>a</code>，即</p>
 <figure class="highlight llvm"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">x</span> <span class="keyword">x</span> :: a</span><br></pre></td></tr></table></figure>
 
 <p>则有</p>
 <figure class="highlight clean"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">x :: b -&gt; a</span><br></pre></td></tr></table></figure>
 
-<p>其中<code>a</code>，<code>b</code>为未知类型。在另一方面，我们还能推导出</p>
+<p>其中 <code>a</code>，<code>b</code> 为未知类型。在另一方面，我们还能推导出</p>
 <figure class="highlight stylus"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="selector-tag">b</span> :: <span class="selector-tag">b</span> -&gt; a</span><br></pre></td></tr></table></figure>
 
-<p>这是因为我们作为函数来考虑<code>x</code>，它接受一个<code>b</code>类型的<code>x</code>作为参数，而根据前面的式子<code>x</code>又具有类型<code>b -&gt; a</code>，所以我们可以得出<code>b</code>的类型是<code>b -&gt; a</code>。因此这个类型是<a href="https://zh.wikipedia.org/wiki/%E9%80%92%E5%BD%92%E7%B1%BB%E5%9E%8B" target="_blank" rel="noopener"><strong>递归类型</strong></a>。</p>
-<h3 id="递归类型"><a href="#递归类型" class="headerlink" title="递归类型"></a>递归类型</h3><p>List就可以看做一种递归类型。</p>
+<p>这因为作为函数来考虑 <code>x</code>，它接受一个 <code>b</code> 类型的 <code>x</code> 作为参数，而根据前面的式子 <code>x</code> 又具有类型 <code>b -&gt; a</code>，所以可以得出 <code>b</code> 的类型是 <code>b -&gt; a</code>。因此这个类型是<a href="https://zh.wikipedia.org/wiki/%E9%80%92%E5%BD%92%E7%B1%BB%E5%9E%8B" target="_blank" rel="noopener"><strong>递归类型</strong></a>。</p>
+<h3 id="递归类型"><a href="#递归类型" class="headerlink" title="递归类型"></a>递归类型</h3><p>List 就可以看做一种递归类型。</p>
 <figure class="highlight haskell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">data</span> <span class="type">List</span> a = <span class="type">Nil</span> | <span class="type">Cons</span> a (<span class="type">List</span> <span class="title">a</span>)</span></span><br></pre></td></tr></table></figure>
 
-<p>在函数式语言例如Haskell/OCaml中，递归是不能以type synonyms的形式来实现的，例如下面这些使用**<code>type</code>**的语句是不合法的。我们可以简单地想象在C++里面的<code>typedef</code>关键字定义的“类型”，在实际上他们并不是正在的类型，而是alias构成的语法糖。如果我们使用这样的定义，那么在编译时就会因为简单的替换而导致死循环的发生</p>
+<p>在函数式语言例如 Haskell/OCaml 中，递归是不能以 type synonyms 的形式来实现的，例如下面这些使用**<code>type</code>**的语句是不合法的。我们可以简单地想象在 C++ 里面的 <code>typedef</code> 关键字定义的“类型”，在实际上他们并不是真正的类型，而是 alias 构成的语法糖。如果使用这样的定义，那么在编译时就会因为简单的替换而导致死循环的发生</p>
 <figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">type Bad = (Int, Bad)</span><br><span class="line">type Evil = Bool -&gt; Evil</span><br></pre></td></tr></table></figure>
 
 <p>解决之道就是按照下面的方式去新建一个ADT(Algebraic data type)</p>
 <figure class="highlight haskell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">data</span> <span class="type">Good</span> = <span class="type">Pair</span> <span class="type">Int</span> <span class="type">Good</span></span></span><br><span class="line"><span class="class"><span class="keyword">data</span> <span class="type">Fine</span> = <span class="type">Fun</span> (<span class="type">Bool</span>-&gt;<span class="type">Fine</span>)</span></span><br></pre></td></tr></table></figure>
-
-<h1 id="fix函数和递归"><a href="#fix函数和递归" class="headerlink" title="fix函数和递归"></a>fix函数和递归</h1><p>fix定义如下</p>
-<figure class="highlight nix"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">fix <span class="attr">f</span> = <span class="keyword">let</span> &#123;<span class="attr">x</span> = f x&#125; <span class="keyword">in</span> x</span><br></pre></td></tr></table></figure>
-
-<p>我们可以直接import</p>
-<figure class="highlight css"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="selector-pseudo">:m</span> <span class="selector-tag">Control</span><span class="selector-class">.Monad</span><span class="selector-class">.Fix</span></span><br></pre></td></tr></table></figure>
-
-<p>我们可以直接用它来实现不动点组合子</p>
-<figure class="highlight coq"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">fix</span> (\self n -&gt; <span class="keyword">if</span> n == <span class="number">0</span> <span class="keyword">then</span> <span class="number">1</span> <span class="keyword">else</span> n * self (n<span class="number">-1</span>)) <span class="number">5</span></span><br></pre></td></tr></table></figure>
-
-<p>对于一个发散函数，它的不动点是<code>_|_</code>。</p>
-<figure class="highlight coffeescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Prelude&gt; (<span class="number">2</span>+) <span class="literal">undefined</span></span><br><span class="line">*** Exception: Prelude.<span class="literal">undefined</span></span><br></pre></td></tr></table></figure>
-
-<p>注意到，对于有的函数，例如<code>(*3)</code>，是存在不动点0的，但是<code>fix (*3)</code>仍然发散。这是因为fix找的是least-defined的不动点。</p>
-<p>可以用fix函数来解方程</p>
-<figure class="highlight ocaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">fix (\next guess tol <span class="keyword">val</span> -&gt; <span class="keyword">if</span> abs(guess^<span class="number">2</span>-<span class="keyword">val</span>) &lt; tol <span class="keyword">then</span> guess <span class="keyword">else</span></span><br><span class="line">                     next ((guess + <span class="keyword">val</span> / guess) / <span class="number">2.0</span>) tol <span class="keyword">val</span>) <span class="number">2.0</span> <span class="number">0.0001</span> <span class="number">25.0</span></span><br></pre></td></tr></table></figure>
 
 <h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
 <li><a href="https://lptk.github.io/programming/2019/10/15/simple-essence-y-combinator.html" target="_blank" rel="noopener">https://lptk.github.io/programming/2019/10/15/simple-essence-y-combinator.html</a><br> 根据这篇文章，增加了Demo，使得通俗易懂</li>
@@ -623,9 +634,9 @@
           
             <a href="/tags/Haskell/" rel="tag"># Haskell</a>
           
-            <a href="/tags/lambda/" rel="tag"># lambda</a>
-          
             <a href="/tags/函数式/" rel="tag"># 函数式</a>
+          
+            <a href="/tags/lambda/" rel="tag"># lambda</a>
           
         </div>
       
@@ -729,7 +740,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">195</span>
+                <span class="site-state-item-count">196</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -742,7 +753,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">143</span>
+                <span class="site-state-item-count">144</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -835,7 +846,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#基于-Haskell-的-demo"><span class="nav-number">1.</span> <span class="nav-text">基于 Haskell 的 demo</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#如何解决-lazy-evaluation-问题"><span class="nav-number">1.1.</span> <span class="nav-text">如何解决 lazy evaluation 问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#如何解决递归调用Y"><span class="nav-number">1.2.</span> <span class="nav-text">如何解决递归调用Y</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#基于C-的demo"><span class="nav-number">2.</span> <span class="nav-text">基于C++的demo</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#基于Python的Demo"><span class="nav-number">3.</span> <span class="nav-text">基于Python的Demo</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#一个简易的递归调用方法"><span class="nav-number">3.1.</span> <span class="nav-text">一个简易的递归调用方法</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#太丑了"><span class="nav-number">3.2.</span> <span class="nav-text">太丑了</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#解决方案"><span class="nav-number">3.2.1.</span> <span class="nav-text">解决方案</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#原理1：实现递归"><span class="nav-number">3.2.1.1.</span> <span class="nav-text">原理1：实现递归</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#原理2：在函数体内干掉f"><span class="nav-number">3.2.1.2.</span> <span class="nav-text">原理2：在函数体内干掉f</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#总结"><span class="nav-number">3.2.1.3.</span> <span class="nav-text">总结</span></a></li></ol></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#函数的不动点"><span class="nav-number">4.</span> <span class="nav-text">函数的不动点</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#不动点的数学定义"><span class="nav-number">4.1.</span> <span class="nav-text">不动点的数学定义</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#从不动点的视角回顾Demo"><span class="nav-number">4.2.</span> <span class="nav-text">从不动点的视角回顾Demo</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Y-Combinator"><span class="nav-number">4.2.1.</span> <span class="nav-text">Y-Combinator</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#通过Z-不动点来美化"><span class="nav-number">4.3.</span> <span class="nav-text">通过Z-不动点来美化</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#定义lambda演算"><span class="nav-number">5.</span> <span class="nav-text">定义lambda演算</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#形式化定义"><span class="nav-number">5.1.</span> <span class="nav-text">形式化定义</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#括号"><span class="nav-number">5.1.1.</span> <span class="nav-text">括号</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#绑定"><span class="nav-number">5.2.</span> <span class="nav-text">绑定</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#lambda演算规则"><span class="nav-number">5.3.</span> <span class="nav-text">lambda演算规则</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#α-转换-Alpha-equivalence"><span class="nav-number">5.3.1.</span> <span class="nav-text">α-转换(Alpha equivalence)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#β-归约-Beta-reduction"><span class="nav-number">5.3.2.</span> <span class="nav-text">β-归约(Beta reduction)</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#绑定与自由"><span class="nav-number">5.3.2.1.</span> <span class="nav-text">绑定与自由</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#通常形式"><span class="nav-number">5.3.3.</span> <span class="nav-text">通常形式</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#η-变换-Eta-conversion"><span class="nav-number">5.3.4.</span> <span class="nav-text">η-变换(Eta conversion)</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Y-Combinator的实现"><span class="nav-number">6.</span> <span class="nav-text">Y Combinator的实现</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#证明"><span class="nav-number">6.1.</span> <span class="nav-text">证明</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Y-Combinator的类型"><span class="nav-number">6.2.</span> <span class="nav-text">Y Combinator的类型</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#递归类型"><span class="nav-number">6.2.1.</span> <span class="nav-text">递归类型</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#fix函数和递归"><span class="nav-number">7.</span> <span class="nav-text">fix函数和递归</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">8.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#基于-Haskell-的-demo"><span class="nav-number">1.</span> <span class="nav-text">基于 Haskell 的 demo</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#fix-函数和递归"><span class="nav-number">1.1.</span> <span class="nav-text">fix 函数和递归</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#如何解决-lazy-evaluation-问题"><span class="nav-number">1.2.</span> <span class="nav-text">如何解决 lazy evaluation 问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#如何解决递归调用Y"><span class="nav-number">1.3.</span> <span class="nav-text">如何解决递归调用Y</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#基于C-的demo"><span class="nav-number">2.</span> <span class="nav-text">基于C++的demo</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#基于Python的Demo"><span class="nav-number">3.</span> <span class="nav-text">基于Python的Demo</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#简易做法"><span class="nav-number">3.1.</span> <span class="nav-text">简易做法</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#太丑了"><span class="nav-number">3.2.</span> <span class="nav-text">太丑了</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#解决方案"><span class="nav-number">3.2.1.</span> <span class="nav-text">解决方案</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#原理1：实现递归"><span class="nav-number">3.2.1.1.</span> <span class="nav-text">原理1：实现递归</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#原理2：在函数体内干掉f"><span class="nav-number">3.2.1.2.</span> <span class="nav-text">原理2：在函数体内干掉f</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#总结"><span class="nav-number">3.2.1.3.</span> <span class="nav-text">总结</span></a></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Y-Combinator-的实现"><span class="nav-number">3.3.</span> <span class="nav-text">Y-Combinator 的实现</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#通过Z-不动点来美化"><span class="nav-number">3.4.</span> <span class="nav-text">通过Z-不动点来美化</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#通过引入不动点解决问题"><span class="nav-number">4.</span> <span class="nav-text">通过引入不动点解决问题</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#不动点的数学定义"><span class="nav-number">4.1.</span> <span class="nav-text">不动点的数学定义</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#从不动点的视角回顾Demo"><span class="nav-number">4.2.</span> <span class="nav-text">从不动点的视角回顾Demo</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#lambda演算简介"><span class="nav-number">5.</span> <span class="nav-text">lambda演算简介</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#形式化定义"><span class="nav-number">5.1.</span> <span class="nav-text">形式化定义</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#括号"><span class="nav-number">5.1.1.</span> <span class="nav-text">括号</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#绑定"><span class="nav-number">5.2.</span> <span class="nav-text">绑定</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#lambda演算规则"><span class="nav-number">5.3.</span> <span class="nav-text">lambda演算规则</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#α-转换-Alpha-equivalence"><span class="nav-number">5.3.1.</span> <span class="nav-text">α-转换(Alpha equivalence)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#β-归约-Beta-reduction"><span class="nav-number">5.3.2.</span> <span class="nav-text">β-归约(Beta reduction)</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#绑定与自由"><span class="nav-number">5.3.2.1.</span> <span class="nav-text">绑定与自由</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#通常形式"><span class="nav-number">5.3.3.</span> <span class="nav-text">通常形式</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#η-变换-Eta-conversion"><span class="nav-number">5.3.4.</span> <span class="nav-text">η-变换(Eta conversion)</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Y-Combinator的实现"><span class="nav-number">6.</span> <span class="nav-text">Y Combinator的实现</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#证明-Y-Combinator-的性质"><span class="nav-number">6.1.</span> <span class="nav-text">证明 Y Combinator 的性质</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Y-Combinator的类型"><span class="nav-number">6.2.</span> <span class="nav-text">Y Combinator的类型</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#递归类型"><span class="nav-number">6.2.1.</span> <span class="nav-text">递归类型</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">7.</span> <span class="nav-text">Reference</span></a></li></ol></div>
             
 
           </div>
