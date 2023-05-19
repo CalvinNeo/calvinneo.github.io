@@ -1,0 +1,1290 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="分布式,2PC," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="介绍 Hazard Pointer。">
+<meta name="keywords" content="分布式,2PC">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Hazard Pointer">
+<meta property="og:url" content="http://www.calvinneo.com/2023/05/16/hazptr/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="介绍 Hazard Pointer。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:image" content="http://www.calvinneo.com/img/hazptr/folly1.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/hazptr/folly2.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/hazptr/folly3.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/hazptr/folly4.png">
+<meta property="og:updated_time" content="2023-05-18T15:17:51.519Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Hazard Pointer">
+<meta name="twitter:description" content="介绍 Hazard Pointer。">
+<meta name="twitter:image" content="http://www.calvinneo.com/img/hazptr/folly1.png">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2023/05/16/hazptr/"/>
+
+
+
+
+
+  <title>Hazard Pointer | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2023/05/16/hazptr/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                Hazard Pointer
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2023-05-16T20:34:22+08:00">
+                2023-05-16
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>介绍 Hazard Pointer。</p>
+<a id="more"></a>
+
+<h1 id="简介"><a href="#简介" class="headerlink" title="简介"></a>简介</h1><p><a href="http://www.cs.otago.ac.nz/cosc440/readings/hazard-pointers.pdf" target="_blank" rel="noopener">Hazard Pointer</a>类似于面向多线程的智能指针，它能够无等待地进行<strong>线程安全的 GC</strong>。在前面提到的 MS 队列中，它的 free 就可以由 HazardPointer 实现。<br>维护一个全局数组 <code>HP hp[N]</code>，其中 N 表示线程的数量。HP 看上去是 ThreadLocal 的，但实际上不是。因为虽然每个线程只能写自己的 HP，但是却可以读所有其他线程的 HP。<br>当需要访问某个指针时，就将这个指针赋值给自己的 HP，也就是通知别人不要释放这个指针。这里的释放被称为 reclaim 或者 deallocate，指的是销毁这个对象。<br>如果同时访问多个指针呢？同样可以扩展HP。比如 HazardPointer 的思维通常是在无锁队列中出现，这个场景最多也就操作一个节点的指针。而如果操作其他数据结构比如树或者图，那么一个线程可以同时访问多个指针。<br>每个线程维护一个私有链表，称为 retired。当该线程准备释放一个指针时，如果此时这个指针还有 reader，则不能立即 gc 掉这个指针，此时把该指针放入 retired 链表中。被 retire 的指针不再可以被新的 reader 访问了，但它仍旧可以被之前就已经指向了的 reader 访问。<br>当一个线程要释放某个指针时，它需要检查全局的 HP 数组。如果有一个线程的 HP 指向这个指针，则不能释放。</p>
+<h2 id="Why-Hazard-Pointer"><a href="#Why-Hazard-Pointer" class="headerlink" title="Why Hazard Pointer"></a>Why Hazard Pointer</h2><p>HP 是用来实现安全地释放某个指针的。这里的安全指的是当有 reader 在读的时候，不能立即销毁该指针指向的对象。例如考虑一个线程在遍历链表，另一个线程在移除链表中的某些节点，这两个线程是不互相知晓对方的。如果在删除时，读线程已经持有了访问该节点的指针，那么这个节点就不能被立即删除。诸如此类的场景称为 Deferred Reclamation。</p>
+<p>一些做法可以解决该问题，比如引用计数。例如可以分别维护读引用计数和写引用计数，这样当一个写在发生前，总可以先检查两个引用计数是否都是0。它的缺点是，无论是读还是写，都需要访问一个共享的用来计数的结构。也许这个结构可以借助于原子操作实现得“轻量”，但无论如何，竞争访问(contention)是少不了的。但考虑一个读多写少的场景，也就是大部分时候压根就不会写那个借助引用计数维护的对象，无论它是一个链表节点，或者是一个别的什么。那是否可以让读操作避免去访问共享对象，从而减少竞争呢？这就是 Hazard Pointer 的思想。这样各个读操作之间没有竞争。</p>
+<p>除了 hazard pointer，还有诸如 epoch-based 或者 RCU 的做法来解决问题。</p>
+<h1 id="实现"><a href="#实现" class="headerlink" title="实现"></a>实现</h1><p>本章节中会进一步研究 hp 实现的原理，并基于 folly 的实现给出一份 Rust 的实现。</p>
+<h2 id="基本原理"><a href="#基本原理" class="headerlink" title="基本原理"></a>基本原理</h2><p>如下所示，蓝色的是读线程，紫色的是写线程。reader 在读 hp 指向的那个 x，而 writer 通过 cas 来把 x 替换成 y。每个 reader，都持有一个 harzard pointer。这里面的东西，要么是空的，要么是当前线程正在使用的 pointer。writer 会检查所有的 hp，检查里面是否包含了自己要 gc 的地址。如果有，说明现在还有 reader 访问，writer 就会 yield 掉，做一些其他的事情，等过一段时间再检查 hazard pointer。等到没有 reader 访问这个 old value 了，writer 就会销毁掉它。</p>
+<p>对于每个对象，它所有的 reader 组成一个链表。如何保证 hp 链表的线程安全？我们不会在使用完某个 hp 后就释放它，而是通过 cas 将它设置为空。所以这些链表中的 hp 是可以被复用的。所以，在获取 hp 的时候，是有一些竞争的，但相比新分配一个 hp，或者 cas 整个链表会好很多。</p>
+<p><img src="/img/hazptr/folly1.png"></p>
+<blockquote>
+<p>这里还讲了 wait free 的实现依赖于 memory reclamation，而不是反过来。所以无法利用某种 wait free 的算法来实现 hp。</p>
+</blockquote>
+<blockquote>
+<p>epoch 的方式更 batch 一些，也更消耗内存。因为只有在 epoch 结束之后，才能释放这个 epoch 中的所有对象。</p>
+</blockquote>
+<p>reader 如何访问 x 呢？ reader 设置 hp，然后后面的 writer 在释放 old value 前进行检查会看到有 hp 被设置了，从而推迟销毁。<br>但这个方案是存在问题的，问题的实质是 hp 和 hp 保护的 ptr 的读写不是原子的。所以考虑下面的顺序，可以发现 W 在还有 R 读 old value 的时候就把 old value 销毁了，这显然是不安全的</p>
+<ol>
+<li>R 读 ptr</li>
+<li>W 更新 ptr</li>
+<li>W 检查 hp</li>
+<li>W 销毁 old value</li>
+<li>R 更新 hp</li>
+</ol>
+<p><img src="/img/hazptr/folly2.png"></p>
+<p>这里有个疑问，如果先更新 hp，再读取 ptr 是否可行呢？这是不可行的，因为 hp 里面要填入它保护的 ptr，所以必须先取到 ptr。</p>
+<p>因此设计下面的过程：</p>
+<ol>
+<li>R 读 ptr，读到值为 ptr1。</li>
+<li>R 更新 hp。</li>
+<li>R 再读 ptr，确保此时读到的值还是 ptr1，此时视为 R 可以安全读 ptr 的值。否则 R 就需要加载最新的 ptr，然后重复这个过程。</li>
+<li>W 更新 ptr。</li>
+<li>W 检查 hp。</li>
+</ol>
+<p>这样的话，如果在 2 和 3 之间有一个 writer 进行了 CAS，那么它会导致 3 读出来的 ptr 发生变化，这样 reader 就能重试。如果在 3 之后有一个 writer，那么 writer 在看到 hp 之后就会重试。</p>
+<h2 id="folly-的接口"><a href="#folly-的接口" class="headerlink" title="folly 的接口"></a>folly 的接口</h2><p>本章节中，研究 folly 的接口，并尝试用 Rust 来实现一份接口。</p>
+<p>一个类继承 hazptr_obj_base 才可以被用 hp 维护。这个 hazptr_obj_base 中有一个 retire 方法。为什么要这么做呢？其实大可以把 MyType 用 HazPtrTarget 包一层，但这样就多了一层间接，用起来不方便。就是想把 HazPtrTarget 里面的一些功能 trait 出来，让 MyType 实现。这样的话，就不需要外面包一层了。当然，后面会发现因为 Rust 中不能往 trait 里面放比如 <code>hazptrs: LinkedList&lt;HazPtrHolder&gt;</code> 之类的 field，所以作者还是包了一层。</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">AtomicPtr&lt;MyType&gt;</span><br><span class="line">AtomicPtr&lt;HazPtrTarget&lt;MyType&gt;&gt;</span><br></pre></td></tr></table></figure>
+
+<p>一个 retire 的对象，不再 accessible，但仍然被 hp 保护。在 reclaim 阶段，会检查该对象是否可以被删除。</p>
+<p>另外，为什么提供一个显式的 retire 函数，而不直接在析构的时候做 retire 相关的事情。作者觉得这是一个 taste 的问题，<code>drop(*)</code> 有点奇怪的。</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">let</span> old: *<span class="keyword">mut</span> HazPtrTarget&lt;MyType&gt; = x.swap(new);</span><br><span class="line">HazPtrTarget::retire(old); <span class="comment">// 1</span></span><br><span class="line"><span class="built_in">drop</span>(*old); <span class="comment">// 2</span></span><br></pre></td></tr></table></figure>
+
+<p>在访问需要保护的对象前，需要首先创建一个 hazptr_holder。holder 是 reader 实际操作的对象。holder 会检查自己是否拥有 hp，如果没有的话，会从对应的 domain 去 acquire 一个。<br>holder 的方法 get_protected 接受一个 <code>AtomicPtr&lt;T&gt;</code>，也就是需要保护的对象。它返回一个不可变引用，这个引用是被 hp 保护的了。</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">impl</span> HazPtrHolder &#123;</span><br><span class="line">    <span class="function"><span class="keyword">fn</span> <span class="title">get_protected</span></span>&lt;<span class="symbol">'a</span>, T&gt;(&amp;<span class="symbol">'a</span> <span class="keyword">mut</span> <span class="keyword">self</span>, &amp;<span class="symbol">'_</span> AtomicPtr&lt;T&gt;) -&gt; &amp;<span class="symbol">'a</span> T;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>首先，无所谓这个 <code>AtomicPtr&lt;T&gt;</code> 的生命周期，因为实际是为了拿到它维护的指针。【Q】那为什么要这个 AtomicPtr 保护一下呢？这和之前说的要读两次 ptr 有关，也就是需要原子地从 ptr 上 load 出它当前的值。<br>其次，即使返回 &amp;T，我们依旧需要 &amp;mut self。这是为了避免先 get_protected a 之后又 get_protected b，这样 a 实际上就不被保护了。<br>最后，返回的 &amp;T 的生命周期是和 HazPtrHolder 一致的。</p>
+<p>如图所示，retire(x) 调用时，发现 x 还在被访问，不能直接 reclaim，所以记录到 retire 表中。retire(y) 调用的时候，发现 y 在被访问，但 x 已经不再被访问了，所以 reclaim x，然后把 y 记录在表中。<br><img src="/img/hazptr/folly3.png"></p>
+<p>演讲者认为 folly 的 demo 存在一些疏漏。如果 V 是一个引用类型的话，则可能出现问题。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">///   // Called frequently</span></span><br><span class="line"><span class="comment">///   U get_config(V v) &#123;</span></span><br><span class="line"><span class="comment">///     hazptr_holder h = make_hazard_pointer();</span></span><br><span class="line"><span class="comment">///     Config* ptr = h.protect(config_);</span></span><br><span class="line"><span class="comment">///     /* safe to access *ptr as long as it is protected by h */</span></span><br><span class="line"><span class="comment">///     return ptr-&gt;get_config(v);</span></span><br><span class="line"><span class="comment">///     /* h dtor resets and releases the owned hazard pointer,</span></span><br><span class="line"><span class="comment">///        *ptr will be no longer protected by this hazard pointer */</span></span><br><span class="line"><span class="comment">///   &#125;</span></span><br></pre></td></tr></table></figure>
+
+<p>下图列出 haz holder、haz pointer、atomic 和 haz obj 的关系。<br>看起来 holder 是 reader 实际操作的对象。holder 会检查自己是否拥有 hp，如果没有的话，会从对应的 domain 去 acquire 一个。<br><img src="/img/hazptr/folly4.png"></p>
+<p>这里 non-typical 的是比如去 dfs 遍历一棵树，然后对于树的每一层都有一个 hp 来记录。这样的话，每个线程的 hp 的数量是 log(d) 而不是常数。<br>第二段的意思是，retire 但还没有 reclaim 的 haz ptr 的数量，和 hp 的数量是线性的。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/// Memory Usage</span></span><br><span class="line"><span class="comment">/// ------------</span></span><br><span class="line"><span class="comment">/// - The size of the metadata for the hazptr library is linear in the</span></span><br><span class="line"><span class="comment">///   number of threads using hazard pointers, assuming a constant</span></span><br><span class="line"><span class="comment">///   number of hazard pointers per thread, which is typical.</span></span><br><span class="line"><span class="comment">/// - The typical number of reclaimable but not yet reclaimed of</span></span><br><span class="line"><span class="comment">///   objects is linear in the number of hazard pointers, which</span></span><br><span class="line"><span class="comment">///   typically is linear in the number of threads using hazard</span></span><br><span class="line"><span class="comment">///   pointers.</span></span><br></pre></td></tr></table></figure>
+
+<p>下面的 Rust 代码展示了 hp 的大概使用方法。这里的 HazPtrHolder::load 类似于 get_protected。可以看到，当 HazPtrHolder 被析构后，就不再可以使用 my_x 了。</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#[test]</span></span><br><span class="line"><span class="function"><span class="keyword">fn</span> <span class="title">feels_good</span></span>() &#123;</span><br><span class="line">    <span class="keyword">let</span> x = AtomicPtr::new(<span class="built_in">Box</span>::into_raw(<span class="built_in">Box</span>::new(<span class="number">42</span>))); <span class="comment">// x: AtomicPtr&lt;i32&gt;</span></span><br><span class="line">    <span class="comment">// As a reader:</span></span><br><span class="line">    <span class="keyword">let</span> h = HazPtrHolder::<span class="keyword">default</span>();</span><br><span class="line">    <span class="keyword">let</span> my_x: &amp;<span class="built_in">i32</span> = h.load(&amp;x);</span><br><span class="line">    <span class="built_in">drop</span>(h);</span><br><span class="line">    <span class="comment">// invalid:</span></span><br><span class="line">    <span class="keyword">let</span> _ = *my_x;</span><br><span class="line">    <span class="comment">// As a writer:</span></span><br><span class="line">    <span class="keyword">let</span> old = x.swap(</span><br><span class="line">        <span class="built_in">Box</span>::into_raw(<span class="built_in">Box</span>::new(<span class="number">9001</span>)),</span><br><span class="line">        Ordering::SeqCst,</span><br><span class="line">    );</span><br><span class="line">    HazPtrobject::retire(old);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>上面的代码也有几个不尽如人意的地方：</p>
+<ol>
+<li>首先是 AtomicPtr 可能接受一个 null，但我们的场景中实际要禁止 null。显然 Rust 中缺少一个 NotNullAtomicPtr 的结构。</li>
+</ol>
+<p>下面就是 load 的实现。分为两部分：</p>
+<ol>
+<li>尝试获得一个 hp，如果当前的 holder 尚未绑定一个 hp，就从 domain 上 acquire 一个。acquire 的实现类似从链表里面取一个可用节点，这在后面介绍。</li>
+<li>从 AtomicPtr 中加载 ptr，放到刚才获得的 hp 里面，也就是 protect 方法。然后再从 ptr 中读一遍，确保现在读到的 ptr2 等于之前的 ptr1。</li>
+</ol>
+<p>这里能够在 ptr1 == ptr2 的时候返回 ptr1，其安全性在于：</p>
+<ol>
+<li>ptr1 不可能被释放，因为它此时至少受到我们刚创建的 hp 的保护。</li>
+<li>caller 保证 AtomicPtr 非空，并且只可能通过 retire 来被释放掉。</li>
+</ol>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">pub</span> <span class="keyword">unsafe</span> <span class="function"><span class="keyword">fn</span> <span class="title">load</span></span>&lt;T&gt;(&amp;<span class="keyword">mut</span> <span class="keyword">self</span>, ptr: &amp;<span class="symbol">'_</span> AtomicPtr&lt;T&gt;) -&gt; <span class="built_in">Option</span>&lt;&amp;T&gt;</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">let</span> hazptr = <span class="keyword">if</span> <span class="keyword">let</span> <span class="literal">Some</span>(hazptr) = <span class="keyword">self</span>.<span class="number">0</span> &#123;</span><br><span class="line">        hazptr</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        <span class="keyword">let</span> hazptr = SHARED_DOMAIN.acquire();</span><br><span class="line">        <span class="keyword">self</span>.<span class="number">0</span> = <span class="literal">Some</span>(hazptr);</span><br><span class="line">        hazptr</span><br><span class="line">    &#125;;</span><br><span class="line">    <span class="keyword">let</span> <span class="keyword">mut</span> ptr1 = ptr.load(Ordering::SeqCst);</span><br><span class="line">    <span class="keyword">loop</span> &#123;</span><br><span class="line">        hazptr.protect(ptr1);</span><br><span class="line">        <span class="keyword">let</span> ptr2 = ptr.load(Ordering::SeqCst);</span><br><span class="line">        <span class="keyword">if</span> ptr1 == ptr2 &#123;</span><br><span class="line">            <span class="comment">// All good -- protected</span></span><br><span class="line">            <span class="keyword">break</span> <span class="literal">Some</span>(todo!())</span><br><span class="line">        &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">            ptr1 = ptr2;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>后面卡在 <code>impl&lt;T&gt; HazPtrObject for T</code> 的 domain 方法上了。这个 domain 方法要返回一个 HazPtrDomain，但写不下去了。因为无法从 trait HazPtrObject 或者任一类型 T 中去取到它被绑定的 domain。所以我们得引入一个 <code>HazPtrObjectWrapper&lt;T&gt;</code> 来保存 domain。这个 Wrapper 可以解引用为 T，还实现了 HazPtrObject。哎，所以这不是走回 <code>AtomicPtr&lt;HazPtrTarget&lt;MyType&gt;&gt;</code> 这样的老路了么。</p>
+<p>这里遇到一个 Drop 相关的问题，他要把 self cast 成一个 <code>*mut dyn Drop</code>，这要求 HazPtrObject 的 Self 必须 impl Drop。但 Rust 又报一个 warning 说 HazPtrObject 继承一个 Drop trait 是多余的。搞到最后作者也没办法去掉这 warning，只能通过 drop_bounds 去禁用掉这个 warning。在视频的第二部分，通过用一个新的空的 trait Reclaim 替换 Drop 来解决掉那个多的 warning。毕竟我们核心只是要一个虚表。</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#[allow(drop_bounds)]</span></span><br><span class="line"><span class="keyword">pub</span> <span class="class"><span class="keyword">trait</span> <span class="title">HazPtrObject</span></span></span><br><span class="line"><span class="keyword">where</span></span><br><span class="line">    <span class="keyword">Self</span>: <span class="built_in">Sized</span> + <span class="built_in">Drop</span> + <span class="symbol">'static</span>,</span><br><span class="line">&#123;</span><br><span class="line">    <span class="function"><span class="keyword">fn</span> <span class="title">domain</span></span>(&amp;<span class="keyword">self</span>) -&gt; &amp;HazPtrDomain;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">unsafe</span> <span class="function"><span class="keyword">fn</span> <span class="title">retire</span></span>(<span class="keyword">self</span>: *<span class="keyword">mut</span> <span class="keyword">Self</span>) &#123;</span><br><span class="line">        <span class="keyword">if</span> !std::mem::needs_drop::&lt;<span class="keyword">Self</span>&gt;() &#123;</span><br><span class="line">            <span class="keyword">return</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">unsafe</span> &#123; &amp;*<span class="keyword">self</span> &#125;.domain().retire(<span class="keyword">self</span> <span class="keyword">as</span> *<span class="keyword">mut</span> dyn <span class="built_in">Drop</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>后续引入一个 trait Deleter，给到 retire 函数，用来指定如何删除这个对象。</p>
+<p>然后说了下，测试里面的 swap 之后，还需要 retire 才能语义上保证 old 不会再 accessible 了。borrow checker 保证了，在调用 reset 的时候，不可能持有一个 load 得到的 &amp;T 指针。这是因为 load 和 reset 都需要 mut borrow。</p>
+<p>下面实现 HazPtrDomain::acquire。我们遍历 domain 维护的整个链表，找到第一个 active 为 false 的节点并返回。注意 active 为 true 表示这个 node 正在被使用。如果遍历完整个链表都找不到，则需要扩容链表。这里的链表扩容挺符合直觉的，是一个经典的 loop cas，每次都想办法更新 head。如果 cas 失败，说明 head 已经被其他线程更新了，就重试一次。但是重试前要更新自己的 next 为新的 head。</p>
+<p>bulk_reclaim 尝试 reclaim 掉所有可以被 gc 的对象。这里说一下，一个对象 retire 之后，就会从 hp 链表中被删掉，然后放到 retire 链表里。如果是这样的话，又在放到 retire 链表之前线程崩了，那么这个对象是不是泄露了？其实 retire 只会设置 hp 的 active 为 false。</p>
+<p>如果此时 retire 被某个线程拿过去回收了，所以 retire 是 nullptr，然后又有一个新的节点要加到 retire 上，会不会导致出现两个 retire 链表？关于这个问题，看后面的实现就可以知道不会发生。他的做法并不是 swap 两个链表，而是在处理完老 retire 的 tail 后，将它的 next 设置为新 retired 链表的 head，然后再尝试更新 retire 为老 retire 的 head。结果就是</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">| 老 retire 中尚未释放的链表的 head | 新 retire 的 head |</span><br></pre></td></tr></table></figure>
+
+<p>如何判断 retire 链表中的元素是可以被安全删除的呢？这里会遍历 hazptrs 链表，将遍历得到的指针全记录在 guarded_ptrs 中。我想其中一个要点是，如果一个指针被 retire 了：</p>
+<ol>
+<li>那么它就不会再出现在 hazptrs 链表中，因为它不可能被新的线程所访问。</li>
+<li>因为它还没有被 reclaim，所以也不会在 hazptrs 中出现分配在同一个位置上的另一个对象。</li>
+</ol>
+<p>后面是对 Deleter 的实现。Deleter 是负责真正 reclaim 这个 ptr 的。Deleter 的作用是标记到底要 delete 什么对象。这个是通过 trait 里面的 vtable 来实现的。<br>第一版是这个写法。DropBox 适合用来析构从 Box 创建的对象。而 drop_in_place 应该可以在任何情况下被使用。但如果这个 ptr type 本身需要 drop 的话，可能会内存泄露。所以作者两种都提供了。</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">pub</span> <span class="class"><span class="keyword">struct</span> <span class="title">DropInPlace</span></span>;</span><br><span class="line"><span class="keyword">impl</span> Deleter <span class="keyword">for</span> DropInPlace &#123;</span><br><span class="line">    <span class="function"><span class="keyword">fn</span> <span class="title">delete</span></span>(ptr: *<span class="keyword">mut</span> dyn <span class="built_in">Drop</span>) &#123;</span><br><span class="line">        <span class="keyword">unsafe</span> std::ptr::drop_in_place(ptr);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">pub</span> <span class="class"><span class="keyword">struct</span> <span class="title">DropBox</span></span>;</span><br><span class="line"><span class="keyword">impl</span> Deleter <span class="keyword">for</span> DropBox &#123;</span><br><span class="line">    <span class="function"><span class="keyword">fn</span> <span class="title">delete</span></span>(ptr: *<span class="keyword">mut</span> dyn <span class="built_in">Drop</span>) &#123;</span><br><span class="line">        <span class="keyword">let</span> _ = <span class="built_in">Box</span>::from_raw(ptr);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>然后可能是他觉得用一个类包一下有点丑，所以就写了下面的方案。但这样写会报错，说后面那个 fn 没有 impl Deleter。</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">impl</span> Deleter <span class="keyword">for</span> <span class="function"><span class="keyword">fn</span></span>(*<span class="keyword">mut</span> (dyn <span class="built_in">Drop</span> +<span class="symbol">'static</span>)) &#123;</span><br><span class="line">    <span class="function"><span class="keyword">fn</span> <span class="title">delete</span></span>(&amp;<span class="keyword">self</span>, ptr:*<span class="keyword">mut</span> dyn <span class="built_in">Drop</span>) &#123;</span><br><span class="line">        (*<span class="keyword">self</span>)(ptr)</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里的原因是，需要传一个 fat pointer，一个带虚表的 pointer 给 retire，但一个 raw function 不是 fat pointer。</p>
+<p>下面的代码是可以过的</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">fn</span> <span class="title">drop_box</span></span>(ptr:*<span class="keyword">mut</span> dyn <span class="built_in">Drop</span>) &#123;</span><br><span class="line">    <span class="keyword">let</span> _ = <span class="keyword">unsafe</span> &#123; <span class="built_in">Box</span>::from_raw(ptr) &#125;;</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">static</span> FOO: <span class="function"><span class="keyword">fn</span></span>(*<span class="keyword">mut</span> dyn <span class="built_in">Drop</span>) = drop_box;</span><br><span class="line"></span><br><span class="line"><span class="keyword">unsafe</span> &#123; old.retire(&amp;FOO) &#125;;</span><br></pre></td></tr></table></figure>
+
+<p>另外，类型转换也能过</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">fn</span> <span class="title">drop_in_place</span></span>(ptr: *<span class="keyword">mut</span> dyn <span class="built_in">Drop</span>) &#123;</span><br><span class="line">    <span class="keyword">unsafe</span> &#123; std::ptr::drop_in_place(ptr) &#125;;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">unsafe</span> &#123; old.retire(&amp;(drop_in_place <span class="keyword">as</span> <span class="function"><span class="keyword">fn</span></span>(*<span class="keyword">mut</span> dyn <span class="built_in">Drop</span>))) &#125;;</span><br></pre></td></tr></table></figure>
+
+<p>在这个讲座的第二部分，介绍了原代码的几个问题：</p>
+<ol>
+<li>在 reclaim 统计 ptr 数量的时候，需要过滤掉 inactive 的。这个也说明了 active 的作用，就是当一个 hp 被 retire 之后，它会被标记为 inactive，等待下一轮被拿出来复用，而不是从链表中摘出来释放掉。</li>
+<li>在之前 HazPtrObject::reclaim 的实现中，也许 Self 不需要被 drop。但 <code>*mut Self</code> 可能来自于一个 Box，这个 Box 本身需要被 drop。因此不能简单判断 needs_drop 然后就跳过。</li>
+<li>在 HazPtrDomain::bulk_reclaim 中，在没有判断 <code>guarded_ptrs.contains(&amp;(n.ptr as *mut u8))</code> 的前提下，就在前面 Box::from_raw 去获取所有权了。这个是不正确的，因为此时可能有 reader 在访问。<br> 正确的做法应该如下所示，去获取 <code>n</code> 也就是解出来的一个共享的引用。 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">let</span> n = <span class="keyword">unsafe</span> &#123; &amp;*node &#125;;</span><br><span class="line">node = n.next.get_mut():</span><br></pre></td></tr></table></figure></li>
+</ol>
+<h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
+<li><a href="https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2021/p1121r3.pdf" target="_blank" rel="noopener">https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2021/p1121r3.pdf</a></li>
+<li><a href="https://github.com/jonhoo/haphazard/blob/7f0d8d62e071f8bc55233a3d2437225d6282e368/src/lib.rs" target="_blank" rel="noopener">https://github.com/jonhoo/haphazard/blob/7f0d8d62e071f8bc55233a3d2437225d6282e368/src/lib.rs</a><br> Rust HazPtr 作者的第一部视频结束后的代码。</li>
+</ol>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/分布式/" rel="tag"># 分布式</a>
+          
+            <a href="/tags/2PC/" rel="tag"># 2PC</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2023/04/09/excerpt_harry_potter/" rel="next" title="Excerpt from Harry Potter">
+                <i class="fa fa-chevron-left"></i> Excerpt from Harry Potter
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">197</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">143</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#简介"><span class="nav-number">1.</span> <span class="nav-text">简介</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Why-Hazard-Pointer"><span class="nav-number">1.1.</span> <span class="nav-text">Why Hazard Pointer</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#实现"><span class="nav-number">2.</span> <span class="nav-text">实现</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#基本原理"><span class="nav-number">2.1.</span> <span class="nav-text">基本原理</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#folly-的接口"><span class="nav-number">2.2.</span> <span class="nav-text">folly 的接口</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">3.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2023/05/16/hazptr/';
+          this.page.identifier = '2023/05/16/hazptr/';
+          this.page.title = 'Hazard Pointer';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+  
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Config({
+        tex2jax: {
+          inlineMath: [ ['$','$'], ["\\(","\\)"]  ],
+          processEscapes: true,
+          skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+        }
+      });
+    </script>
+
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax(), i;
+        for (i=0; i < all.length; i += 1) {
+          all[i].SourceElement().parentNode.className += ' has-jax';
+        }
+      });
+    </script>
+    <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+  
+
+
+  
+
+  
+
+</body>
+</html>

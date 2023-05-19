@@ -107,7 +107,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/leveldb/compaction/version.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/leveldb/compaction/versionset.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/leveldb/compaction/versionset_link.png">
-<meta property="og:updated_time" content="2023-04-27T04:03:52.259Z">
+<meta property="og:updated_time" content="2023-04-30T07:17:08.175Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="LevelDB之Version">
 <meta name="twitter:description" content="在本文中介绍Version和VersionEdit概念，它们有助于理解LevelDB对MVCC的实现。本文拆解自《LevelDB之Compaction》。">
@@ -651,7 +651,7 @@
 <li>自增 added_iter，继续处理下一个文件 </li>
 </ol>
 <p>总而言之，我们先初始化了 <code>bpos</code>，但是循环中自增的却是 <code>base_iter</code>，<code>for(A;B;C)</code>里面 A 和 C 的主体不一样，挺新鲜的。</p>
-<p>**那么这么做的好处在哪里呢？我认为是减少了比较的次数，从 O(n) 到了 O(logn)**。因为这里是<code>BytewiseComparator</code>，是两个Slice之间的比较，所以开销还是比较大的，这是值得学习的一个 Best Practice。特别是我们 merge delta 层和 stable 层的时候，因为 delta 层相对较少，所以往往可以使用这种办法快速跳过大块的 stable 层的数据。</p>
+<p><strong>这么做的好处是什么</strong>？我认为是减少了比较的次数，从 O(n) 到了 O(logn)。因为这里是<code>BytewiseComparator</code>，是两个Slice之间的比较，所以开销还是比较大的，这是值得学习的一个 Best Practice。特别是我们 merge delta 层和 stable 层的时候，因为 delta 层相对较少，所以往往可以使用这种办法快速跳过大块的 stable 层的数据。</p>
 <figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line">...</span><br><span class="line">    <span class="keyword">const</span> FileSet* added_files = levels_[level].added_files;</span><br><span class="line">    v-&gt;files_[level].reserve(base_files.size() + added_files-&gt;size());</span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">const</span> <span class="keyword">auto</span>&amp; added_file : *added_files) &#123;</span><br><span class="line">      <span class="comment">// Add all smaller files listed in base_</span></span><br><span class="line">      <span class="keyword">for</span> (<span class="built_in">std</span>::<span class="built_in">vector</span>&lt;FileMetaData*&gt;::const_iterator bpos =</span><br><span class="line">               <span class="built_in">std</span>::upper_bound(base_iter, base_end, added_file, cmp);</span><br><span class="line">           base_iter != bpos; ++base_iter) &#123;</span><br><span class="line">        MaybeAddFile(v, level, *base_iter);</span><br><span class="line">      &#125;</span><br><span class="line"></span><br><span class="line">      MaybeAddFile(v, level, added_file);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// Add remaining base files</span></span><br><span class="line">    <span class="keyword">for</span> (; base_iter != base_end; ++base_iter) &#123;</span><br><span class="line">      MaybeAddFile(v, level, *base_iter);</span><br><span class="line">    &#125;</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
 
 <p>在 Debug 的状态下，会去检查除 Level0 之外的层有没有重叠。检查方法也很简单，就是看后一个文件的 smallest 是不是一定<strong>严格</strong>大于前一个文件的 largest。</p>
@@ -916,7 +916,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">196</span>
+                <span class="site-state-item-count">197</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -929,7 +929,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">144</span>
+                <span class="site-state-item-count">143</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
