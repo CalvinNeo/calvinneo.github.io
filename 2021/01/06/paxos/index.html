@@ -113,7 +113,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/paxos/26.a.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/paxos/26.b.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/paxos/q1.png">
-<meta property="og:updated_time" content="2023-05-12T03:06:47.078Z">
+<meta property="og:updated_time" content="2023-05-21T07:46:45.163Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Paxos算法">
 <meta name="twitter:description" content="本文介绍Paxos算法，包含Basic Paxos，以及Raft作者提出的一个Multi Paxos的工程化实现方案。此外，我们还就Raft作者给出的Paxos习题进行探讨。">
@@ -393,7 +393,7 @@
         <p>本文介绍Paxos算法，包含Basic Paxos，以及Raft作者提出的一个Multi Paxos的工程化实现方案。此外，我们还就Raft作者给出的Paxos习题进行探讨。</p>
 <a id="more"></a>
 <h1 id="Basic-Paxos-Lamport"><a href="#Basic-Paxos-Lamport" class="headerlink" title="Basic Paxos(Lamport)"></a>Basic Paxos(Lamport)</h1><p>Paxos允许消息被任意延迟、丢包、重复，但不允许消息被损坏。<br>Basic Paxos弱化了Leader的概念，而使用了Proposer的概念。<br>Basic Paxos只对一个Value决议。这个Value实际上<a href="https://stackoverflow.com/questions/65175880/how-can-i-understand-value-in-bacis-paxos" target="_blank" rel="noopener">类似于Raft里面的一个Log Entry</a>，即<code>x=1</code>或者<code>y=42</code>之类的。根据原版论文<em>The part-time parliament</em>，这里的Value即法令，类似于禁止画画或者允许自由艺术等。<br>注意，一个 Value 被决定是 chosen 而不是 accepted，即决议的过程是</p>
-<figure class="highlight livescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">propose<span class="function"><span class="params">(issue)</span> -&gt;</span> accept<span class="function"> -&gt;</span> chosen</span><br></pre></td></tr></table></figure>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">propose(issue) -&gt; accept -&gt; chosen</span><br></pre></td></tr></table></figure>
 
 <h2 id="论证1"><a href="#论证1" class="headerlink" title="论证1"></a>论证1</h2><p>在论证1的部分，我们从原始要求倒推出需要维护的不变量 P2b。</p>
 <h3 id="P1"><a href="#P1" class="headerlink" title="P1"></a>P1</h3><p>考虑没有丢包和机器故障，并且假设只有一个proposer。对于该平凡情况，可以得到下面的要求：<br>一个 acceptor 必须接受它收到的第一个 proposal。</p>
@@ -573,7 +573,7 @@
 <h3 id="措施1：Proposer-需要不断地重复-Accept-请求，直到所有的-acceptor-都回复"><a href="#措施1：Proposer-需要不断地重复-Accept-请求，直到所有的-acceptor-都回复" class="headerlink" title="措施1：Proposer 需要不断地重复 Accept 请求，直到所有的 acceptor 都回复"></a>措施1：Proposer 需要不断地重复 Accept 请求，直到所有的 acceptor 都回复</h3><p>当已经复制玩 majority 后，这个操作就可以在后台完成了。<br>这个策略保证了在这个 Server 上创建的大部分新 entry 都能给复制到其他 Server 上。但还是不充分的，原因是考虑当 Proposer 宕掉时，他未必能够将所有的 Entry 都进行复制。其实我还认为就算复制过去，但对方还是不知道这个 entry 是否可以 chosen 啊。</p>
 <h3 id="措施2：跟踪所有被-chosen-的-Entry"><a href="#措施2：跟踪所有被-chosen-的-Entry" class="headerlink" title="措施2：跟踪所有被 chosen 的 Entry"></a>措施2：跟踪所有被 chosen 的 Entry</h3><p>每个 Server 对自己知道的，已经被 chosen 的 Entry 设置 <code>acceptedProposal[i]=INF</code>，INF 也是能够无缝适配协议的，因为不可能存在一个更大的 proposal number 来 overwrite 掉这个 proposal 了。<br>每个 Server 维护一个 <code>firstUnchosenIndex</code>，也就是在“维护一个Log”中介绍的那个。</p>
 <h3 id="措施3：-Proposer-将自己的-firstUnchosenIndex-附加在-Accept-请求中发送"><a href="#措施3：-Proposer-将自己的-firstUnchosenIndex-附加在-Accept-请求中发送" class="headerlink" title="措施3： Proposer 将自己的 firstUnchosenIndex 附加在 Accept 请求中发送"></a>措施3： Proposer 将自己的 firstUnchosenIndex 附加在 Accept 请求中发送</h3><p>这样，一个 Accept 请求具有下面的结构。表示 3.4 这个 proposal，设置 index = 8 处的 Value 为 v，并且 proposer 处第一个没标记为 chosen 的是 index = 7。</p>
-<figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">request = Accept(<span class="attribute">proposal</span>=3.4, <span class="attribute">index</span>=8, <span class="attribute">value</span>=v, <span class="attribute">firstUnchosenIndex</span>=7)</span><br></pre></td></tr></table></figure>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">request = Accept(proposal=3.4, index=8, value=v, firstUnchosenIndex=7)</span><br></pre></td></tr></table></figure>
 
 <p>而 acceptor 会对每个 <code>Entry[i]</code> 进行如下的检查，如果下面两个条件被满足，那么就将 <code>Entry[i]</code> 标记为 chosen。</p>
 <ul>
@@ -858,7 +858,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">197</span>
+                <span class="site-state-item-count">198</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -871,7 +871,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">143</span>
+                <span class="site-state-item-count">144</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

@@ -100,7 +100,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="本文介绍在一个较老的环境下编译V8引擎，并全静态地链接到既有的游戏服务上。原因是我们必需一个很新的JS引擎，从而能支持WebAssembly。经过调研，我们认为使用V8是最好的。我们的游戏服务使用GCC4.4.6，这是一个非常老的版本，甚至不能完整支持C++11标准，而即使是很老版本的V8都需要完整的C++11支持(GCC 4.8+)；进一步地最新版本的V8需要C++14标准的支持，这不仅体现在v">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2023-01-12T16:08:05.903Z">
+<meta property="og:updated_time" content="2023-05-21T06:24:36.545Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="V8引擎编译">
 <meta name="twitter:description" content="本文介绍在一个较老的环境下编译V8引擎，并全静态地链接到既有的游戏服务上。原因是我们必需一个很新的JS引擎，从而能支持WebAssembly。经过调研，我们认为使用V8是最好的。我们的游戏服务使用GCC4.4.6，这是一个非常老的版本，甚至不能完整支持C++11标准，而即使是很老版本的V8都需要完整的C++11支持(GCC 4.8+)；进一步地最新版本的V8需要C++14标准的支持，这不仅体现在v">
@@ -386,32 +386,32 @@
 
 <h1 id="编译GCC和GLIBC"><a href="#编译GCC和GLIBC" class="headerlink" title="编译GCC和GLIBC"></a>编译GCC和GLIBC</h1><p>见<a href="/2020/12/13/gcc-glibc-compile/">文章</a></p>
 <h1 id="代码拉取"><a href="#代码拉取" class="headerlink" title="代码拉取"></a>代码拉取</h1><p>代码拉取值得单独开一节，因为虽然V8代码使用Git来管理的，但它却并不是传统的git clone的路数，而是需要借助gclient这个工具。<br>gclient，包括gn等工具都在<code>depot_tools</code>这个包里面，我们可以通过下面的链接得到这个包</p>
-<figure class="highlight crmsh"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git <span class="keyword">clone</span> <span class="title">https</span>://chromium.googlesource.com/chromium/tools/depot_tools.git</span><br></pre></td></tr></table></figure>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git <span class="built_in">clone</span> https://chromium.googlesource.com/chromium/tools/depot_tools.git</span><br></pre></td></tr></table></figure>
 
 <p>在得到这个包后，我们还需要将它加到环境路径里面以方便访问</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">export</span> PATH=`<span class="built_in">pwd</span>`/depot_tools:<span class="string">"<span class="variable">$PATH</span>"</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight xml"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">export PATH=`pwd`/depot_tools:"$PATH"</span><br></pre></td></tr></table></figure>
 
 <p>然后，使用下面的命令拉取</p>
-<figure class="highlight armasm"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="symbol">fetch</span> <span class="built_in">v8</span></span><br><span class="line"><span class="symbol">glient</span> sync</span><br></pre></td></tr></table></figure>
+<figure class="highlight xml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">fetch v8</span><br><span class="line">glient sync</span><br></pre></td></tr></table></figure>
 
 <p>如果出现gclient拉取问题，可以尝试修改.gclient文件如下所示</p>
-<figure class="highlight makefile"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">solutions = [</span><br><span class="line">  &#123;</span><br><span class="line">    <span class="string">"managed"</span>: False,</span><br><span class="line">    <span class="string">"name"</span>: <span class="string">"src"</span>,</span><br><span class="line">    <span class="string">"url"</span>: <span class="string">"https://chromium.googlesource.com/v8/v8.git"</span>,</span><br><span class="line">    <span class="string">"custom_deps"</span>: &#123;&#125;,</span><br><span class="line">    <span class="string">"deps_file"</span>: <span class="string">".DEPS.git"</span>,</span><br><span class="line">    <span class="string">"safesync_url"</span>: <span class="string">""</span>,</span><br><span class="line">  &#125;,</span><br><span class="line">]</span><br></pre></td></tr></table></figure>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">solutions = [</span><br><span class="line">  &#123;</span><br><span class="line">    &quot;managed&quot;: False,</span><br><span class="line">    &quot;name&quot;: &quot;src&quot;,</span><br><span class="line">    &quot;url&quot;: &quot;https://chromium.googlesource.com/v8/v8.git&quot;,</span><br><span class="line">    &quot;custom_deps&quot;: &#123;&#125;,</span><br><span class="line">    &quot;deps_file&quot;: &quot;.DEPS.git&quot;,</span><br><span class="line">    &quot;safesync_url&quot;: &quot;&quot;,</span><br><span class="line">  &#125;,</span><br><span class="line">]</span><br></pre></td></tr></table></figure>
 
 <p>此外，url还可以尝试取github上的地址</p>
-<figure class="highlight awk"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">https:<span class="regexp">//gi</span>thub.com<span class="regexp">/chromium/</span>chromium.git</span><br></pre></td></tr></table></figure>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">https://github.com/chromium/chromium.git</span><br></pre></td></tr></table></figure>
 
 <h1 id="编译V8"><a href="#编译V8" class="headerlink" title="编译V8"></a>编译V8</h1><p>目前V8默认是使用Clang编译的，确实比GCC快很多，但由于我们最后还要和游戏进行链接，所以需要把工具链换成GCC。在<a href="https://chromium.googlesource.com/external/github.com/v8/v8.wiki/+/8c0be5e888bda68437f15e2ea9e317fd6229a5e3/Building-with-GN.md" target="_blank" rel="noopener">这篇wiki</a>中给出了从简单到复杂的不同的编译的流程。我试验下来直接用<code>gn</code>是最为方便的。</p>
 <h2 id="修改编译器"><a href="#修改编译器" class="headerlink" title="修改编译器"></a>修改编译器</h2><p>V8默认的编译工具链是clang，我们要将它变成GCC。首先我们需要设置<code>use_custom_libcxx</code>，这个项目如果为true，就会走v8自带的编译工具，这样编译出来如果是d8还好，但我们需要静态库，这样肯定不行。</p>
-<figure class="highlight ini"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">use_custom_libcxx</span> = <span class="literal">false</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">use_custom_libcxx = false</span><br></pre></td></tr></table></figure>
 
 <p>然后我们需要修改<code>gn args</code>，添加下面的项目，目的是禁用clang相关的宏。</p>
-<figure class="highlight ini"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">is_clang</span> = <span class="literal">false</span></span><br><span class="line"><span class="attr">use_sysroot</span> = <span class="literal">false</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">is_clang = false</span><br><span class="line">use_sysroot = false</span><br></pre></td></tr></table></figure>
 
 <p>为了防止<code>ld.gold</code>报错，还需要开启下面的选项。</p>
-<figure class="highlight ini"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">fatal_linker_warnings</span> = <span class="literal">false</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">fatal_linker_warnings = false</span><br></pre></td></tr></table></figure>
 
 <p>但这么做还不够，需要在入口<code>build/config/BUILDCONFIG.gn</code>中，修改Linux下，<code>is_clang</code>为true的情况下，<code>toolchain</code>为GCC。否则，还是有一些代码会把<code>is_clang</code>的值变回true。</p>
-<figure class="highlight ini"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">_default_toolchain</span> = <span class="string">"//build/toolchain/linux:$target_cpu"</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">_default_toolchain = &quot;//build/toolchain/linux:$target_cpu&quot;</span><br></pre></td></tr></table></figure>
 
 <p>紧接着，我们就要修改原来的gcc toolchain，将里面的配置替换成我们刚编译得到的GCC9，具体涉及下面的修改</p>
 <ol>
@@ -425,24 +425,24 @@
 <li><code>config\c++\BUILD.gn</code><br> 参照<code>toolchain\gcc_toolchain.gni</code>修改<code>cflags_cc</code>和<code>ldflags</code>。</li>
 </ol>
 <h2 id="去掉snapshot"><a href="#去掉snapshot" class="headerlink" title="去掉snapshot"></a>去掉snapshot</h2><p>snapshot技术是V8为了提高Context的加载速度引入的优化，将V8启动后的内存布局和JS函数预编译好的二进制对象写到专门的文件<code>shapshot_blob.bin</code>和<code>natives_blob.bin</code>中，并在每一次初始化的时候直接加载，以减少重复编译消耗。<br>修改<code>gn args</code>，添加</p>
-<figure class="highlight ini"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">v8_use_external_startup_data</span> = <span class="literal">false</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">v8_use_external_startup_data = false</span><br></pre></td></tr></table></figure>
 
 <h2 id="生成v8静态库"><a href="#生成v8静态库" class="headerlink" title="生成v8静态库"></a>生成v8静态库</h2><p>首先生成ninja构建文件</p>
-<figure class="highlight d"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">gn gen <span class="keyword">out</span>.gn/x64.<span class="keyword">debug</span>/</span><br></pre></td></tr></table></figure>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">gn gen out.gn/x64.debug/</span><br></pre></td></tr></table></figure>
 
 <p>修改<code>gn args</code>，添加</p>
-<figure class="highlight ini"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">v8_monolithic</span> = <span class="literal">true</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">v8_monolithic = true</span><br></pre></td></tr></table></figure>
 
 <p>然后使用下面的命令生成静态库，注意后面的<code>-j</code>不能加得太大，因为在编译比如torque的时候GCC会占用比较大的内存，如果并行度很高，可能就编不出来</p>
-<figure class="highlight d"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ninja -C <span class="keyword">out</span>.gn/x64.<span class="keyword">debug</span>/ v8_monolith -j2</span><br></pre></td></tr></table></figure>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ninja -C out.gn/x64.debug/ v8_monolith -j2</span><br></pre></td></tr></table></figure>
 
 <h1 id="静态链接"><a href="#静态链接" class="headerlink" title="静态链接"></a>静态链接</h1><p>通过下面的命令可以静态链接V8的Hello world程序。</p>
-<figure class="highlight elixir"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="variable">$(</span>GCC_ROOT)/bin/g++ samples/bench.cpp -o bench -isystem<span class="variable">$(</span>GLIBC_ROOT)/<span class="keyword">include</span>/ -I. -Iinclude -isystem<span class="variable">$(</span>GLIBC) -nodefaultlibs  -DV8_COMPRESS_POINTERS -static <span class="variable">$(</span>V8_OBJ)/libv8_monolith.a -Wl,--start-group <span class="variable">$(</span>GCC_ROOT)/lib64/libstdc++.a  <span class="variable">$(</span>GLIBC_ROOT)/lib/libpthread.a <span class="variable">$(</span>GLIBC_ROOT)/lib/libdl.a <span class="variable">$(</span>GLIBC_ROOT)/lib/libm.a <span class="variable">$(</span>GLIBC_ROOT)/lib/librt.a <span class="variable">$(</span>GCC_GCC)/libgcc.a <span class="variable">$(</span>GCC_GCC)/libgcc_eh.a <span class="variable">$(</span>GCC_GCC)/libcommon.a <span class="variable">$(</span>GLIBC_ROOT)/lib/libc.a -Wl,--<span class="keyword">end</span>-group</span><br></pre></td></tr></table></figure>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$(GCC_ROOT)/bin/g++ samples/bench.cpp -o bench -isystem$(GLIBC_ROOT)/include/ -I. -Iinclude -isystem$(GLIBC) -nodefaultlibs  -DV8_COMPRESS_POINTERS -static $(V8_OBJ)/libv8_monolith.a -Wl,--start-group $(GCC_ROOT)/lib64/libstdc++.a  $(GLIBC_ROOT)/lib/libpthread.a $(GLIBC_ROOT)/lib/libdl.a $(GLIBC_ROOT)/lib/libm.a $(GLIBC_ROOT)/lib/librt.a $(GCC_GCC)/libgcc.a $(GCC_GCC)/libgcc_eh.a $(GCC_GCC)/libcommon.a $(GLIBC_ROOT)/lib/libc.a -Wl,--end-group</span><br></pre></td></tr></table></figure>
 
 <h1 id="附注"><a href="#附注" class="headerlink" title="附注"></a>附注</h1><h2 id="2558版本"><a href="#2558版本" class="headerlink" title="2558版本"></a>2558版本</h2><p>2558版本是一个较老的版本，它是使用Make和GYP来构建的。由于它同样需要移动语义，所以也要C++11的支持。主要涉及下面的修改</p>
 <ol>
 <li><code>build/standalone.gypi</code><br> 设置<code>$(snapshot)</code>为<code>off</code>。<br> 设置<code>clang%</code>为1。</li>
-<li>Hello world链接过程 <figure class="highlight ada"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">g++ -pthread -fuse-ld=gold -fuse-ld=gold -m64 -m64 -rdynamic -rdynamic -Wl,<span class="comment">--threads -Wl,--thread-count=4 -Wl,--threads -Wl,--thread-count=4 -o hello -Wl,--start-group hello-world.o out_libs/libv8_libplatform.a out_libs/libicui18n.a out_libs/libicuuc.a out_libs/libv8_base.a out_libs/libv8_libbase.a out_libs/libicudata.a out_libs/libv8_nosnapshot.a -Wl,--end-group -ldl -lrt</span></span><br></pre></td></tr></table></figure>
+<li>Hello world链接过程 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">g++ -pthread -fuse-ld=gold -fuse-ld=gold -m64 -m64 -rdynamic -rdynamic -Wl,--threads -Wl,--thread-count=4 -Wl,--threads -Wl,--thread-count=4 -o hello -Wl,--start-group hello-world.o out_libs/libv8_libplatform.a out_libs/libicui18n.a out_libs/libicuuc.a out_libs/libv8_base.a out_libs/libv8_libbase.a out_libs/libicudata.a out_libs/libv8_nosnapshot.a -Wl,--end-group -ldl -lrt</span><br></pre></td></tr></table></figure>
 
 </li>
 </ol>
@@ -606,7 +606,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">197</span>
+                <span class="site-state-item-count">198</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -619,7 +619,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">143</span>
+                <span class="site-state-item-count">144</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

@@ -103,7 +103,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/mat_mul/slice.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/mat_mul/cannon1.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/mat_mul/cannon2.png">
-<meta property="og:updated_time" content="2023-02-16T13:28:06.480Z">
+<meta property="og:updated_time" content="2023-05-21T07:49:57.526Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="矩阵乘法">
 <meta name="twitter:description" content="计算矩阵A和B的乘法，其基本代码是 1234for(i=0; i&amp;lt;n; i++)    for(j=0; j&amp;lt;n; j++)        for(k=0; k&amp;lt;n; k++)            C[i][j] += A[i][k] * B[k][j];  但这样的代码却存在以下的问题：1、局部性较差    由于B是按列访问的，所以其局部性较差2、 不能保证A[i]始终在缓存">
@@ -381,14 +381,14 @@
 
       
         <p>计算矩阵<code>A</code>和<code>B</code>的乘法，其基本代码是</p>
-<figure class="highlight matlab"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span>(<span class="built_in">i</span>=<span class="number">0</span>; <span class="built_in">i</span>&lt;n; <span class="built_in">i</span>++)</span><br><span class="line">    <span class="keyword">for</span>(<span class="built_in">j</span>=<span class="number">0</span>; <span class="built_in">j</span>&lt;n; <span class="built_in">j</span>++)</span><br><span class="line">        <span class="keyword">for</span>(k=<span class="number">0</span>; k&lt;n; k++)</span><br><span class="line">            C[i][j] += A[i][k] * B[k][j];</span><br></pre></td></tr></table></figure>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">for(i=0; i&lt;n; i++)</span><br><span class="line">    for(j=0; j&lt;n; j++)</span><br><span class="line">        for(k=0; k&lt;n; k++)</span><br><span class="line">            C[i][j] += A[i][k] * B[k][j];</span><br></pre></td></tr></table></figure>
 
 <p>但这样的代码却存在以下的问题：<br>1、局部性较差<br>    由于<code>B</code>是按列访问的，所以其局部性较差<br>2、 不能保证<code>A[i]</code>始终在缓存中<br>    内层循环的执行可能导致<code>A[i]</code>被缓存置换策略淘汰。</p>
 <a id="more"></a>
 <h1 id="在单CPU上进行优化"><a href="#在单CPU上进行优化" class="headerlink" title="在单CPU上进行优化"></a>在单CPU上进行优化</h1><h1 id="在GPU上进行优化"><a href="#在GPU上进行优化" class="headerlink" title="在GPU上进行优化"></a>在GPU上进行优化</h1><h1 id="并行算法"><a href="#并行算法" class="headerlink" title="并行算法"></a>并行算法</h1><h2 id="分块矩阵"><a href="#分块矩阵" class="headerlink" title="分块矩阵"></a>分块矩阵</h2><p>很多并行算法都和分块矩阵有关，这是因为分块矩阵有非常好的性质。<br><img src="/img/mat_mul/slice.png"><br>简单地说，我们可以把分块矩阵当成矩阵中的元素一样相乘，然后把原矩阵带回即可。</p>
 <h2 id="信息传输"><a href="#信息传输" class="headerlink" title="信息传输"></a>信息传输</h2><p>在节点间传输信息的时间可以使用下面的式子描述<br>$$<br>T_{msg} = t_s + t_w L<br>$$<br>其中$t_s$是startup time或者latency，也就是传输一条长度为0的信息所需要的时间。$t_w$是每多发送一个单词所额外需要的时间那么$1/t_w$就是单位时间的带宽（按单词计算），$L$是消息中的所有单词。对于大多数分布式系统来说，$t_s$是相当大的。</p>
 <h2 id="Cannon算法"><a href="#Cannon算法" class="headerlink" title="Cannon算法"></a>Cannon算法</h2><p>Cannon算法是一个经典的2D算法。<br>Cannon算法是对方阵而言的，我们将矩阵<code>A</code>和<code>B</code>分为<code>p</code>个方块，则每个方块的边长是<code>n / sqrt(p)</code>。这个值必须要是能整除的，因而存在不少限制。<br>对应的，我们有<code>p</code>个处理器来计算这<code>p</code>个分块，处理器<code>P[i, j]</code>计算分块<code>C[i]=A[i]*B[i]</code>。在计算时，Cannon主要采用了称为”Shift and multiply”的思想。<br>以下图为例，在计算<code>C[0, 0]</code>时，可以不停地将<code>A</code>的框往左移动，<code>B</code>的框往上移动，然后原位相加。</p>
-<figure class="highlight lsl"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">C[<span class="number">0</span>,<span class="number">0</span>] = A[<span class="number">0</span>,<span class="number">0</span>]*B[<span class="number">0</span>,<span class="number">0</span>] + A[<span class="number">0</span>,<span class="number">1</span>]*B[<span class="number">1</span>,<span class="number">0</span>] + A[<span class="number">0</span>,<span class="number">2</span>]*B[<span class="number">2</span>,<span class="number">0</span>]</span><br></pre></td></tr></table></figure>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">C[0,0] = A[0,0]*B[0,0] + A[0,1]*B[1,0] + A[0,2]*B[2,0]</span><br></pre></td></tr></table></figure>
 
 <p>那么对于其他的位置比如<code>C[0, 1]</code>，我们就不能刚好地找到对应了。<br><img src="/img/mat_mul/cannon1.png"><br><img src="/img/mat_mul/cannon2.png"></p>
 <h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
@@ -558,7 +558,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">197</span>
+                <span class="site-state-item-count">198</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -571,7 +571,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">143</span>
+                <span class="site-state-item-count">144</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

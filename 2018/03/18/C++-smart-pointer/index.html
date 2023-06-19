@@ -100,7 +100,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="在C++史前时代只有一种智能指针std::auto_ptr&amp;lt;T&amp;gt;，它的作用方式类似一个lock_guard&amp;lt;T&amp;gt;，或者经过封装的RAII。但在使用中发现，依托于RAII是不够的，为了方便地实现更复杂逻辑下的资源管理，我们需要从资源的所有权上对智能指针进行更加细致的分类。在C++11之后，标准库引入了std::shared_ptr&amp;lt;T&amp;gt;、std::unique_p">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2023-01-24T04:36:42.115Z">
+<meta property="og:updated_time" content="2023-05-21T08:36:16.827Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="C++智能指针的使用与实现">
 <meta name="twitter:description" content="在C++史前时代只有一种智能指针std::auto_ptr&amp;lt;T&amp;gt;，它的作用方式类似一个lock_guard&amp;lt;T&amp;gt;，或者经过封装的RAII。但在使用中发现，依托于RAII是不够的，为了方便地实现更复杂逻辑下的资源管理，我们需要从资源的所有权上对智能指针进行更加细致的分类。在C++11之后，标准库引入了std::shared_ptr&amp;lt;T&amp;gt;、std::unique_p">
@@ -457,12 +457,12 @@
 <li><p><code>_Enable_shared</code><br> 这里的<code>_Enable_shared</code>用来处理继承了<code>enable_shared_from_this&lt;T&gt;</code>的情况，在下面的讨论中详细了解有关这个函数和<code>enable_shared_from_this</code>的实现。</p>
 </li>
 </ol>
-<h3 id="enable-shared-from-this"><a href="#enable-shared-from-this" class="headerlink" title="enable_shared_from_this"></a>enable_shared_from_this</h3><p>上文讨论了当需要传出<code>this</code>时，我们应当让类继承<code>enable_shared_from_this</code>，查看一下这个类模板</p>
+<h3 id="enable-shared-from-this"><a href="#enable-shared-from-this" class="headerlink" title="enable_shared_from_this"></a>enable_shared_from_this</h3><p>上文讨论了当需要传出<code>this</code>时，应当让类继承<code>enable_shared_from_this</code>，查看一下这个类模板</p>
 <figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">template</span>&lt;<span class="class"><span class="keyword">class</span> _<span class="title">Ty</span>&gt; <span class="title">class</span> <span class="title">enable_shared_from_this</span></span></span><br></pre></td></tr></table></figure>
 
-<p>原来<code>shared_from_this</code>就是从<code>weak_ptr</code>创建一个<code>shared_ptr</code>，这个<code>weak_ptr</code>是创建控制块时通过<code>_Resetp0 -&gt; _Enable_shared -&gt; _Do_enable</code>得到的，而它实际上也是指向了控制块<code>_Refptr</code>。<br>【Q】然后我们发现，这里会有一个<code>weak_ptr</code>，于是有以下问题：</p>
+<p>原来<code>shared_from_this</code>就是从<code>weak_ptr</code>创建一个<code>shared_ptr</code>，这个<code>weak_ptr</code>是创建控制块时通过<code>_Resetp0 -&gt; _Enable_shared -&gt; _Do_enable</code>得到的，而它实际上也是指向了控制块<code>_Refptr</code>。<br>【Q】然后发现，这里会有一个<code>weak_ptr</code>，于是有以下问题：</p>
 <ol>
-<li>这个指针是干嘛的？<br> 回顾一下问题，我们要在<code>T</code>里面搞出一个函数<code>shared_from_this</code>，返回指向自己的<code>shared_ptr&lt;T&gt;</code>。<br> 解决方案很朴素，我找个地方存一个<code>shared_ptr&lt;T&gt;</code>不就行了？考虑到没法逐个修改<code>T</code>本身，于是我们实现了一个公共的<code>enable_shared_from_this&lt;T&gt;</code>来做这个事情。</li>
+<li>这个指针是干嘛的？<br> 回顾一下问题，要在<code>T</code>里面搞出一个函数<code>shared_from_this</code>，返回指向自己的<code>shared_ptr&lt;T&gt;</code>。<br> 解决方案很朴素，找个地方存一个<code>shared_ptr&lt;T&gt;</code>不就行了？考虑到没法逐个修改<code>T</code>本身，于是实现一个公共的<code>enable_shared_from_this&lt;T&gt;</code>来做这个事情。</li>
 <li>为什么一定得是Weak的？<br> 因为上面说的存<code>shared_ptr&lt;T&gt;</code>实际上是不行的。存这玩意，实际上就是在<code>T</code>里面持有了一个<code>shared_ptr&lt;T&gt;</code>，这不循环引用了么，所以得用<code>weak_ptr&lt;T&gt;</code>。</li>
 <li><code>shared_from_this</code>如何通过<code>weak_ptr&lt;T&gt;</code>返回最终的<code>shared_ptr&lt;T&gt;</code>？<br> 通过weak_ptr牵线搭桥，就可以直接创建一个<code>shared_ptr</code>了。</li>
 </ol>
@@ -673,7 +673,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">197</span>
+                <span class="site-state-item-count">198</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -686,7 +686,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">143</span>
+                <span class="site-state-item-count">144</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

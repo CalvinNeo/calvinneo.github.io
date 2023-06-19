@@ -100,7 +100,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="Continuation、Coroutine和Generator是异步编程中的一些概念。通过Continuation能够实现Coroutine和Generator。 Continuation常有两种实现，一种是以call/cc(call with current contination)为代表的语言级别的实现；另一种对于不能原生支持Continuation的语言但是支持闭包（函数作为一等公民）的语">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2022-11-20T08:02:29.485Z">
+<meta property="og:updated_time" content="2023-05-21T06:25:55.535Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="神器Continuation">
 <meta name="twitter:description" content="Continuation、Coroutine和Generator是异步编程中的一些概念。通过Continuation能够实现Coroutine和Generator。 Continuation常有两种实现，一种是以call/cc(call with current contination)为代表的语言级别的实现；另一种对于不能原生支持Continuation的语言但是支持闭包（函数作为一等公民）的语">
@@ -391,10 +391,10 @@
 <p>还可以这样理解，在本来程序是要执行<code>(display xxx)</code>的，Lisp一看<code>xxx</code>原来是一个<code>call/cc f</code>，那就把现在的状态（下面要运行<code>display</code>啦）打包成一个Continuation，然后程序就不往下面运行了<code>display</code>了，而是立即跳转去执行<code>f</code>函数。那这个<code>f</code>函数有点特别，他会被系统喂刚才得到的Continuation参数<code>return</code>，函数通过调用<code>return</code>就相当于从<code>f</code>函数中退出，并继续执行调用<code>f</code>前要执行的<code>display</code>，这里<code>display</code>需要一个参数，所以调用<code>return 2</code>，这里可以近似理解Continuation参数<code>return</code>就是下面要执行的<code>display</code>函数的别名。</p>
 <h1 id="CPS"><a href="#CPS" class="headerlink" title="CPS"></a>CPS</h1><p>对于没有<code>call/cc</code>这机制的语言，可以使用闭包进行模拟。</p>
 <h2 id="callback"><a href="#callback" class="headerlink" title="callback"></a>callback</h2><p>通常的语言如C++中，常使用<code>return</code>命令返回结果，例如</p>
-<figure class="highlight cs"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">add</span>(<span class="params"><span class="keyword">int</span> x, <span class="keyword">int</span> y</span>)</span>&#123;</span><br><span class="line">	<span class="keyword">return</span> x + y;</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">int</span> result = <span class="keyword">add</span>(<span class="number">1</span>, <span class="number">2</span>);</span><br></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">add</span><span class="params">(<span class="keyword">int</span> x, <span class="keyword">int</span> y)</span></span>&#123;</span><br><span class="line">	<span class="keyword">return</span> x + y;</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">int</span> result = add(<span class="number">1</span>, <span class="number">2</span>);</span><br></pre></td></tr></table></figure>
 
 <p>其中<code>int result = add(1, 2);</code>语句将<code>result</code>与<code>add</code>函数的返回值<code>return x + y</code>进行了绑定。这样的方式对我们屏蔽了绑定的细节。我们需要通过额外的了解能够得知，并且还要取决于具体的代码和编译环境。例如一般<code>int</code>返回值会被放入eax中，再调<code>ret</code>，而有些时候浮点数会被放在FPU或XMM上返回。当然也许会说编译语言没必要去讨论它的目标代码，不过至少我们只有通过把函数的返回值和某个名字进行绑定这一种默认的处理返回值的方式。<br>对于有些异步的需求，常常有回调函数的概念。函数接受一个额外的回调函数作为参数<code>callback</code>。</p>
-<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> F&gt;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">add</span><span class="params">(<span class="keyword">int</span> x, <span class="keyword">int</span> y, F f)</span></span>&#123;</span><br><span class="line">	<span class="keyword">return</span> f(x + y);</span><br><span class="line">&#125;</span><br><span class="line">add(<span class="number">1</span>, <span class="number">2</span>, [&amp;] (<span class="keyword">int</span> result) &#123;</span><br><span class="line">	</span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> F&gt;</span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">add</span><span class="params">(<span class="keyword">int</span> x, <span class="keyword">int</span> y, F f)</span></span>&#123;</span><br><span class="line">	<span class="keyword">return</span> f(x + y);</span><br><span class="line">&#125;</span><br><span class="line">add(<span class="number">1</span>, <span class="number">2</span>, [&amp;] (<span class="keyword">int</span> result) &#123;</span><br><span class="line">	</span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
 
 <p>将这段代码与上面的代码进行对比，我们发现实际上我们返回的是一个<strong>函数</strong>，而不是一个<strong>值</strong>。</p>
 <h2 id="CPS-function"><a href="#CPS-function" class="headerlink" title="CPS function"></a>CPS function</h2><p>Continuation和callback都是可以调用的，不同的是在A里面调用一个callback B后，程序进入B然后从B返回到A继续执行；而在A里面调用一个Continuation B后，程序立刻进入B运行，并且不会在B再返回到A。<br>因此对于没有<code>call/cc</code>这样的first-class Continuation的语言可以通过callback实现CPS function。方法如同上面的<code>add</code>函数一样，<code>add</code>函数通过在函数结尾调用该回调函数，自己的计算结果传给该回调函数，来完成返回操作。这样的回调函数方案借助了尾递归（在函数的末尾调用另一个函数）。<br>此时，函数实际上将自己的剩余部分作为<code>callback</code>（此时该<code>callback</code>称为<strong>continuation</strong>），该函数即CPS function。<br>相对于命令式语言的<code>if/else</code>、<code>do/while/break/continue</code>、<code>try/catch/finally</code>、<code>goto</code>等控制语句，CPS function的好处是能够更灵活地操作control flow，因为下一步要做什么不是根据你是顺序结构/选择结构/循环结构，而是你在continuation里面写了什么。<br>这样还会带来一个好处是程序可以任意被中断（此时只需要保存回调函数的指针<code>f</code>），然后从中断的地方调用<code>f</code>开始继续执行。于是常常使用Continuation/Coroutine代替多线程（毕竟线程的开销还是很高的）。</p>
@@ -556,7 +556,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">197</span>
+                <span class="site-state-item-count">198</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -569,7 +569,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">143</span>
+                <span class="site-state-item-count">144</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

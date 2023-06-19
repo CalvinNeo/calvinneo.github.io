@@ -125,7 +125,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/fbs/flpf2.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/fbs/flpf3.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/fbs/fzztj.jpg">
-<meta property="og:updated_time" content="2022-11-24T17:51:26.917Z">
+<meta property="og:updated_time" content="2023-06-15T11:54:15.483Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="分布式一致性和分布式共识协议">
 <meta name="twitter:description" content="分布式系统中常出现以下的一些应用场景：分布式锁、负载均衡、发布订阅模型、选举、分布式队列。为了提高在这些场景下的高可用或者容错特性，常常采用维护多个冗余副本的办法来实现，因此需要维护这些副本之间的一致性。 相比单机，分布式集群搭建在网络上，而网络通信是复杂的，数据包的丢失、重复、乱序需要被妥善处理，此外节点宕机或者网络分区的情况也需要被考虑。事实上，CAP理论认为一致性C、可用性A和分区容错P不可">
@@ -498,7 +498,7 @@
 <p><img src="/img/fbs/replicate_sync_async.png"></p>
 <h4 id="一致性问题"><a href="#一致性问题" class="headerlink" title="一致性问题"></a>一致性问题</h4><p>日志复制的不同实现方式可能产生一致性问题。例如在读写分离的架构下，同步复制对可用性的损害是很大的，但如果采用异步复制的方式，在从库落后的情况下，同时对主库和从库的查询可能产生不同的结果，从而产生一致性问题。主从复制的架构是最终一致的(eventually consistency)，也就是在副本之间实现同步间存在不一致窗口，称为复制延迟(replication lag)。复制延迟的持续时间是不确定的。</p>
 <p>从CAP的观点来看，主从复制实际上是在最大可用(Max Availability)和最大保护(Max Protect)之间的一个trade-off，其核心原因是网络分区和宕机是不可避免的。如果我们允许主从节点在某个Slave宕机到恢复的时间段内继续服务，那么我们就必然要为不一致窗口付出代价。如果我们不容许一致性受到损害，那么就必然要等到这个Slave恢复或者超时并切换到备用机之后。<strong>哪怕只有一个机器宕机</strong>，这段时间内的可用性也无法保证。</p>
-<p>但这个是不符合常识的，比如说我想知道我们班新的班长是谁，我首先找室友问，发现室友出去和女朋友High了，或者室友给了我一个错误的答案，难道我就不能真正知道班长是谁了么？事实上我只要问足够多的人就行。例如如果每个人都是言行一致的话，那么过半数人认为的班长就是班长了。这个原理，就对应到Lamport提出的基于复制自动机的分布式集群，它使用共识算法来维护一致性，能够承受不多于半数的节点失效。</p>
+<p>但这个是不符合常识的，比如说我想知道我们班新的班长是谁，我首先找室友问，发现室友出去 High 了，或者室友给了我一个错误的答案，难道我就不能真正知道班长是谁了么？事实上我只要问足够多的人就行。例如如果每个人都是言行一致的话，那么过半数人认为的班长就是班长了。这个原理，就对应到Lamport提出的基于复制自动机的分布式集群，它使用共识算法来维护一致性，能够承受不多于半数的节点失效。</p>
 <h3 id="Multi-Leader架构"><a href="#Multi-Leader架构" class="headerlink" title="Multi Leader架构"></a>Multi Leader架构</h3><p>多主复制：<br>单主复制，或者说传统的主从架构，基于单个领导的复制存在缺点。也就是说所有的写入只能通过一个主库，所以可用性会很差。</p>
 <p>多主复制的一个问题是当两个主库同时对同一个记录进行更新时如何处理写入冲突。一个典型的冲突如DDIA的5-7所示，原值为A，但两个用户1和2分别想把它改成B或者C。</p>
 <p><img src="/img/fbs/57.png"></p>
@@ -509,21 +509,21 @@
 <li><p>冲突合并<br> 对于单主数据库而言，可以采用LWW策略，即如果同一个字段有多个更新，则最后一个写操作将确定该字段的最终值。<br> 但对多主配置中，写入顺序没有定义，所以最终值应该是什么并不清楚。在DDIA的图5-7中，在主库1中标题首先更新为B而后更新为C；在主库2中，首先更新为C，然后更新为B。两个顺序都不是“更正确”的。<br> 如果每个副本只是按照它看到写入的顺序写入，那么数据库最终将处于不一致的状态：最终值将是在主库1的C和主库2的B。这是不可接受的，每个复制方案都必须确保数据在所有副本中最终都是相同的。因此，数据库必须以一种收敛(convergent)的方式解决冲突，这意味着所有副本必须在所有变更复制完成时收敛至一个相同的最终值。</p>
 <p> 实现冲突合并解决有多种途径：</p>
 <ol>
-<li>给每个写入一个唯一的ID<br> 这个ID可以是时间戳、长的随机数、UUID、键和值的哈希。<br> 挑选最高ID的写入作为胜利者，并丢弃其他写入。<br> 如果使用时间戳，这种技术被称为最后写入胜利(LWW, last write wins)。<br> 很容易造成数据丢失。</li>
-<li>为每个副本分配一个唯一的ID<br> ID编号更高的写入具有更高的优先级。这种方法也意味着数据丢失。</li>
+<li>给每个写入一个唯一的ID<br> 这个 ID 可以是时间戳、长的随机数、UUID、键和值的哈希。<br> 挑选最高 ID 的写入作为胜利者，并丢弃其他写入。<br> 如果使用时间戳，这种技术被称为最后写入胜利(LWW, last write wins)。<br> 很容易造成数据丢失。</li>
+<li>为每个副本分配一个唯一的 ID<br> ID编号更高的写入具有更高的优先级。这种方法也意味着数据丢失。</li>
 <li>以某种方式将这些值合并在一起<br> 例如，按字母顺序排序，然后连接它们（DDIA的图5-7中，合并的标题可能类似于“B/C”）。</li>
 <li>在保留所有信息的显式数据结构中记录冲突<br> 并编写解决冲突的应用程序代码（也许通过提示用户的方式）。<br> 我理解就是由应用层解决这个冲突。</li>
 </ol>
 </li>
 </ol>
 <h3 id="Leaderless架构"><a href="#Leaderless架构" class="headerlink" title="Leaderless架构"></a>Leaderless架构</h3><h3 id="链式复制"><a href="#链式复制" class="headerlink" title="链式复制"></a>链式复制</h3><p>链式复制的概念主要来自于<a href="https://www.cs.cornell.edu/home/rvr/papers/OSDI04.pdf" target="_blank" rel="noopener">Chain Replication for Supporting High Throughput and Availability</a>这一篇论文。</p>
-<p>链式复制总是从头写，从尾读。当尾节点写成功了，头节点才会返回Committed。</p>
-<p>但实际上，可以从任何节点开始读。此时，我们就可以引入MVCC这个解决读写冲突的神器了。当读取某个节点，发现存在多个版本的数据时，需要先去尾节点查询当前数据的最新版本。<br>每个节点收到下一个结点的ACK时，就可以删除旧版本的数据了。</p>
+<p>链式复制总是从头写，从尾读。当尾节点写成功了，头节点才会返回 Committed。</p>
+<p>但实际上，可以从任何节点开始读。此时可以引入 MVCC 这个解决读写冲突的神器了。当读取某个节点，发现存在多个版本的数据时，需要先去尾节点查询当前数据的最新版本。<br>每个节点收到下一个结点的 ACK 时，就可以删除旧版本的数据了。</p>
 <p>相对于主从：</p>
 <ol>
-<li>减少了Master的replication的负担<br> 因为Master只要往后面一个节点复制了</li>
+<li>减少了 Master 的 replication 的负担<br> 因为 Master 只要往后面一个节点复制了</li>
 <li>可能不需要借助于分布式共识了</li>
-<li>相对于主从要慢，应为replication不能是并行的<br> 对此可以采用pipeline或者<a href="https://datatracker.ietf.org/doc/html/rfc1546" target="_blank" rel="noopener">Multicast</a>之类的配置。</li>
+<li>相对于主从要慢，应为 replication 不能是并行的<br> 对此可以采用 pipeline 或者 <a href="https://datatracker.ietf.org/doc/html/rfc1546" target="_blank" rel="noopener">Multicast</a> 之类的配置。</li>
 </ol>
 <h3 id="级联复制"><a href="#级联复制" class="headerlink" title="级联复制"></a>级联复制</h3><p>级联复制模式下，部分Slave的数据同步不连接Master，而是连接Slave。</p>
 <h2 id="partition"><a href="#partition" class="headerlink" title="partition"></a>partition</h2><h3 id="一致性Hash"><a href="#一致性Hash" class="headerlink" title="一致性Hash"></a>一致性Hash</h3><h4 id="雪崩问题"><a href="#雪崩问题" class="headerlink" title="雪崩问题"></a>雪崩问题</h4><p>令环<code>A -&gt; B -&gt; C -&gt; D</code>，如果A崩溃了，会导致数据从A往B迁移，这几乎导致B必然崩溃。<br>为了解决以上的雪崩问题，可以引入<strong>虚拟节点</strong>的方案。</p>
@@ -559,13 +559,14 @@
 <p>从概念上分布式中的一致性(CAP中的C)和事务一致性(ACID中的C)是完全不一样的，CAP中的一致性要求多副本的系统的行为表现得像单系统一样，并且对这个系统的修改是原子的。而事务一致性强调事务前后不变量不能改变。</p>
 <p><img src="/img/fbs/yzxdj.png" alt="一致性的等级"></p>
 <h2 id="强一致性"><a href="#强一致性" class="headerlink" title="强一致性"></a>强一致性</h2><p>分布式系统，特别是CAP理论中对一致性(consistency)的定义是<em>all nodes see the same data at the same time</em>，这个要求是比较高的，<a href="https://blog.csdn.net/chao2016/article/details/81149674#%E5%8E%9F%E5%AD%90%E4%B8%80%E8%87%B4%E6%80%A7atomic-consistency" target="_blank" rel="noopener">一些人会将它等价位</a>强一致性(Strong consistency)、线性一致性(Linearizability)、外部一致性(External consistency)、原子一致性(atomic consistency)。</p>
-<p>强一致性强调each operation appears to execute instantaneously, exactly once, at some point between its invocation and its response。</p>
-<p>考虑一个简单的主从架构的例子(来自<em>Designing Data-Intensive Applications</em>)，在下图中比赛结果由Referee写入Leader主库，并向两个Follower同步复制，线性一致性需要这个过程是透明的。</p>
+<p>强一致性强调 each operation appears to execute instantaneously, exactly once, at some point between its invocation and its response。</p>
+<p>考虑一个简单的主从架构的例子(来自<em>Designing Data-Intensive Applications</em>)，在下图中比赛结果由 Referee 写入 Leader 主库，并向两个 Follower 同步复制，线性一致性需要这个过程是透明的。</p>
 <p><img src="/img/fbs/lin.png"></p>
-<p>在本场景中即<strong>当任何一个读取返回新值后，所有后续读取都必须返回新值</strong>。但简单的读写分离主从复制，就会出现当Leader只同步了Follower1而没有同步到Follower2时，对两个副本的读取结果分别返回新值和旧值的现象。</p>
+<p>在本场景中即<strong>当任何一个读取返回新值后，所有后续读取都必须返回新值</strong>。但简单的读写分离主从复制，就会出现当 Leader 只同步了 Follower1 而没有同步到 Follower2 时，对两个副本的读取结果分别返回新值和旧值的现象。</p>
 <p>需要注意，线性一致性和“未提交事务不可见”不是一个概念。比如如下图所示，client B 读取到的 x 可能为 0 或 1。因为此时 B 读和 C 写是并发的。按照线性一致的定义，只要在 invocation 和 response 之间瞬间完成读和写就行。<br><img src="/img/fbs/fig9-2.png"></p>
 <p>但如下如图所示，一旦 B 读到了 x 为 1，也就是 reponse 了。那么后续就不能读到之前的 x 为 1 的状态了。</p>
 <p><img src="/img/fbs/fig9-3.png"></p>
+<p>如果一个写入返回后，读取还能返回旧值么？我想是不行的。这是因为 “… at some point between its invocation and its response”。所以在 response 后，这个操作就应该被认为已经执行完毕了。</p>
 <p>可以参考<a href="/2017/12/28/Concurrency-Programming-Compare/">C++内存模型</a>中的可见性一块。</p>
 <p>通过线性一致性<a href="https://www.jianshu.com/p/64b7b286ef7c" target="_blank" rel="noopener">可以实现</a>分布式锁、选举、和唯一性约束等功能。我们使用共识算法实现的是<strong>线性一致性</strong>，而主从复制则不是。由此可见，分布式一致性(Consistency)和共识(Consensus)是完全不同的两个概念，后者是实现前者的一个工具。</p>
 <h3 id="辨析Linearizability、Serializability"><a href="#辨析Linearizability、Serializability" class="headerlink" title="辨析Linearizability、Serializability"></a>辨析Linearizability、Serializability</h3><p>我们还需要区分<a href="http://www.bailis.org/blog/linearizability-versus-serializability/" target="_blank" rel="noopener">Linearizability和Serializability</a>。</p>
@@ -617,15 +618,15 @@
 <li><p>另外两篇文章说的是我一个事件产生完就立马发送了，这整个过程中，+了1。</p>
 </li>
 <li><p>事件在当前节点发生</p>
-<figure class="highlight applescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">time</span> = <span class="built_in">time</span> + <span class="number">1</span>;</span><br></pre></td></tr></table></figure></li>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">time = time + 1;</span><br></pre></td></tr></table></figure></li>
 <li><p>发送事件</p>
-<figure class="highlight lisp"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">send(<span class="name">message</span>, time)<span class="comment">;</span></span><br></pre></td></tr></table></figure></li>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">send(message, time);</span><br></pre></td></tr></table></figure></li>
 <li><p>接收事件</p>
-<figure class="highlight lisp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">(<span class="name">message</span>, time_stamp) = receive()<span class="comment">;</span></span><br><span class="line">time = max(<span class="name">time_stamp</span>, time) + <span class="number">1</span><span class="comment">;</span></span><br></pre></td></tr></table></figure></li>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">(message, time_stamp) = receive();</span><br><span class="line">time = max(time_stamp, time) + 1;</span><br></pre></td></tr></table></figure></li>
 </ol>
 <p><img src="/img/fbs/lamportclock.jpg"><br>Lamport Clock得到了偏序关系，但是我们可以从这个偏序关系整理出若干种全序关系（一个常用的方式是按照进程号进行排序），虽然真实发生的是其中的一种情况。在下图中展示了B4这个事件的“光锥”。蓝色部分的是因，红色部分的是果。</p>
 <p>总而言之，可以按照下面的办法生成全序关系：定义<code>a -&gt; b</code>为，其中<code>-&gt;</code>表示Happen before而不是蕴含关系(implication)：</p>
-<figure class="highlight lisp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Ci (<span class="name">a</span>) &lt; Cj (<span class="name">b</span>)</span><br><span class="line">Ci (<span class="name">a</span>) = Cj (<span class="name">b</span>) and Pi &lt; Pj</span><br></pre></td></tr></table></figure>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Ci (a) &lt; Cj (b)</span><br><span class="line">Ci (a) = Cj (b) and Pi &lt; Pj</span><br></pre></td></tr></table></figure>
 
 <p>其中C表示逻辑时钟，P表示进程号，i/j表示进程，a/b表示进程上的事件。</p>
 <p>下面我们看看，为什么<code>a -&gt; b</code>，则<code>C(a) &lt; C(b)</code>：</p>
@@ -953,7 +954,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">197</span>
+                <span class="site-state-item-count">198</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -966,7 +967,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">143</span>
+                <span class="site-state-item-count">144</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

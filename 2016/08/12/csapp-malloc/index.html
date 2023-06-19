@@ -103,7 +103,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/csapp-malloc/yskxlb1.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/csapp-malloc/yskxlb2.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/csapp-malloc/yskxlb3.png">
-<meta property="og:updated_time" content="2023-04-23T15:12:41.675Z">
+<meta property="og:updated_time" content="2023-06-15T13:42:29.920Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="csapp malloc lab">
 <meta name="twitter:description" content="一个动态分配器的要求是：  处理任意请求序列 这意味着我们不能对请求的先后顺序以及释放操作发生的时间（甚至是否发生）做出任何假设。 立即响应 这里不是指要实现无阻塞的分配，而是说我们的请求要是在线的，我们不能进行缓冲或者重排 使用堆 对齐 不能移动已分配的块  一个动态分配器的目标包含下面两点，我们能看到的是这两个性质往往互为trade-off。  最大化吞吐率 最大化存储器利用率  【未完待续】">
@@ -397,10 +397,10 @@
 <a id="more"></a>
 
 <h1 id="内存管理的通常方法"><a href="#内存管理的通常方法" class="headerlink" title="内存管理的通常方法"></a>内存管理的通常方法</h1><h2 id="位图-bitmap"><a href="#位图-bitmap" class="headerlink" title="位图(bitmap)"></a>位图(bitmap)</h2><p>查找位图中指定长度的连续为0的串是相对较为耗时的</p>
-<h2 id="隐式空闲链表"><a href="#隐式空闲链表" class="headerlink" title="隐式空闲链表"></a>隐式空闲链表</h2><p>隐式空闲链表由表头、有效载荷和填充组成。这里填充的作用体现了分配器的策略，例如我们需要它来对付外部碎片。<br><img src="/img/csapp-malloc/yskxlb1.png"><br>目前我们还没有看到链表的next指针在哪里，其实这是因为我们可以通过头部的size字段来跳转到下一个块。下图中每一个正方格表示4个字节，我们看到我们可以仅通过遍历头部就能选取下一个空闲块。<br><img src="/img/csapp-malloc/yskxlb2.png"><br>搜索空闲链表有首次匹配法、下次匹配法、最佳匹配法和分离匹配法，其中分离匹配法包括Linux的伙伴系统。<br>当我们匹配到的空闲链表块过大时，我们可能会选择切分。当分配器释放一个已分配块时，如果这个块与其他空闲块相邻就会造成假碎片(fault fragmentation)现象，我们需要进行合并(coalescing)，合并可以是立即的，也可以是推迟的。立即合并具有常数开销，但可能会造成反复的合并-分隔这样的抖动，因此推迟合并是较为常用的一种方式。为了方便地进行合并我们需要一个类似<code>prev</code>指针的机制。Knuth提出一种边界标记(boundary tag)技术，为每个块后面加上一个脚部，现在可以向前跳跳转了。<br><img src="/img/csapp-malloc/yskxlb3.png"><br>此外，我们发现只有前面块时空闲时，我们才想要去合并，才会有访问<code>prev</code>的需求，于是我们可以将前面块的状态维护在当前块低三位中的另一位上，这样我们就可以取消已分配块的脚部了。</p>
+<h2 id="隐式空闲链表"><a href="#隐式空闲链表" class="headerlink" title="隐式空闲链表"></a>隐式空闲链表</h2><p>隐式空闲链表由表头、有效载荷和填充组成。这里填充的作用体现了分配器的策略，例如我们需要它来对付外部碎片。<br><img src="/img/csapp-malloc/yskxlb1.png"><br>目前我们还没有看到链表的next指针在哪里，其实这是因为我们可以通过头部的size字段来跳转到下一个块。下图中每一个正方格表示4个字节，我们看到我们可以仅通过遍历头部就能选取下一个空闲块。<br><img src="/img/csapp-malloc/yskxlb2.png"><br>搜索空闲链表有首次匹配法、下次匹配法、最佳匹配法和分离匹配法，其中分离匹配法包括Linux的伙伴系统。<br>当我们匹配到的空闲链表块过大时，我们可能会选择切分。当分配器释放一个已分配块时，如果这个块与其他空闲块相邻就会造成假碎片(fault fragmentation)现象，我们需要进行合并(coalescing)，合并可以是立即的，也可以是推迟的。立即合并具有常数开销，但可能会造成反复的合并-分隔这样的抖动，因此推迟合并是较为常用的一种方式。为了方便地进行合并我们需要一个类似<code>prev</code>指针的机制。Knuth提出一种边界标记(boundary tag)技术，为每个块后面加上一个脚部，现在可以向前跳跳转了。<br><img src="/img/csapp-malloc/yskxlb3.png"><br>此外，我们发现只有前面块时空闲时，才想要去合并，才会有访问<code>prev</code>的需求，于是可以将前面块的状态维护在当前块低三位中的另一位上，这样我们就可以取消已分配块的脚部了。</p>
 <h2 id="显式空闲链表"><a href="#显式空闲链表" class="headerlink" title="显式空闲链表"></a>显式空闲链表</h2><p>隐式空闲链表的实现比较优雅，但它对块的分配（首次适配的分配时间）与堆块的总数成线性关系，所以对于通用的分配器并不适合，只能作为一种baseline。<br>显式链表增加了<code>prev</code>和<code>next</code>指针，现在我们可以将所有的<strong>空闲块</strong>单独串联起来。现在对于串联的顺序我们也可以进行设计了，首先我们有较为简单的LIFO原则，也就是将新释放的块放到链表的头部。为了提高地址利用率，我们可以按地址顺序组织链表（现在和隐式链表的顺序相同了，但不包含已分配项）。</p>
 <h2 id="简单分离存储"><a href="#简单分离存储" class="headerlink" title="简单分离存储"></a>简单分离存储</h2><p>分离存储是一个非常有用的思路，我们现在将所有的块按大小分成若干不同大小的类，称为大小类(size class)。<br>简单分离存储实际上维护了一系列链表，每个链表链接了同一个大小的所有块。我们每一次申请不分割既有块，如果没有就直接向系统请求一个chunk，分割成指定大小添加至链表中；每一次释放也不合并相邻块。这样的方式会造成大量的内存碎片（由于不分割）和外部碎片（释放后不合并）。</p>
-<h2 id="伙伴系统"><a href="#伙伴系统" class="headerlink" title="伙伴系统"></a>伙伴系统</h2><p>Linux使用伙伴系统进行分离适配，在Linux中每一个大小类都是2的幂，在最初的阶段只有一个$2^m$的块。对于一个长度为<code>x</code>的请求，我们将它向上舍入到$2^k$的幂，这个过程我们可以用<code>(x + mask) &amp; (~mask)</code>来表示。如果我们找不到恰巧的，就只能找到第一个能容纳的$2^j$大小的块，下面我们要在这个块中裁出$2^k$的块供分配。裁剪的方法就是不停二分，直到得到两个$2^k$大小的块为止。每一次对半的切分得到的两个块互为伙伴，我们将多余的那一份放到对应的链表中存储，容易看出只要给定地址和块大小，我们能够轻松地得到伙伴的地址。例如某块的地址为<code>0bxxxx1000</code>，那么它伙伴的地址一定是<code>0bxxxx0000</code></p>
+<h2 id="伙伴系统"><a href="#伙伴系统" class="headerlink" title="伙伴系统"></a>伙伴系统</h2><p>Linux使用伙伴系统进行分离适配，在Linux中每一个大小类都是2的幂，在最初的阶段只有一个$2^m$的块。对于一个长度为<code>x</code>的请求，我们将它向上舍入到$2^k$的幂，这个过程我们可以用<code>(x + mask) &amp; (~mask)</code>来表示。如果我们找不到恰巧的，就只能找到第一个能容纳的$2^j$大小的块，下面我们要在这个块中裁出$2^k$的块供分配。裁剪的方法就是不停二分，直到得到两个$2^k$大小的块为止。每一次对半的切分得到的两个块互为伙伴，我们将多余的那一份放到对应的链表中存储，容易看出只要给定地址和块大小，我们能够轻松地得到伙伴的地址。例如某块的地址为<code>0bxxxx1000</code>，那么它伙伴的地址一定是<code>0bxxxx0000</code>。</p>
 
       
     </div>
@@ -557,7 +557,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">197</span>
+                <span class="site-state-item-count">198</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -570,7 +570,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">143</span>
+                <span class="site-state-item-count">144</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
