@@ -100,7 +100,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="C++的预处理机制令人诟病的一点是在不同的编译器中的表现是不同的，在boost/preprocessor/config/config.hpp列举出了非常多的case，所以在本篇文章中我们只考虑g++-7的编译结果。此外，出于便于阅读的考虑，对名字进行了简化，去掉了诸如BOOST_PP等前缀。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2023-05-21T05:47:07.792Z">
+<meta property="og:updated_time" content="2023-07-14T15:44:32.298Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="通过C++预处理实现if">
 <meta name="twitter:description" content="C++的预处理机制令人诟病的一点是在不同的编译器中的表现是不同的，在boost/preprocessor/config/config.hpp列举出了非常多的case，所以在本篇文章中我们只考虑g++-7的编译结果。此外，出于便于阅读的考虑，对名字进行了简化，去掉了诸如BOOST_PP等前缀。">
@@ -396,7 +396,7 @@
 
 <p>这个方案的基本原理是如果我们将<code>IS_EMPTY_DEF_</code>和<code>x</code>和<code>IS_EMPTY_HELPER</code>三者连接，对于一个平凡情况，如果<code>x</code>为空，那么我们最终会得到一个<code>IS_EMPTY_DEF_IS_EMPTY_HELPER</code>（过程稍后），我们将它展开为<code>_, EAT_BRACE(1)</code>。这是一个奇妙的构造，我们希望的结果1就构造在<code>EAT_BRACE(1)</code>里面，我们将在稍后谋划如何将其取出。为了能够理解代码的精妙之处，我们首先考虑一个不平凡的情况，如果我们做简单的连接，那么可能不能形成一个valid preprocessing token，那么我们就得想办法在早期将它搞掉。现在我们假定<code>x</code>的值就是<code>x</code>，那么我们第一步展开为<code>IS_EMPTY_I(x IS_EMPTY_HELPER)</code>。在第二步，我们不看<code>BOOST_PP_TUPLE_ELEM</code>，它里面的东西是<code>IS_EMPTY_DEF_ ## x IS_EMPTY_HELPER ()</code>。再展开<code>IS_EMPTY_HELPER ()</code>，发现它是<code>, 0</code>，于是我们得到了一个<code>IS_EMPTY_DEF_, 0</code>，容易看出我们要的结果同样在第1个（从0开始），我们可以通过<code>BOOST_PP_TUPLE_ELEM</code>将它取出来，其实现将在后面讨论。于是现在我们有了疑问，第一，为什么<code>IS_EMPTY_HELPER</code>后面要加上括号，这样一来怎么合成<code>IS_EMPTY_DEF_IS_EMPTY_HELPER</code>呢？第二，为啥0是裸着的，1要包着一个<code>EAT_BRACE</code>？首先我们推演<code>IS_EMPTY_DEF_ ## IS_EMPTY_HELPER ()</code>得到了这个结果，这时候<code>##</code>可以合成<code>IS_EMPTY_DEF_IS_EMPTY_HELPER</code>这个token，于是<code>IS_EMPTY_HELPER ()</code>就没有被展开。而我们又没有定义<code>IS_EMPTY_DEF_IS_EMPTY_HELPER ()</code>，所以最后只能挂着一个<code>_, EAT_BRACE(1) ()</code>，而EAT_BRACE的作用当然就是把后面挂着的这个括号去掉啦。</p>
 <h1 id="可变参数模板部分"><a href="#可变参数模板部分" class="headerlink" title="可变参数模板部分"></a>可变参数模板部分</h1><p>下面我们研究<code>BOOST_PP_TUPLE_ELEM</code>的实现，它位于<strong>boost/preprocessor/tuple/elem.hpp</strong>。这个宏接受两个或三个参数，当接受三个参数是，前两个分别是size和index，后面的<code>__VA_ARGS__</code>被括号包起来。</p>
-<figure class="highlight lisp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">#define ADD_SIZE_TO_SURFIX(<span class="name">prefix</span>, ...) CAT(<span class="name">prefix</span>, SIZE(<span class="name">__VA_ARGS__</span>))</span><br><span class="line">#define TUPLE_ELEM(...) ADD_SIZE_TO_SURFIX(<span class="name">TUPLE_ELEM_O_</span>, __VA_ARGS__)(<span class="name">__VA_ARGS__</span>)</span><br><span class="line">#define TUPLE_ELEM_O_2(<span class="name">n</span>, tuple) VARIADIC_ELEM(<span class="name">n</span>, BOOST_PP_REM tuple)</span><br><span class="line">#define TUPLE_ELEM_O_3(<span class="name">size</span>, n, tuple) TUPLE_ELEM_O_2(<span class="name">n</span>, tuple)</span><br></pre></td></tr></table></figure>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> ADD_SIZE_TO_SURFIX(prefix, ...) CAT(prefix, SIZE(__VA_ARGS__))</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> TUPLE_ELEM(...) ADD_SIZE_TO_SURFIX(TUPLE_ELEM_O_, __VA_ARGS__)(__VA_ARGS__)</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> TUPLE_ELEM_O_2(n, tuple) VARIADIC_ELEM(n, BOOST_PP_REM tuple)</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> TUPLE_ELEM_O_3(size, n, tuple) TUPLE_ELEM_O_2(n, tuple)</span></span><br></pre></td></tr></table></figure>
 
 <p>其中<code>ADD_SIZE_TO_SURFIX</code>对应boost中的<code>BOOST_PP_OVERLOAD</code>方法，其作用是使用<code>SIZE</code>获得<code>__VA_ARGS_</code>的大小，并将这个值放到prefix之后形成新的token。我们看到<code>TUPLE_ELEM</code>视参数个数调用<code>TUPLE_ELEM_O_2</code>或<code>TUPLE_ELEM_O_3</code>，而最后都归结为<code>VARIADIC_ELEM</code>。也就是说TUPLE模块的实现借助了VARIADIC模块，TUPLE宏由于有个“重载”，所以它的<code>__VA__ARGS__</code>被用括号括起来，所以要把这一层括号去掉才能调用VARIADIC宏。<code>BOOST_PP_REM</code>定义在<strong>boost/preprocessor/tuple/rem.hpp</strong>里面，它的实现似乎是用来处理<code>...</code>部分的<code>__VA_ARGS__</code>是空的情况，或者是single element的情况。</p>
 <h2 id="获取一个序列的长度"><a href="#获取一个序列的长度" class="headerlink" title="获取一个序列的长度"></a>获取一个序列的长度</h2><p>这段构思巧妙地代码来自于<strong>boost/preprocessor/variadic/size.hpp</strong>：</p>
@@ -566,7 +566,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">198</span>
+                <span class="site-state-item-count">199</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -579,7 +579,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">144</span>
+                <span class="site-state-item-count">143</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
