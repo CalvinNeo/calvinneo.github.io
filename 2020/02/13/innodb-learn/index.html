@@ -108,7 +108,7 @@
 <meta property="og:image" content="http://img.blog.itpub.net/blog/2019/01/14/e14bfae3e4eeb53e.jpeg?x-oss-process=style/bb">
 <meta property="og:image" content="http://www.calvinneo.com/img/innodb/innodb-logical-storage.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/innodb/innodb-data-page.png">
-<meta property="og:updated_time" content="2023-05-21T05:47:20.075Z">
+<meta property="og:updated_time" content="2023-07-30T15:32:50.884Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Innodb学习笔记">
 <meta name="twitter:description" content="本文是有关InnoDB实现原理的读书笔记，主要包含：  《MySQL技术内幕(InnoDB存储引擎)第2版》 《MySQL内核：INNODB存储引擎 卷一》  在本文中，主要介绍下面内容：  MySQL/InnoDB的配置和搭建 MySQL/InnoDB的宏观架构 MySQL/InnoDB的日志，以及事务中涉及到日志相关的部分  在本文中，不会详细介绍：  刷脏页机制 MVCC机制 索引机制和索引">
@@ -434,18 +434,24 @@
 <h2 id="查询日志"><a href="#查询日志" class="headerlink" title="查询日志"></a>查询日志</h2><p>查询日志存储了所有对MySQL的请求信息。</p>
 <h2 id="binlog"><a href="#binlog" class="headerlink" title="binlog"></a>binlog</h2><p>binlog在MySQL 5.1之后的版本引入，记录了MySQL对数据库进行更改的所有操作。可以通过<code>show master status\G</code>获得binlog的存储位置。binlog可以被用来恢复数据、主从复制以及审计(audit)，例如统计是否有对数据库的攻击。当<code>sync_binlog==0</code>时，由底层文件系统控制对binlog缓存的刷新。对于InnoDB而言，它将binlog统一写到一块缓存中，等事务提交之后，直接将缓冲中的binlog写入binlog文件，该缓冲大小由<code>binlog_cache_size</code>决定，默认为32K，并且是基于会话的。可以通过<code>mysqlbinlog</code>查看当前的binlog。</p>
 <h2 id="redo-undo-log"><a href="#redo-undo-log" class="headerlink" title="redo/undo log"></a>redo/undo log</h2><p>和binlog不一样，redo/undo log是物理日志，记录了数据页的修改，而binlog是逻辑日志，记录了事务的原始逻辑。redo/undo log在事务执行过程中随时写入，而binlog是在事务commit前写入的。</p>
-<h3 id="Redo-log简介"><a href="#Redo-log简介" class="headerlink" title="Redo log简介"></a>Redo log简介</h3><p>InnoDB通过force log at commit机制实现事务的持久性。即当事务提交的时候，要首先将redo log（而不是undo log）写入<strong>文件</strong>进行持久化。这里注意，一般redo log会先被写到内存中的缓冲区内，但提交的时候强制刷盘。盘实际上是一次fsync操作，确保位于内核高速缓冲区的数据被磁盘。特别地，如果我们不希望使用文件系统的缓存，需要设置<code>O_DIRECT</code>启用直接IO/裸IO，从用户空间直接将写到磁盘（比如说DMA）上。此外，还有一个<code>O_SYNC</code>，这个表示write操作<a href="https://stackoverflow.com/questions/5055859/how-are-the-o-sync-and-o-direct-flags-in-open2-different-alike" target="_blank" rel="noopener">在操作系统将所有数据发送给磁盘之后才能返回</a>。当然了，通过设置<code>innodb_flush_log_at_trx_commit</code>为0，可以不让InnoDB在每次提交事务的时候都fsync，这样的话就依赖于其他两个定时和剩余空间的条件了。当MySQL宕机后，可能会丢失1秒内的事务。特别地，这个值还可以被设为2，此时数据会被写到内核高速缓存中，但不会立即刷入磁盘，在这种情况下，只要系统不宕机，那么MySQL宕机后的安全性也是能得到保证的。</p>
-<h3 id="undo-log简介以及和redo-log的比较"><a href="#undo-log简介以及和redo-log的比较" class="headerlink" title="undo log简介以及和redo log的比较"></a>undo log简介以及和redo log的比较</h3><p>redo log实际上可以保证事务的Duration特性。相应地undo log记录数据被修改<strong>前</strong>的值，实际上保证事务的Isolation特性。undo log常用的地方是：</p>
+<h3 id="Redo-log简介"><a href="#Redo-log简介" class="headerlink" title="Redo log简介"></a>Redo log简介</h3><p>InnoDB 通过 force log at commit 机制实现事务的持久性。即当事务提交的时候，要首先将 redo log 写入<strong>文件</strong>进行持久化。注意 redo log 会先被写到文件系统分配在内存中的缓冲区内，但提交的时候 fsync 刷盘。</p>
 <ol>
-<li>事务失败时rollback</li>
-<li>MVCC功能<br> <a href="https://zhuanlan.zhihu.com/p/52977862" target="_blank" rel="noopener">在InnoDB中每个SQL语句执行前都会得到一个read view</a>，其中主要保存了当前活跃（没有commit）的事务的ID号。根据数据库的Isolation特性，这些事务对本事务是不可见的。<br> 通过读undo log链可以看到该条记录的历史版本，可以实现不同事务版本号都拥有自己独立的快照数据版本。</li>
+<li>O_DIRECT 写<br> 特别地，如果不希望使用文件系统的缓存，需要设置 <code>O_DIRECT</code> 启用直接IO/裸IO，从用户空间直接将写到磁盘比如说 DMA 上。</li>
+<li>O_SYNC 写<br> <code>O_SYNC</code> 表示 write 操作<a href="https://stackoverflow.com/questions/5055859/how-are-the-o-sync-and-o-direct-flags-in-open2-different-alike" target="_blank" rel="noopener">在操作系统将所有数据发送给磁盘之后才能返回</a>。但可能此时数据还在 hard disk 自己的 cache 中，但无论如何这个不是操作系统能够控制的了。但回答后面的评论还有补充，Linux 对于支持 FUA 的设备，会设置这个位；否则会在写完之后，强制发一个 Flush write cache 的命令。</li>
+</ol>
+<p>当然了，通过设置 <code>innodb_flush_log_at_trx_commit</code> 为0，可以不让 InnoDB 在每次提交事务的时候都 fsync，这样的话就依赖于其他两个定时和剩余空间的条件了。当MySQL宕机后，可能会丢失1秒内的事务。特别地，这个值还可以被设为2，此时数据会被写到内核高速缓存中，但不会立即刷入磁盘，在这种情况下，只要系统不宕机，那么MySQL宕机后的安全性也是能得到保证的。</p>
+<h3 id="undo-log简介以及和redo-log的比较"><a href="#undo-log简介以及和redo-log的比较" class="headerlink" title="undo log简介以及和redo log的比较"></a>undo log简介以及和redo log的比较</h3><p>先前提到过，redo log 实际上可以保证事务的 Duration 特性，一旦一个事务被提交之后，redo log 就包含了足够的信息了。</p>
+<p>undo log 记录数据被修改<strong>前</strong>的值，实际上保证事务的 Isolation 特性。undo log 常用的地方是：</p>
+<ol>
+<li>事务失败时 rollback</li>
+<li>MVCC功能<br> <a href="https://zhuanlan.zhihu.com/p/52977862" target="_blank" rel="noopener">在 InnoDB 中每个 SQL 语句执行前都会得到一个 read view</a>，其中主要保存了当前活跃，也就是没有被 commit 的事务的ID号。出于 Isolation 的要求，这些事务对本事务是不可见的。<br> 通过读 undo log 链可以看到该条记录的历史版本，可以实现不同事务版本号都拥有自己独立的快照数据版本。</li>
 </ol>
 <h3 id="读写和刷盘"><a href="#读写和刷盘" class="headerlink" title="读写和刷盘"></a>读写和刷盘</h3><p>通过redo log可以在宕机恢复后恢复已提交的事务，如果没有redo log，就需要在事务commit时完成所有的刷脏页操作。但这个对性能是一个损伤，有了redo log，就可以把日志记到磁盘上，然后异步刷脏页了。通过undo log可以在宕机恢复后回滚未提交的事务，如果有了undo log，在事务提交前也可以刷脏页了。</p>
 <p>redo log基本上顺序写的，但是undo log需要随机读写。<br>redo log存储于形如<code>ib_logfile*</code>的文件里面。此外，redo log是在4GB的空间中循环写的，所以没有归档的功能。如果需要归档，就要借助于类似<code>ib_arch_log_</code>形式的归档重做日志，该日志始终是对<code>ib_logfile1</code>这个文件进行归档。InnoDB一般先会把redo log写到位于内存中的缓冲区内，然后在下面三种情况下进行刷新</p>
 <ol>
 <li>每隔一秒</li>
 <li>每个事务提交时</li>
-<li>redo log缓冲池剩余空间小于1/2</li>
+<li>redo log 缓冲池剩余空间小于1/2</li>
 </ol>
 <p><img src="/img/innodb/innodb-mem.png"></p>
 <h2 id="binlog和redo-undo-log的协同工作"><a href="#binlog和redo-undo-log的协同工作" class="headerlink" title="binlog和redo/undo log的协同工作"></a>binlog和redo/undo log的协同工作</h2><h3 id="两阶段提交2PC"><a href="#两阶段提交2PC" class="headerlink" title="两阶段提交2PC"></a>两阶段提交2PC</h3><p>需要特别注意，2PC不是2PL。其实我们在<a href="/2019/03/12/2pc-3pc/">专门的文章</a>中已经介绍过原始版本的2PC和3PC算法了，我们将研究这个算法在MySQL中的应用。</p>
@@ -713,7 +719,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">199</span>
+                <span class="site-state-item-count">201</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>

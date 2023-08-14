@@ -92,18 +92,18 @@
 
 
 
-<meta name="description" content="介绍 Linux 文件系统。">
+<meta name="description" content="Linux 通过 VFS 建立了一个抽象层，并在之上提供了通用的文件系统模型，使得 Linux 能够支持多种文件系统。">
 <meta name="keywords" content="Linux">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Linux 的文件系统">
 <meta property="og:url" content="http://www.calvinneo.com/2022/06/21/linux-fs/index.html">
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
-<meta property="og:description" content="介绍 Linux 文件系统。">
+<meta property="og:description" content="Linux 通过 VFS 建立了一个抽象层，并在之上提供了通用的文件系统模型，使得 Linux 能够支持多种文件系统。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2022-06-21T13:34:19.939Z">
+<meta property="og:updated_time" content="2023-08-13T16:23:24.439Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Linux 的文件系统">
-<meta name="twitter:description" content="介绍 Linux 文件系统。">
+<meta name="twitter:description" content="Linux 通过 VFS 建立了一个抽象层，并在之上提供了通用的文件系统模型，使得 Linux 能够支持多种文件系统。">
 
 
 
@@ -376,10 +376,53 @@
       
 
       
-        <p>介绍 Linux 文件系统。</p>
+        <p>Linux 通过 VFS 建立了一个抽象层，并在之上提供了通用的文件系统模型，使得 Linux 能够支持多种文件系统。</p>
 <a id="more"></a>
+<h1 id="文件系统的原理"><a href="#文件系统的原理" class="headerlink" title="文件系统的原理"></a>文件系统的原理</h1><p>文件系统的管理方式，可以分为 bitmap 和 tree 两大类。</p>
+<p>在支持大容量文件系统时，bitmap 存在问题：</p>
+<ol>
+<li>bitmap 本身占用空间太大，占用内存空间，并且回写磁盘更慢，对于掉电故障更不友好。</li>
+<li>如果已分配空间较为零散，那么后续新的分配需要遍历很多的位。并且产生较多的随机写。</li>
+</ol>
+<h1 id="Linux-VFS"><a href="#Linux-VFS" class="headerlink" title="Linux VFS"></a>Linux VFS</h1><p>索引节点，即 index node, inode，存储了文件的元信息。Unix中，文件和目录其实都是文件。<br>装载点即 mount pointer，Unix 把每个文件系统 mount 到一个特定的 mount 点上，称为命名空间 namespace。</p>
+<p>VFS 为了封装这些抽象使用了四个主要的对象类型：</p>
+<ol>
+<li>超级块对象，代表一个具体的已安装文件系统</li>
+<li>索引节点对象，代表一个具体文件</li>
+<li>目录项对象，代表一个目录项<br> 注意目录项不等同于目录，Linux 中目录属于文件。<br> 这里的目录项描述了一个路径的性质，例如说在基于路径名的查找时需要访问整个路径，所以将路径名从文件中抽象出来简化了过程。</li>
+<li>文件对象，代表一个由进程打开的文件</li>
+</ol>
+<p>以 <code>write()</code> 调用为例，它首先经过了 VFS 层中的 <code>sys_write()</code> 函数，接着调用具体文件系统的实现，以写入物理介质。</p>
+<h2 id="超级块"><a href="#超级块" class="headerlink" title="超级块"></a>超级块</h2><p>Linux 中使用了 <code>struct super_block</code> 来描述超级块，使用 <code>struct super_block.super_operations</code> 来定义这个超级块中的所有行为。</p>
+<h2 id="inode"><a href="#inode" class="headerlink" title="inode"></a>inode</h2><p><code>struct inode</code> 结构体在文件被访问时在内存中创建，它可以描述一个管道、块设备或者字符设备。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">union</span> &#123;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">pipe_inode_info</span>  *<span class="title">i_pipe</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">block_device</span> *<span class="title">i_bdev</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">cdev</span>     *<span class="title">i_cdev</span>;</span></span><br><span class="line">    <span class="keyword">char</span>            *i_link;</span><br><span class="line">    <span class="keyword">unsigned</span>        i_dir_seq;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
 
+<h2 id="目录项"><a href="#目录项" class="headerlink" title="目录项"></a>目录项</h2><p>目录项有三种状态</p>
+<ol>
+<li>被使用。这个状态的目录的<code>d_inode</code>是一个有效的节点，并且<code>d_count</code>为正，表示正在被VFS访问。</li>
+<li>未被使用。这个状态的目录的<code>d_count</code>为0，表示这个对象没有被使用，但是仍然在中缓存以便将来使用。</li>
+<li>负状态。此时<code>d_inode</code>为<code>NULL</code>，表示inode已经删除，或者路径已经不再合法，缓存这样的节点可以方便查询，即使是对一个不合法的节点。</li>
+</ol>
+<h2 id="和进程相关的结构"><a href="#和进程相关的结构" class="headerlink" title="和进程相关的结构"></a>和进程相关的结构</h2><p>文件描述符 fd 在进程中以 <code>struct file_struct</code> 定义。</p>
+<h1 id="Page-Cache"><a href="#Page-Cache" class="headerlink" title="Page Cache"></a>Page Cache</h1><p>O_DIRECT 表示 IO 不使用 Buffer，<br>O_SYNC：以同步IO方式打开文件。</p>
+<h1 id="ZFS"><a href="#ZFS" class="headerlink" title="ZFS"></a>ZFS</h1><p>ZFS 支持下面的内容：</p>
+<ol>
+<li>COW</li>
+<li>Snapshot</li>
+<li>数据完整性验证和自动修复</li>
+<li>RAID-Z</li>
+<li>最大 16 EiB 的文件大小</li>
+<li>最大 256 ZiB 的存储</li>
+</ol>
+<h1 id="IO-调度"><a href="#IO-调度" class="headerlink" title="IO 调度"></a>IO 调度</h1><h2 id="Linus-电梯"><a href="#Linus-电梯" class="headerlink" title="Linus 电梯"></a>Linus 电梯</h2><ol>
+<li>合并相邻扇区的请求</li>
+<li>出现驻留时间过长的请求时插入尾部</li>
+<li>尝试插入扫描序列中的对应顺序位置</li>
+<li>如果不存在插入尾部</li>
+</ol>
+<h2 id="最终期限调度"><a href="#最终期限调度" class="headerlink" title="最终期限调度"></a>最终期限调度</h2><p>对某个磁盘扇区上的繁重操作会导致其他扇区的饥饿。<br>写-饥饿-读问题。这是因为写操作常常是异步的，在内核有空时提交，而读操作则用户进程必须阻塞等待，所以是同步的。而读写操作都涉及到访问inode，因此这里存在竞争关系，能够料想写操作的饥饿能够导致读请求的饥饿。为了解决这个问题我们引入了最后期限调度，但是如我们所想的那样，这种控制延迟在一定程度内的算法一定会降低吞吐量。</p>
 <h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
+<li><a href="https://developer.aliyun.com/article/401890" target="_blank" rel="noopener">https://developer.aliyun.com/article/401890</a><br> ZFS</li>
 <li><a href="https://www.cnblogs.com/zl1991/p/10288291.html" target="_blank" rel="noopener">https://www.cnblogs.com/zl1991/p/10288291.html</a><br> O_SYNC 和 O_DIRECT</li>
 </ol>
 
@@ -536,7 +579,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">199</span>
+                <span class="site-state-item-count">201</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -642,7 +685,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">1.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#文件系统的原理"><span class="nav-number">1.</span> <span class="nav-text">文件系统的原理</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Linux-VFS"><span class="nav-number">2.</span> <span class="nav-text">Linux VFS</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#超级块"><span class="nav-number">2.1.</span> <span class="nav-text">超级块</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#inode"><span class="nav-number">2.2.</span> <span class="nav-text">inode</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#目录项"><span class="nav-number">2.3.</span> <span class="nav-text">目录项</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#和进程相关的结构"><span class="nav-number">2.4.</span> <span class="nav-text">和进程相关的结构</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Page-Cache"><span class="nav-number">3.</span> <span class="nav-text">Page Cache</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#ZFS"><span class="nav-number">4.</span> <span class="nav-text">ZFS</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#IO-调度"><span class="nav-number">5.</span> <span class="nav-text">IO 调度</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Linus-电梯"><span class="nav-number">5.1.</span> <span class="nav-text">Linus 电梯</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#最终期限调度"><span class="nav-number">5.2.</span> <span class="nav-text">最终期限调度</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">6.</span> <span class="nav-text">Reference</span></a></li></ol></div>
             
 
           </div>

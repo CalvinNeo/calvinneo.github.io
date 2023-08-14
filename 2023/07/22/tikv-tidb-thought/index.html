@@ -1,0 +1,1344 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="分布式," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="一些常见问题的思考，这些问题是我瞎想出来的。">
+<meta name="keywords" content="分布式">
+<meta property="og:type" content="article">
+<meta property="og:title" content="关于 TiKV、TiDB、TiFlash 的一些思考">
+<meta property="og:url" content="http://www.calvinneo.com/2023/07/22/tikv-tidb-thought/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="一些常见问题的思考，这些问题是我瞎想出来的。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2023-08-14T12:24:50.878Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="关于 TiKV、TiDB、TiFlash 的一些思考">
+<meta name="twitter:description" content="一些常见问题的思考，这些问题是我瞎想出来的。">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2023/07/22/tikv-tidb-thought/"/>
+
+
+
+
+
+  <title>关于 TiKV、TiDB、TiFlash 的一些思考 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2023/07/22/tikv-tidb-thought/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                关于 TiKV、TiDB、TiFlash 的一些思考
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2023-07-22T23:20:37+08:00">
+                2023-07-22
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>一些常见问题的思考，这些问题是我瞎想出来的。</p>
+<a id="more"></a>
+
+<h1 id="TiKV-相关"><a href="#TiKV-相关" class="headerlink" title="TiKV 相关"></a>TiKV 相关</h1><h2 id="TiKV-写入"><a href="#TiKV-写入" class="headerlink" title="TiKV 写入"></a>TiKV 写入</h2><h3 id="KV-热点"><a href="#KV-热点" class="headerlink" title="KV 热点"></a>KV 热点</h3><p>如果出现热点 Key，机器会吃不消么？写热点是难以避免的。TiKV 选择按 Range 切割，但是 User Key 不跨 Region。一段区间内的写热点，会导致容量超过上限而分裂，新分裂出来的 Region 可以被调度到其他 Node 上，从而实现负载均衡。在<a href="https://zhuanlan.zhihu.com/p/81316899" target="_blank" rel="noopener">文章</a>中提到，可以通过预分区的方式来划分 Region。可是对于单调递增的主键，或者索引，它会永远写在最后一个 Region 上。但我认为热点 Region 未必意味着热点机器，可以先进行 Split，然后通过 Leader Transfer 给其他的 Peer，或者通过 Conf Change 直接干掉自己。我猜测这个主要取决于数据迁移的效率和中心化服务的质量，如果在 Raft Log 阶段就能检测到流量问题并分裂，那么负载有可能被分流到多个相邻的 Region 中。</p>
+<p>TiKV 提供了 SHARD_ROW_ID_BITS 来进行打散，这类似于 Spanner 架构中提到的利用哈希解决 Append 写的思路。TiBD 提供了 AUTO_RANDOM 替代 AUTO_INCREMENT。</p>
+<p>注意，如果负载是频繁对某个特定的 key 更新，则 TS 一定也被用来计算哈希，不然热点 key 一定是在同一个 Region 内。这样一个 key 的不同版本就分布在不同的 Region 中，就不利于扫表了。因为下推到 TiKV 的请求可以理解为从 [l, r] 去扫出来所有 <a href="https://blog.csdn.net/TiDB_PingCAP/article/details/100535768" target="_blank" rel="noopener">commit_ts &lt;= scan_ts</a> 的数据，这样的扫表一定是会涉及到所有的机器，性能会很差。对于点查也一样，我们始终要找一个大于 user_key + ts 的 TiKV Key，哈希分片不好 seek。特别地，如果是 SI，那还得扫 [0, scan_ts] 中有没有 Lock，这个过程也要访问多个机器。</p>
+<p>如果在构造 key 的时候就进行分片，比如在最左边加一个 shard_id，这样 rehash 会很困难。shard_id 可以比如是通过某个特定字段哈希得到。</p>
+<p>在 Spanner 中存在 Tablet，也就是将多个同时访问比较频繁的 Region co-locate，这些 Region 彼此之间未必是有序的，甚至可能属于不同的表。</p>
+<h3 id="关于-Region-数量的讨论"><a href="#关于-Region-数量的讨论" class="headerlink" title="关于 Region 数量的讨论"></a>关于 Region 数量的讨论</h3><p>较小的 Region 的好处：</p>
+<ol>
+<li>每个 Region 中较低的并发</li>
+<li>更加快速的调度</li>
+</ol>
+<p>较大的 Region 的好处：</p>
+<ol>
+<li>Placement Driver 的压力变小</li>
+<li>CompactLog、Heartbeat 等网络开销变小</li>
+</ol>
+<h3 id="Raft-存储"><a href="#Raft-存储" class="headerlink" title="Raft 存储"></a>Raft 存储</h3><p>原来 TiKV 使用 RocksDB 存储 Raft Log 和相关 Meta，存在几个问题：</p>
+<ol>
+<li>WAL + 实际数据，需要写两次盘。</li>
+<li>数据变多，Compaction 负担变大，写放大更大。层数更多，写放大更大。</li>
+</ol>
+<p>因此引入了类似 bitcask 架构的 RaftEngine 来解决这个问题。RaftEngine 中每个 Region 对应一个 Memtable，数据先通过 Group Write 写入到文件中，然后再注册到 Memtable 中。在读取时从 Memtable 获取位置，再从文件中读取。因此随着 Region 日志 Apply 进度的不同，RaftEngine 在文件中会存在空洞，因此需要 rewrite。这使得存在一部分 CPU 和 IO 花费在 rewrite 逻辑上，而不能像 PolarDB 一样按照水位线直接删除。RaftEngine 这么做可以减少 fsync 的调用频率，并且充分利用文件系统 buffer 来做聚合。</p>
+<p>此外，Raftstore 还使用 async_io 来异步落盘 Raft 日志和 Raft 状态。这样，Raftstore 线程不被 io 阻塞，能够处理更多的 Raft 相关请求和日志。需要注意，这反过来可能会加重 PeerFsm、ApplyFsm 和网络的负担，对 CPU 的要求更高。</p>
+<h3 id="日志和数据分离存储"><a href="#日志和数据分离存储" class="headerlink" title="日志和数据分离存储"></a>日志和数据分离存储</h3><h3 id="Titan"><a href="#Titan" class="headerlink" title="Titan"></a>Titan</h3><p>Titan 的思路是将 RocksDB 中的 value 拿出来存，减少 Compaction 对 CPU 和 IO 的开销，但会带来空间放大。并且数据局部性差，所以范围查询性能较差。</p>
+<p>Titan 将这些大 value 有序地存放在一些 blob file 中，并且保存了 value 对应的 user key 用来反查 RocksDB。反查的原因是 blob file 本身需要 gc，所以要通过 user key 来查询是否过期，这会带来一些写放大。</p>
+<p>Titan 有两种 gc 策略：</p>
+<ol>
+<li>定时 rewrite blob file<br> 监听每次 Compaction 事件，从而维护每个 blob 文件中无效数据的大小。每次重写 invalid 率最高的几个文件，并更新回 RocksDB。旧的文件需要确保不再有 Snapshot 引用才可被删除。</li>
+<li>在 LSM-tree compaction 的时候同时进行 blob 文件的重写<br> 也就是在 Compaction 的同时写到一份新的 blob 文件中。因为不需要的 kv 会在 Compaction 的时候被过滤掉，也就相当于自动完成了 gc。<br> 这种方案要求 blob 文件也需要伴随着 SST 进行分层，从而带来写放大。并且也有不小的空间放大。因此，该策略只对最下面两层生效。</li>
+</ol>
+<h2 id="TiKV-读取"><a href="#TiKV-读取" class="headerlink" title="TiKV 读取"></a>TiKV 读取</h2><p>TiDB 支持<a href="https://docs.pingcap.com/zh/tidb/stable/follower-read" target="_blank" rel="noopener">多种读取方式</a>，例如最近 Peer、Leader、Follower、Learner、自适应等多种模式，这些依赖于 Follower Read，在这之前都需要从 Raft Leader 读取。</p>
+<p>TiKV 处理读请求对 Block Cache 要求较高，较低的 Block Cache Hit 会导致读性能倍数下滑。Block Cache 需要占用接近一般的内存，但也需要保留一部分给系统作为 Page Cache，以及处理查询时的内存。</p>
+<p>不同的压缩方式，对 CPU 的压力不同。</p>
+<h2 id="共识层和事务层的关系"><a href="#共识层和事务层的关系" class="headerlink" title="共识层和事务层的关系"></a>共识层和事务层的关系</h2><p>TiKV 的共识层在事务层之下。在事务 Commit 之前的很多数据也会被复制到多数节点上，这产生了一些写放大。但也需要注意其带来的好处：</p>
+<ol>
+<li>共识层实际为 Percolator 提供了类似 BigTable 的存储。<br> 首先提供了外部一致性。<br> 然后提供了 PUT default/PUT lock 和 PUT write/DEL lock 的原子性写入。<br> 当然，这里要先读后写，可能会有 Write Skew。</li>
+<li>共识层本身也可以作为一个 Raw KV 对外服务。</li>
+<li>Percolator 事务的定序依赖于存储于共识层上 lock 中的时间戳。<br> 当然这也存在一个 argue 点，因为 Raft Log 本身也是 total order 的。看起来会有一些冗余。</li>
+</ol>
+<p>特别地，在 CDC 服务和 TiFlash 中，我们实际上不会处理未 Commit 的数据。</p>
+<h1 id="Multi-Raft-相关"><a href="#Multi-Raft-相关" class="headerlink" title="Multi Raft 相关"></a>Multi Raft 相关</h1><h2 id="Raft-状态的思考"><a href="#Raft-状态的思考" class="headerlink" title="Raft 状态的思考"></a>Raft 状态的思考</h2><p>RaftLocalState 中相比 Raft 协议多包含了 last_index 和 commit。其中 commit 可以避免重启后不能立即 apply 的情况。</p>
+<h2 id="Multi-Raft-的思考"><a href="#Multi-Raft-的思考" class="headerlink" title="Multi Raft 的思考"></a>Multi Raft 的思考</h2><h3 id="Split-Merge-和-Apply-Snapshot"><a href="#Split-Merge-和-Apply-Snapshot" class="headerlink" title="Split/Merge 和 Apply Snapshot"></a>Split/Merge 和 Apply Snapshot</h3><p>Multi Raft 实现的复杂度，很大程度在处理 Split/Merge 和 Apply Snapshot 的冲突上。</p>
+<h1 id="Partitioned-RaftKV-相关"><a href="#Partitioned-RaftKV-相关" class="headerlink" title="Partitioned RaftKV 相关"></a>Partitioned RaftKV 相关</h1><h2 id="和-Mono-store-RaftKV-的兼容性问题"><a href="#和-Mono-store-RaftKV-的兼容性问题" class="headerlink" title="和 Mono-store RaftKV 的兼容性问题"></a>和 Mono-store RaftKV 的兼容性问题</h2><p>新架构简化了 Snapshot 的生成和注入流程：</p>
+<ol>
+<li>在生成时，只需要对当前 Region 对应的 RocksDB 做一个 Snapshot 就行。这个 Snapshot 包含的数据可以新于 Raft Local State。</li>
+<li>在注入时，只需要重命名 RocksDB 文件夹即可。不需要处理 range overlap 的问题。因此不需要引入单线程的 region worker。</li>
+</ol>
+<p>因此 Mono-store RaftKV 需要处理下列问题：</p>
+<ol>
+<li>RocksDB 数据和 Raft 状态不一致。</li>
+<li>Snapshot 的 Range 可能和其他本地 Region Overlap。</li>
+</ol>
+<p>不光是 Snapshot，在 Partitioned RaftKV 中，Region Peer 之间也可能互相 Overlap。所幸这个场景只会出现在 BatchSplit 和调度 Peer 发生冲突的情况下。</p>
+<p>在新架构中，Apply 的落盘也实现了异步化，现在下层引擎可以选择在任意时刻落盘数据，并且在落盘完毕后通知 raftstore。这对 TiFlash 来说是一件好事，我们可以由此来让 KVStore 的落盘不再阻塞。</p>
+<h2 id="采用更大的-Region-的性能影响"><a href="#采用更大的-Region-的性能影响" class="headerlink" title="采用更大的 Region 的性能影响"></a>采用更大的 Region 的性能影响</h2><ol>
+<li>可以采用 Parallel Raft 的方式实现并行 Apply。</li>
+<li>单个 Region 的 Apply 压力会增大，但是下层 RocksDB 的负担减轻了。相比于单个实例的 RocksDB，新架构的层数更少，并且并发写入也更少。后续还可以尝试支持多盘部署。</li>
+</ol>
+<p>另一个考量点是如果集群中出现很多小表，那么大 Region 的效果不能完全展示：</p>
+<ol>
+<li>因为编码的问题，table 编码不相邻的表不能被合并到同一个 Region 中。</li>
+<li>相邻的 table 合并会给 TiFlash 带来不少问题。例如如果给一些小表添加 TiFlash 副本，并且这个小表被合并到一个大 Region 中，那么发来的 Snapshot 可能非常大，并且包含了大量 TiFlash 不需要的数据。此外，TiFlash 本身的存储引擎也需要做出调整。</li>
+</ol>
+<p>我觉得可能 Spanner 的架构会更好一点。也就是说：</p>
+<ol>
+<li>依然是一个 Region 一个 Raft Group，但这个 Region 不再和某个 Key range 绑定。</li>
+<li>一个 Region 下可以被调度多个 Key range。例如有局部性的 Key range 可以被调度在一起，或者处于打散负载的目的可以将 Key range 进行随机的分布。</li>
+</ol>
+<h1 id="TiFlash-相关"><a href="#TiFlash-相关" class="headerlink" title="TiFlash 相关"></a>TiFlash 相关</h1><h2 id="架构"><a href="#架构" class="headerlink" title="架构"></a>架构</h2><h3 id="为什么-TiFlash-实现-HTAP-基于-Raft？"><a href="#为什么-TiFlash-实现-HTAP-基于-Raft？" class="headerlink" title="为什么 TiFlash 实现 HTAP 基于 Raft？"></a>为什么 TiFlash 实现 HTAP 基于 Raft？</h3><p>Raft 帮助我们实现：</p>
+<ol>
+<li>LB</li>
+<li>HA</li>
+<li>Sharding</li>
+</ol>
+<p>但是 TiFlash 只通过 Raft 同步各个表的 record 部分的数据。我们不同步索引，因为不需要。我们不同步 DDL 相关结构，因为并不是所有表都存在 TiFlash 副本。取而代之的是在解析失败，或者后台任务中，定期取请求 TiKV 的 Schema。</p>
+<h3 id="为什么在-TiSpark-之外还开发-TiFlash"><a href="#为什么在-TiSpark-之外还开发-TiFlash" class="headerlink" title="为什么在 TiSpark 之外还开发 TiFlash"></a>为什么在 TiSpark 之外还开发 TiFlash</h3><p>TiSpark 直接操作 TiKV，绕过了事务层，可能产生一致性问题。<br>TiSpark 没有自己的列式存储，处理分析性查询并不占优势。</p>
+<h3 id="TiFlash-是副本越多越好么？"><a href="#TiFlash-是副本越多越好么？" class="headerlink" title="TiFlash 是副本越多越好么？"></a>TiFlash 是副本越多越好么？</h3><p>不是。理论上是 1 副本的性能最好，但是考虑到高可用，通常建议 2 副本。</p>
+<p>1 副本性能最好的原因是，DeltaTree 的 Segment 的粒度要显著比 TiKV 的 region 大，因此同一个 Segment 上会存在多个 Region。</p>
+<p>考虑存在 4 个 Region，从 A 到 D，如果只设置一个副本，其分布类似</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Store1: [A0, B0]</span><br><span class="line">Store2: [C0, D0]</span><br></pre></td></tr></table></figure>
+
+<p>而如果设置两个副本，其分布类似</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Store1: [A0, B0, C0, D0]</span><br><span class="line">Store2: [A1, B1, C1, D1]</span><br></pre></td></tr></table></figure>
+
+<p>假如一个查询同时覆盖这 4 个 region，那么一副本的情况下，Store1 和 Store2 分别扫描自己的一部分数据就行了。而两副本的情况下，则可能扫描到多余的 Region 的数据。</p>
+<p>有一些人还会觉得副本数越多，并发能力越强。但在基于 Raft 的分区策略下，并发能力是通过合理的 Sharding 来提升的。而具体到一个副本上是可以支持大量的并发查询的，并且我们也更容易对这些查询做 Cache，当然在 AP 场景下可能有限。</p>
+<h2 id="存储"><a href="#存储" class="headerlink" title="存储"></a>存储</h2><h3 id="为什么在列存前还有一个-KVStore？"><a href="#为什么在列存前还有一个-KVStore？" class="headerlink" title="为什么在列存前还有一个 KVStore？"></a>为什么在列存前还有一个 KVStore？</h3><p>在 CStore 模型中，WS 和 RS 都是列存，WS 的数据通过 Tuple Mover 被批量合并到 RS 中。体现在 TiFlash 中，WS 是 DM 中基于 PS 的 Delta 层，而 RS 是 Stable 层。</p>
+<p>TiFlash 使用 KVStore，目的是：</p>
+<ol>
+<li>保存未提交的数据。<br> 因为只有已提交的数据才会写入行存，为了和 Apply 状态机一致，所以未提交的数据同样需要持久化，因此引入 KVStore。</li>
+<li>KVStore 管控 Apply 进度，对 DM 屏蔽了上游。DM 可以异步落盘。日志复制的架构下，上游的落盘进度不能比下游更新，因为下游更新，重放是幂等的；而上游更新，会丢数据。</li>
+</ol>
+<p>理论上 KVStore 也可以做到独立写盘，从而使得 DM 的落盘进度不会阻塞 Raft Log 的回收。缺点是会使 KVStore 完全变成上游，写链路更长。虽然我们底层用的 PS，Compaction 相对较少，但同样有写放大。但这目前也无法实现，因为：</p>
+<ol>
+<li>KVStore 落盘是全量的，KVStore 和 DM 的内存操作又绑在一块。<br> 这导致在落盘 KVStore 前必须先落盘 DM。并且整个过程还需要加自己的锁，否则会导致数据丢失，而加锁导致阻塞 Apply。特别在一些场景下，少量的 Raft Log 就会导致 KVStore 和 DM 的落盘，严重影响读取延迟。</li>
+<li>Raftstore V1 的 Apply 落盘又是同步的。<br> 在 Raftstore V1 中，写入的数据可能在操作系统的 Page Cache 中，也有可能被刷入了磁盘。如果是前者，那么会在 raftlog_gc 等地方被显式地 sync。但困难在于，V1 中无法精确获得这些时刻，从而进行通知。又因为 TiFlash 的状态不能落后于 Proxy，否则 Proxy 的 applied_index 可能比 KVStore 新从而丢数据。所以这里索性当做同步落盘处理，让 TiFlash 先落盘。代价是我们要劫持 TiKV 所有可能写 apply state 的行为，哪怕这个写不是 sync 写。后面会介绍我的一些异步落盘的想法。</li>
+</ol>
+<p>一个优化方案是解耦 KVStore 和 DM 的落盘。也就是在 DM 落盘后，再清理掉 KVStore 中的数据。这需要将 Region 中的数据拆分成 KV 对落盘，但这会失去对 KV 对做聚合的能力，从而将顺序写转换为随机写，如果写入很密集，性能也许会比较差，所以这个在功能和性能上都依赖 UniPS。</p>
+<p>另一种方案比较简单，也就是限制由 KVStore，实际上就是 Raftstore 发起的落盘，改为由 DM 发起。但这个方案并不感知 Raft Log 的占用，可能导致它膨胀。</p>
+<p>前面提到异步落盘 KVStore 的问题，一个思路是落盘时使用过去的状态+当前的数据。但存在一些问题：</p>
+<ol>
+<li>这个“过去的状态”也需要比 DM 的落盘状态要新，所以还是要先加锁获取 KVStore 状态，再无锁落盘 DM，再用旧状态落盘 KVStore。这样不能解耦和 DM 的落盘，但能够在落盘 DM 的时候无锁已经很好了。</li>
+<li>Split/Merge 或者可能 Apply Snapshot 改变了全局状态。这样的指令在 V1 中是不能被重放的，不然新 Split 出来的 Region 可能和重启前已经被 Split 和 Persist 出来的 Region 冲突。这样就需要在处理这些 Admin 指令的时候同步等待异步的 Persist 完成。其实更简单的方式是根据之前加锁获取的状态来推断有没有执行这些 Admin。</li>
+<li>需要让 KVStore 支持其他命令的重放。目前来看，应该存在一些 corner case。</li>
+<li>需要让 KVStore 通知 Proxy，当前落盘的 applied_index 并不是期望的 applied_index。这实际上破坏了 TiKV 的 MultiRaft 约束，更好的方式是拒接来自 Proxy 的落盘请求，然后从 KVStore 重新主动发起一个。</li>
+<li>落盘 KVStore 同样需要加锁，从而阻塞 Raft 层的写入。</li>
+</ol>
+<p>另一种方案是过去的状态和过去的数据。比如可以在 KVStore 在落盘时，新开一个 Memtable 处理新写入。此时需要处理新 Memtable 上的 Write 可能依赖老 Memtable 上的 Default 之类的问题。这样的好处是在落盘 KVStore 的时候都不需要加锁了。但依然，在这前面需要落盘 DM。</p>
+<p>如果希望彻底和 DM 解耦，就需要想办法保存上次 DM 落盘到现在落盘 KVStore 期间被写到 DMCache 上的数据。这是困难的。</p>
+<h3 id="Raft-机制带来的内存和存储开销"><a href="#Raft-机制带来的内存和存储开销" class="headerlink" title="Raft 机制带来的内存和存储开销"></a>Raft 机制带来的内存和存储开销</h3><p>有没有可能 TiFlash 自己 truncate 日志呢？理论上 Learner 不会成为 Leader 从而发送日志，也不会处理 Follower Snapshot 请求。而 Raft 协议本身就是让每个节点自己做 Snapshot 然后 truncate 日志的。</p>
+<p>我们在云上 TiFlash 做这样的优化，因为云上使用的 UniPS 对内存更敏感。PageDirectory 为每个 Page 占用大约 0.5KB 的内存。另一方面，UniPS 全部受我们控制，所以相比 Raft Engine 也更好做透明的回收。我们透明回收小于 persisted applied_index 的所有 Entry，如果 Raftstore 会访问已经被回收的 Entry，会给一个 Panic。</p>
+<h3 id="为什么-TiFlash-使用-DeltaTree-作为存储"><a href="#为什么-TiFlash-使用-DeltaTree-作为存储" class="headerlink" title="为什么 TiFlash 使用 DeltaTree 作为存储"></a>为什么 TiFlash 使用 DeltaTree 作为存储</h3><p>目的是为了适应频繁的更新。我们采用类似 <a href="https://gogim1.github.io/posts/c_store" target="_blank" rel="noopener">CStore</a>的思路，引入了 PageStorage 这个对象存储。其中针对写优化的部分称为 Delta 层，类似于 RocksDB 的 L0，存储在 PageStorage 中。针对读优化的部分称为 Stable 层，以 DTFile 文件的形式存储，但文件路径在 PageStorage 作为 External Page 的形式维护。</p>
+<h3 id="DM-的-Delta-层是如何实现的？"><a href="#DM-的-Delta-层是如何实现的？" class="headerlink" title="DM 的 Delta 层是如何实现的？"></a>DM 的 Delta 层是如何实现的？</h3><p>PageStorage 先前使用 Append 写加上 GC 的方案，但带来写放大、读放大和空间放大。</p>
+<p>在 SSD 盘上，随机写和顺序写的差距不大，原因是 FTL 会将随机写转换为顺序写，所以寻址相关的开销并不是很大。尽管如此，顺序写依然存在优势，首先顺序写可以做聚合，同样的 IOPS 写入带宽是会比随机写要大很多，然后是顺序写的 gc 会更容易。此外，因为变成随机读，性能会变差。特别是对类似 Raft Log 这样的 scan 场景。</p>
+<p>新一版本的设计，TiFlash 会通过 SpaceMap 尽量选择从已有的文件中分配一块合适的空间用来写入 blob。当 blob 被分配完毕后，多个 writer 可以并发地写自己的部分。在写入 blob 完成后，会写 WAL 记录相关元信息。在这之后就可以更新内存中的数据。</p>
+<h3 id="为什么-DM-的-Stable-只有一层？"><a href="#为什么-DM-的-Stable-只有一层？" class="headerlink" title="为什么 DM 的 Stable 只有一层？"></a>为什么 DM 的 Stable 只有一层？</h3><p>DM 的设计目标包含优化读性能和支持 MVCC 过滤。这就导致要<a href="https://tidb.net/book/tidb-monthly/2022/2022-04/update/tiflash-storage" target="_blank" rel="noopener">解决下面的场景</a>：</p>
+<blockquote>
+<p>TiFlash 有比较多的数据更新操作，与此同时承载的读请求，都会需要通过 MVCC 版本过滤出需要读的数据。而以 LSM Tree 形式组织数据的话，在处理 Scan 操作的时候，会需要从 L0 的所有文件，以及其他层中与查询的 key-range 有 overlap 的所有文件，以堆排序的形式合并、过滤数据。在合并数据的这个入堆、出堆的过程中 CPU 的分支经常会 miss，cache 命中也会很低。测试结果表明，在处理 Scan 请求的时候，大量的 CPU 都消耗在这个堆排序的过程中。</p>
+</blockquote>
+<blockquote>
+<p>另外，采用 LSM Tree 结构，对于过期数据的清理，通常在 level compaction 的过程中，才能被清理掉（即 Lk-1 层与 Lk 层 overlap 的文件进行 compaction）。而 level compaction 的过程造成的写放大会比较严重。当后台 compaction 流量比较大的时候，会影响到前台的写入和数据读取的性能，造成性能不稳定。</p>
+</blockquote>
+<p>为了缓解单层带来的写放大，DM 按照 key range 分成了多个 Segment。每个 Segment 中包含自己的 Stable 和 Delta。其中 Delta 合并 Stable 会产生一个新的 Stable。</p>
+<h2 id="读取"><a href="#读取" class="headerlink" title="读取"></a>读取</h2><h3 id="为什么-TiFlash-没有-buffer-pool"><a href="#为什么-TiFlash-没有-buffer-pool" class="headerlink" title="为什么 TiFlash 没有 buffer pool"></a>为什么 TiFlash 没有 buffer pool</h3><p>对于 AP 负载，扫表的数据规模很大，Cache 起不到太大作用。</p>
+<h1 id="TiFlash-Cloud"><a href="#TiFlash-Cloud" class="headerlink" title="TiFlash Cloud"></a>TiFlash Cloud</h1><h2 id="快速扩容-What-amp-why？"><a href="#快速扩容-What-amp-why？" class="headerlink" title="快速扩容 What &amp; why？"></a>快速扩容 What &amp; why？</h2><p>目的：</p>
+<ol>
+<li>减少 TiKV 生成、传输和 TiFlash 接收、转换 Snapshot 的开销。</li>
+<li>利用如 S3 的特性，减少无效数据的传递。</li>
+<li>提高副本迁移，特别是单副本迁移的效率。</li>
+</ol>
+<p>要点：</p>
+<ol>
+<li>使用 PageStorage 替换 RaftEngine。</li>
+<li>副本选择和由 Learner 管理的副本创建。</li>
+<li>注入数据。</li>
+<li>对旧版本数据的清理。</li>
+</ol>
+<h2 id="使用-UniPS-替换-RaftEngine"><a href="#使用-UniPS-替换-RaftEngine" class="headerlink" title="使用 UniPS 替换 RaftEngine"></a>使用 UniPS 替换 RaftEngine</h2><p>UniPS 的性能劣于 RaftEngine，写入延迟大约是两倍。但是仍有不少优化空间。</p>
+<h2 id="为什么-TiFlash-Cloud-目前还是两副本？"><a href="#为什么-TiFlash-Cloud-目前还是两副本？" class="headerlink" title="为什么 TiFlash Cloud 目前还是两副本？"></a>为什么 TiFlash Cloud 目前还是两副本？</h2><p>目前快速恢复还是实验状态。TiFlash 重启后也需要进行一些整理和追日志才能服务，可能影响 HA，这些需要时间优化。尽管如此，快速恢复依然是一个很好的特性，因为：</p>
+<ol>
+<li>快速恢复在 1 wn 下，可以从本节点重启，减少 TiKV 生成 Snapshot 的负担。而这个负担在 v1 版本的 TiKV 上是比较大的。</li>
+<li>减少宕机一个节点恢复后，集群恢复到正常 2 副本的时间。</li>
+</ol>
+<h2 id="S3-在-TiFlash-Cloud-中起到什么作用？"><a href="#S3-在-TiFlash-Cloud-中起到什么作用？" class="headerlink" title="S3 在 TiFlash Cloud 中起到什么作用？"></a>S3 在 TiFlash Cloud 中起到什么作用？</h2><ol>
+<li>TiFlash Cloud 会定期上传 Checkpoint 到 S3 上，Checkpoint 是一个完整的快照，可以用来做容灾。即使在存储节点宕机后，其上传的那部分数据依然可以被用来查询。</li>
+<li>TiFlash 计算节点可以从 S3 获得数据，相比从存储节点直接获取要更为便宜。此外，如果存储节点承受过多的读请求，对存算分离的性能有影响。</li>
+<li>快速扩容逻辑可以复用其他存储节点的数据，此时新节点并不需要从 TiKV 或者其他 TiFlash 获得全部的数据。副本迁移同理，不需要涉及全部数据的移动。</li>
+</ol>
+<p>尽管如此，S3 并不是当前 TiFlash 数据的全集。本地会存在：</p>
+<ol>
+<li>上传间隔时间内，还没有上传到 S3 的数据。</li>
+<li>因为生命周期太短，在上传前就被 tombstone 的数据。</li>
+<li>尚在内存中的数据。</li>
+</ol>
+<p>因为基于 Raft，所以本地数据的丢失只会导致从上一个 S3 Checkpoint 开始回放。如果只有一个存储节点，会失去 HA 特性。</p>
+<p>对于 <a href="https://aws.amazon.com/cn/s3/storage-classes/" target="_blank" rel="noopener">S3</a> 而言：</p>
+<ol>
+<li>具备 99.999999999% 的持久性和 99.99% 的可用性。<br> 也就是说一天中的不可用时间大约在 9s 左右。</li>
+</ol>
+<p><a href="https://aws.amazon.com/cn/s3/pricing/?nc=sn&loc=4" target="_blank" rel="noopener">定价</a>：</p>
+<ol>
+<li>PUT/POST/LIST/COPY 0.005</li>
+<li>GET/SELECT 0.0004</li>
+<li>存储 每 GB 0.022 USD 每月</li>
+</ol>
+<h1 id="一些元设计"><a href="#一些元设计" class="headerlink" title="一些元设计"></a>一些元设计</h1><p>我们往往在异步线程中预处理一些对象，并最后将它们 link 到主干上，或者从主干上 unlink 对象，并最后 gc 掉。如果这中间发生重启，那么这些对象就会游离在存储中。如何区分被 unlink 但尚未被回收的对象，和刚被创建但还没有被 link 的对象呢？这里的通用思路是在重启后对比主干和存储中的对象，所有不出现在主干中的对象就需要被删掉。然后依赖重放来解决第一种情况。</p>
+<h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
+<li><a href="https://docs.pingcap.com/zh/tidb/stable/troubleshoot-hot-spot-issues" target="_blank" rel="noopener">https://docs.pingcap.com/zh/tidb/stable/troubleshoot-hot-spot-issues</a></li>
+<li><a href="https://www.infoq.com/articles/raft-engine-tikv-database/" target="_blank" rel="noopener">https://www.infoq.com/articles/raft-engine-tikv-database/</a> RaftEngine</li>
+<li><a href="https://www.zhihu.com/question/47544675" target="_blank" rel="noopener">https://www.zhihu.com/question/47544675</a> 固态硬盘性能</li>
+<li><a href="https://docs.pingcap.com/zh/tidb/stable/titan-overview" target="_blank" rel="noopener">https://docs.pingcap.com/zh/tidb/stable/titan-overview</a> Titan 设计</li>
+<li>Fast scans on key-value stores</li>
+</ol>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/分布式/" rel="tag"># 分布式</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2023/07/14/tiflash-pt-1/" rel="next" title="TiFlash 性能测试的一个场景">
+                <i class="fa fa-chevron-left"></i> TiFlash 性能测试的一个场景
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">201</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">143</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#TiKV-相关"><span class="nav-number">1.</span> <span class="nav-text">TiKV 相关</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#TiKV-写入"><span class="nav-number">1.1.</span> <span class="nav-text">TiKV 写入</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#KV-热点"><span class="nav-number">1.1.1.</span> <span class="nav-text">KV 热点</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#关于-Region-数量的讨论"><span class="nav-number">1.1.2.</span> <span class="nav-text">关于 Region 数量的讨论</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Raft-存储"><span class="nav-number">1.1.3.</span> <span class="nav-text">Raft 存储</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#日志和数据分离存储"><span class="nav-number">1.1.4.</span> <span class="nav-text">日志和数据分离存储</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Titan"><span class="nav-number">1.1.5.</span> <span class="nav-text">Titan</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#TiKV-读取"><span class="nav-number">1.2.</span> <span class="nav-text">TiKV 读取</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#共识层和事务层的关系"><span class="nav-number">1.3.</span> <span class="nav-text">共识层和事务层的关系</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Multi-Raft-相关"><span class="nav-number">2.</span> <span class="nav-text">Multi Raft 相关</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Raft-状态的思考"><span class="nav-number">2.1.</span> <span class="nav-text">Raft 状态的思考</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Multi-Raft-的思考"><span class="nav-number">2.2.</span> <span class="nav-text">Multi Raft 的思考</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Split-Merge-和-Apply-Snapshot"><span class="nav-number">2.2.1.</span> <span class="nav-text">Split/Merge 和 Apply Snapshot</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Partitioned-RaftKV-相关"><span class="nav-number">3.</span> <span class="nav-text">Partitioned RaftKV 相关</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#和-Mono-store-RaftKV-的兼容性问题"><span class="nav-number">3.1.</span> <span class="nav-text">和 Mono-store RaftKV 的兼容性问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#采用更大的-Region-的性能影响"><span class="nav-number">3.2.</span> <span class="nav-text">采用更大的 Region 的性能影响</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#TiFlash-相关"><span class="nav-number">4.</span> <span class="nav-text">TiFlash 相关</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#架构"><span class="nav-number">4.1.</span> <span class="nav-text">架构</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#为什么-TiFlash-实现-HTAP-基于-Raft？"><span class="nav-number">4.1.1.</span> <span class="nav-text">为什么 TiFlash 实现 HTAP 基于 Raft？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#为什么在-TiSpark-之外还开发-TiFlash"><span class="nav-number">4.1.2.</span> <span class="nav-text">为什么在 TiSpark 之外还开发 TiFlash</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#TiFlash-是副本越多越好么？"><span class="nav-number">4.1.3.</span> <span class="nav-text">TiFlash 是副本越多越好么？</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#存储"><span class="nav-number">4.2.</span> <span class="nav-text">存储</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#为什么在列存前还有一个-KVStore？"><span class="nav-number">4.2.1.</span> <span class="nav-text">为什么在列存前还有一个 KVStore？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Raft-机制带来的内存和存储开销"><span class="nav-number">4.2.2.</span> <span class="nav-text">Raft 机制带来的内存和存储开销</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#为什么-TiFlash-使用-DeltaTree-作为存储"><span class="nav-number">4.2.3.</span> <span class="nav-text">为什么 TiFlash 使用 DeltaTree 作为存储</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#DM-的-Delta-层是如何实现的？"><span class="nav-number">4.2.4.</span> <span class="nav-text">DM 的 Delta 层是如何实现的？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#为什么-DM-的-Stable-只有一层？"><span class="nav-number">4.2.5.</span> <span class="nav-text">为什么 DM 的 Stable 只有一层？</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#读取"><span class="nav-number">4.3.</span> <span class="nav-text">读取</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#为什么-TiFlash-没有-buffer-pool"><span class="nav-number">4.3.1.</span> <span class="nav-text">为什么 TiFlash 没有 buffer pool</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#TiFlash-Cloud"><span class="nav-number">5.</span> <span class="nav-text">TiFlash Cloud</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#快速扩容-What-amp-why？"><span class="nav-number">5.1.</span> <span class="nav-text">快速扩容 What &amp; why？</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#使用-UniPS-替换-RaftEngine"><span class="nav-number">5.2.</span> <span class="nav-text">使用 UniPS 替换 RaftEngine</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#为什么-TiFlash-Cloud-目前还是两副本？"><span class="nav-number">5.3.</span> <span class="nav-text">为什么 TiFlash Cloud 目前还是两副本？</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#S3-在-TiFlash-Cloud-中起到什么作用？"><span class="nav-number">5.4.</span> <span class="nav-text">S3 在 TiFlash Cloud 中起到什么作用？</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#一些元设计"><span class="nav-number">6.</span> <span class="nav-text">一些元设计</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">7.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2023/07/22/tikv-tidb-thought/';
+          this.page.identifier = '2023/07/22/tikv-tidb-thought/';
+          this.page.title = '关于 TiKV、TiDB、TiFlash 的一些思考';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+  
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Config({
+        tex2jax: {
+          inlineMath: [ ['$','$'], ["\\(","\\)"]  ],
+          processEscapes: true,
+          skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+        }
+      });
+    </script>
+
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax(), i;
+        for (i=0; i < all.length; i += 1) {
+          all[i].SourceElement().parentNode.className += ' has-jax';
+        }
+      });
+    </script>
+    <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+  
+
+
+  
+
+  
+
+</body>
+</html>
