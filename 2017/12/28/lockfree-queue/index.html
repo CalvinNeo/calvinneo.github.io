@@ -100,12 +100,12 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="因为《并发编程重要概念及比较》文章过长，所以将其中无锁队列部分拆出来。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:image" content="http://www.calvinneo.com/img/bfbc/dequeue.png">
-<meta property="og:updated_time" content="2023-05-21T07:56:40.204Z">
+<meta property="og:image" content="http://www.calvinneo.com/img/concur/dequeue.png">
+<meta property="og:updated_time" content="2023-08-19T16:14:16.249Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Lockfree Queue">
 <meta name="twitter:description" content="因为《并发编程重要概念及比较》文章过长，所以将其中无锁队列部分拆出来。">
-<meta name="twitter:image" content="http://www.calvinneo.com/img/bfbc/dequeue.png">
+<meta name="twitter:image" content="http://www.calvinneo.com/img/concur/dequeue.png">
 
 
 
@@ -404,7 +404,7 @@
 <p>下面是Dequeue的实现，需要额外考虑两种情况下和Enqueue会不会产生冲突：</p>
 <ol>
 <li>链表中只有一个元素<br> 那么head和tail指向的就会是同一个节点。为了解决这个问题，增加一个dummy节点作为head，并且每次弹出<code>head-&gt;next</code>而不是<code>head</code>。<br> 这样，Enqueue的时候不需要访问head，Dequeue的时候，不需要访问tail。MS 队列中指出，这样的好处是可以避免潜在的死锁问题。</li>
-<li>链表为空<br> 此时，head和tail应当指向同一个节点。但这种实现有可能会破坏这个性质。考虑下面的图，我们假设T1在做Dequeue，正准备执行位于1处的判断。此时T2正在执行Enqueue插入节点A，并且刚执行完1处的CAS，此时<code>p-&gt;next</code>不为NULL了。回归到T1，此时1处的判断不成立，Dequeue就会把Enqueue新生成的节点取走。而等线程切换回来，T1还在傻傻地设置tail。Scott等人的论文中提到，这种方案会阻碍对Dequeued节点的释放。<br> <img src="/img/bfbc/dequeue.png"></li>
+<li>链表为空<br> 此时，head和tail应当指向同一个节点。但这种实现有可能会破坏这个性质。考虑下面的图，我们假设T1在做Dequeue，正准备执行位于1处的判断。此时T2正在执行Enqueue插入节点A，并且刚执行完1处的CAS，此时<code>p-&gt;next</code>不为NULL了。回归到T1，此时1处的判断不成立，Dequeue就会把Enqueue新生成的节点取走。而等线程切换回来，T1还在傻傻地设置tail。Scott等人的论文中提到，这种方案会阻碍对Dequeued节点的释放。<br> <img src="/img/concur/dequeue.png"></li>
 </ol>
 <figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">DeQueue() &#123;</span><br><span class="line">    <span class="keyword">do</span>&#123;</span><br><span class="line">        p = head;</span><br><span class="line">        <span class="comment">// 判断是不是空节点</span></span><br><span class="line">        <span class="keyword">if</span> (p-&gt;next == <span class="literal">NULL</span>)&#123; <span class="comment">// 1</span></span><br><span class="line">            <span class="keyword">return</span> ERR_EMPTY_QUEUE;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125; <span class="keyword">while</span>( CAS(head, p, p-&gt;next) != TRUE );</span><br><span class="line">    <span class="keyword">return</span> p-&gt;next-&gt;value;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 

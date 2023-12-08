@@ -107,7 +107,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/leveldb/compaction/version.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/leveldb/compaction/versionset.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/leveldb/compaction/versionset_link.png">
-<meta property="og:updated_time" content="2023-05-22T12:48:57.404Z">
+<meta property="og:updated_time" content="2023-08-29T14:29:15.561Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="LevelDB之Version">
 <meta name="twitter:description" content="在本文中介绍Version和VersionEdit概念，它们有助于理解LevelDB对MVCC的实现。本文拆解自《LevelDB之Compaction》。">
@@ -666,11 +666,12 @@
 <h3 id="VersionSet-Finalize"><a href="#VersionSet-Finalize" class="headerlink" title="VersionSet::Finalize"></a>VersionSet::Finalize</h3><p>这个函数在新 Version 产生后，处理一些额外的工作，主要是计算 Compaction 相关的东西。</p>
 <figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">void</span> VersionSet::Finalize(Version* v) &#123;</span><br><span class="line">  <span class="comment">// Precomputed best level for next compaction</span></span><br><span class="line">  <span class="keyword">int</span> best_level = <span class="number">-1</span>;</span><br><span class="line">  <span class="keyword">double</span> best_score = <span class="number">-1</span>;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">for</span> (<span class="keyword">int</span> level = <span class="number">0</span>; level &lt; config::kNumLevels - <span class="number">1</span>; level++) &#123;</span><br><span class="line">    <span class="keyword">double</span> score;</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
 
-<p>我们知道 LevelDB 的第0层如果超过 kL0_CompactionTrigger 个文件就会触发 Compaction，如果超过 kL0_SlowdownWritesTrigger 就会 slow down write。<strong>针对第0层的特殊情况，这里使用文件数量而不是大小来计算 Compaction Score</strong>，注释里面列了两个原因：</p>
+<p>如果 LevelDB 的第0层超过 kL0_CompactionTrigger 个文件就会触发 Compaction，如果超过 kL0_SlowdownWritesTrigger 就会 slow down write。<strong>针对第0层的特殊情况，这里使用文件数量而不是大小来计算 Compaction Score</strong>，注释里面列了两个原因：</p>
 <ol>
 <li>允许更大的写 buffer，从而减少 Level0 Compaction 的数量。<br> 这里的写 buffer 应该是 <code>options_.write_buffer_size</code> 这个东西。这个阈值控制 Memtable 何时转换成 Immutable Memtable，以及在 Recover 的时候何时直接 dump 成 SSTable。<br> 佶屈聱牙，实际上的意思是，如果写 buffer 太大，又用固定的 size 限制死了的话，可能 Level0 的文件数量会很少，比如就1个，这样会导致频繁的 Level0 Compaction。</li>
-<li>Level0 的文件每次读取都会被 Merge。我们不希望有很多个小文件(perhaps because of a small write-buffer setting, or very high compression ratios, or lots of overwrites/deletions)。<br> 如果写 buffer 很小，这样会导致更多的 Level0 文件。因为 Level0 的文件是 overlap 的，所以如果数量过多，每次查询需要 Seek 的文件数量就越多。</li>
+<li>Level0 的文件每次读取都会被 Merge。我们不希望有很多个小文件(perhaps because of a small write-buffer setting, or very high compression ratios, or lots of overwrites/deletions)。<br> 如果写 buffer 很小，这样会导致更多的 Level0 文件。因为 Level0 的文件是 overlap 的，所以如果数量过多，每次查询需要 Seek 的文件数量就越多。这样造成了较大的读放大。</li>
 </ol>
+<p>总结一下，L0 不希望有一个单独的大文件，也不希望有很多个小文件。所以它选择直接控制文件数量。另外，还要考虑读。我们不希望 Compaction 挤占读带宽，所以当 Compaction 很大的时候，会 slow down write 或者 write stall。</p>
 <figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">...</span><br><span class="line">    <span class="keyword">if</span> (level == <span class="number">0</span>) &#123;</span><br><span class="line">      score = v-&gt;files_[level].size() /</span><br><span class="line">              <span class="keyword">static_cast</span>&lt;<span class="keyword">double</span>&gt;(config::kL0_CompactionTrigger); <span class="comment">// ==4</span></span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
 
 <p>对于第1层以下的层，<strong>计算文件总大小</strong>，而不是文件数量了。<code>MaxBytesForLevel</code> 的大概意思就是 Level1 总大小是 10M，下面每一层翻10倍。如果现在这一层的文件总大小大于 <code>MaxBytesForLevel</code>，则它就具有一个大于 1 的值，从而导致可能的 Compaction。我们会计算整个 Version 中 score 最大的 Level，将它计入 compaction_score_ 中。</p>

@@ -100,7 +100,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="Linux 通过 VFS 建立了一个抽象层，并在之上提供了通用的文件系统模型，使得 Linux 能够支持多种文件系统。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2023-08-13T16:23:24.439Z">
+<meta property="og:updated_time" content="2023-09-01T18:08:57.681Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Linux 的文件系统">
 <meta name="twitter:description" content="Linux 通过 VFS 建立了一个抽象层，并在之上提供了通用的文件系统模型，使得 Linux 能够支持多种文件系统。">
@@ -421,9 +421,27 @@
 <li>如果不存在插入尾部</li>
 </ol>
 <h2 id="最终期限调度"><a href="#最终期限调度" class="headerlink" title="最终期限调度"></a>最终期限调度</h2><p>对某个磁盘扇区上的繁重操作会导致其他扇区的饥饿。<br>写-饥饿-读问题。这是因为写操作常常是异步的，在内核有空时提交，而读操作则用户进程必须阻塞等待，所以是同步的。而读写操作都涉及到访问inode，因此这里存在竞争关系，能够料想写操作的饥饿能够导致读请求的饥饿。为了解决这个问题我们引入了最后期限调度，但是如我们所想的那样，这种控制延迟在一定程度内的算法一定会降低吞吐量。</p>
+<h1 id="磁盘相关性能测试工具介绍"><a href="#磁盘相关性能测试工具介绍" class="headerlink" title="磁盘相关性能测试工具介绍"></a>磁盘相关性能测试工具介绍</h1><h2 id="proc-diskstats"><a href="#proc-diskstats" class="headerlink" title="/proc/diskstats"></a>/proc/diskstats</h2><p>诸如 iostat，node_exporter 之类的都是基于读取该指标实现的。</p>
+<ol>
+<li>Field  1 – # of reads completed<br> This is the total number of reads completed successfully.</li>
+<li>Field  2 – # of reads merged, field 6 – # of writes merged<br> 相邻的 read 和 write 会被 merge 起来读写。比如两个相邻的 4k 会被合并成一个 8k 的，然后被算作一次 io。通过这个可以了解 merge 的频率。</li>
+</ol>
+<h2 id="iostat"><a href="#iostat" class="headerlink" title="iostat"></a>iostat</h2><ol>
+<li>rareq-sz/wareq-sz/dareq-sz<br> read/write/discard 请求的平均大小，kb 计算。</li>
+<li>r_await/w_await/d_await<br> read/write/discard 的处理耗时，包含队列中的等待时间，以及真正的处理时间。毫秒计算。</li>
+<li>f_await<br> The average time (in milliseconds) for flush requests issued to the device to be served. The block layer combines flush requests and executes at most one at a time. Thus flush operations could be twice as long: Wait for current flush request, then execute it, then wait for the next one.</li>
+<li>aqu-sz<br> 队列的平均长度。</li>
+<li>%rrqm/%wrqm/%drqm<br> The percentage of read/write/discard requests merged together before being sent to the device.</li>
+<li>rrqm/s wrqm/s drqm/s<br> The number of read/write/discard requests merged per second that were queued to the device.</li>
+<li>r/s w/s d/s f/s<br> The number (after merges) of read/write/discard/flush requests completed per second for the device.</li>
+<li>rkB/s wkB/s<br> 等于 <code>rareq-sz * r/s</code> 和 <code>wareq-sz * w/s</code>。</li>
+</ol>
 <h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
 <li><a href="https://developer.aliyun.com/article/401890" target="_blank" rel="noopener">https://developer.aliyun.com/article/401890</a><br> ZFS</li>
 <li><a href="https://www.cnblogs.com/zl1991/p/10288291.html" target="_blank" rel="noopener">https://www.cnblogs.com/zl1991/p/10288291.html</a><br> O_SYNC 和 O_DIRECT</li>
+<li><a href="https://www.kernel.org/doc/Documentation/ABI/testing/procfs-diskstats" target="_blank" rel="noopener">https://www.kernel.org/doc/Documentation/ABI/testing/procfs-diskstats</a></li>
+<li><a href="https://manpages.debian.org/testing/sysstat/iostat.1.en.html" target="_blank" rel="noopener">https://manpages.debian.org/testing/sysstat/iostat.1.en.html</a></li>
+<li><a href="https://www.kernel.org/doc/Documentation/iostats.txt" target="_blank" rel="noopener">https://www.kernel.org/doc/Documentation/iostats.txt</a></li>
 </ol>
 
       
@@ -685,7 +703,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#文件系统的原理"><span class="nav-number">1.</span> <span class="nav-text">文件系统的原理</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Linux-VFS"><span class="nav-number">2.</span> <span class="nav-text">Linux VFS</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#超级块"><span class="nav-number">2.1.</span> <span class="nav-text">超级块</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#inode"><span class="nav-number">2.2.</span> <span class="nav-text">inode</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#目录项"><span class="nav-number">2.3.</span> <span class="nav-text">目录项</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#和进程相关的结构"><span class="nav-number">2.4.</span> <span class="nav-text">和进程相关的结构</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Page-Cache"><span class="nav-number">3.</span> <span class="nav-text">Page Cache</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#ZFS"><span class="nav-number">4.</span> <span class="nav-text">ZFS</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#IO-调度"><span class="nav-number">5.</span> <span class="nav-text">IO 调度</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Linus-电梯"><span class="nav-number">5.1.</span> <span class="nav-text">Linus 电梯</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#最终期限调度"><span class="nav-number">5.2.</span> <span class="nav-text">最终期限调度</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">6.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#文件系统的原理"><span class="nav-number">1.</span> <span class="nav-text">文件系统的原理</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Linux-VFS"><span class="nav-number">2.</span> <span class="nav-text">Linux VFS</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#超级块"><span class="nav-number">2.1.</span> <span class="nav-text">超级块</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#inode"><span class="nav-number">2.2.</span> <span class="nav-text">inode</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#目录项"><span class="nav-number">2.3.</span> <span class="nav-text">目录项</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#和进程相关的结构"><span class="nav-number">2.4.</span> <span class="nav-text">和进程相关的结构</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Page-Cache"><span class="nav-number">3.</span> <span class="nav-text">Page Cache</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#ZFS"><span class="nav-number">4.</span> <span class="nav-text">ZFS</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#IO-调度"><span class="nav-number">5.</span> <span class="nav-text">IO 调度</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Linus-电梯"><span class="nav-number">5.1.</span> <span class="nav-text">Linus 电梯</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#最终期限调度"><span class="nav-number">5.2.</span> <span class="nav-text">最终期限调度</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#磁盘相关性能测试工具介绍"><span class="nav-number">6.</span> <span class="nav-text">磁盘相关性能测试工具介绍</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#proc-diskstats"><span class="nav-number">6.1.</span> <span class="nav-text">/proc/diskstats</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#iostat"><span class="nav-number">6.2.</span> <span class="nav-text">iostat</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">7.</span> <span class="nav-text">Reference</span></a></li></ol></div>
             
 
           </div>
