@@ -102,7 +102,8 @@
 <meta property="og:locale" content="zh-Hans">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/percolator3.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/percolator/f5.png">
-<meta property="og:updated_time" content="2023-09-07T16:17:09.187Z">
+<meta property="og:image" content="http://www.calvinneo.com/img/percolator/pert.png">
+<meta property="og:updated_time" content="2024-01-05T05:32:48.958Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Percolator论文阅读">
 <meta name="twitter:description" content="介绍Percolator论文。">
@@ -424,7 +425,7 @@
 <li>写write列和清空lock是要原子的么？<br> 从 L58 和 L61 可以看到，primary 是原子的，作为一个事务整体提交。但 secondary 不是原子的。</li>
 <li>在还没有修改Secondary时就可以访问新版本数据了，这个不破坏一致性么？<br> 同问题2</li>
 </ol>
-<h2 id="实现"><a href="#实现" class="headerlink" title="实现"></a>实现</h2><p>Percolator事务的模型也是2PC，下面就分两步来看实现，其实就是对Demo的形式化。<br>整个实现是一个Transaction类，包含几个成员：</p>
+<h2 id="实现"><a href="#实现" class="headerlink" title="实现"></a>实现</h2><p>Percolator 事务的模型也是 2PC，下面就分两步来看实现，其实就是对 Demo 的形式化。<br>整个实现是一个 Transaction 类，包含几个成员：</p>
 <ol>
 <li><p>writes_<br> 这个事务的所有写入。<code>writes_[0]</code>是primary。<br> 一个Percolator事务类似于</p>
  <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">BEGIN</span><br><span class="line">DML/DQL</span><br><span class="line">...</span><br><span class="line">DML/DQL</span><br><span class="line">Prewrite</span><br><span class="line">Commit</span><br></pre></td></tr></table></figure></li>
@@ -450,12 +451,17 @@
 <p>先对 primary 进行 Prewrite 是必要的么？此外，在Commit 2阶段也能看到类似的现象。以上两个问题，在 Commit 2这部分讲。</p>
 <p>【Q】在第 46 行返回前，可以将已经加了的锁删除掉么？</p>
 <h3 id="Prewrite"><a href="#Prewrite" class="headerlink" title="Prewrite"></a>Prewrite</h3><p>传入的两个参数，primary 是 <code>writes_[0]</code>，primary lock 会在它上面。</p>
-<p>需要lock所有被写的cell，在这之前，先对于所有的cell检查下面两类冲突：</p>
+<p>需要 lock 所有被写的 cell，在这之前，先对于所有的 cell 检查下面两类冲突：</p>
 <ol>
 <li>【Line 32】如果发现 cell 的<strong>write 列</strong>在自己的 ST 之后已经存在一条记录，执行 abort<br> 这实际上是有其他事务已经提交了修改，事务 write-write 冲突了。根据 SI，需要 abort。<br> 【Q】这里有个疑问，SI 不是要到提交的时候再检查冲突么？</li>
 <li>【Line 34】如果发现 cell 的<strong>lock 列</strong>上有另外的记录，无论 timestamp 是什么，执行 abort<br> 有可能是一个已经提交的事务，并且它的 CT 比我们 ST 还要小，但没来得及清理锁，所以并不是冲突。但 Percolator 认为这个不常见，所以还是 abort。<br> 在<a href="https://www.jianshu.com/p/05194f4b29dd" target="_blank" rel="noopener">文章</a>中还提到可能有失败事务的情况。无论事务是在 Prewrite 阶段还是在 Commit 阶段失败，都可能留下 lock 列上的记录。这个时候，以 primary 上的 lock 为准。如果残留的是 secondary lock，就根据 lock 上的信息找 primary。如果 primary lock 已经无了，就说明事务提交成功，否则说明事务未提交成功。</li>
 </ol>
-<p>可以发现，检查冲突实际上就是处理 write 列和 lock 列。<br>如果没有以上两类冲突，才继续进行：</p>
+<p>可以发现，检查冲突实际上就是处理 write 列和 lock 列。这两个检查是优化重点：</p>
+<ol>
+<li>需要注意，Percolator 是一个事务提交的协议。在提交前，DML 已经执行过了。所以如果事务冲突很多，那么这里会频繁发生回滚。可以进行悲观锁的优化来减少这里的冲突。</li>
+<li>另一个优化是可以维护一个全局的 <code>min_commit_ts</code>。后面详细说明。</li>
+</ol>
+<p>如果没有以上两类冲突，才继续进行：</p>
 <ol>
 <li>【Line36】更新 data 列，写入 ST，以及真正的值 <code>w.value</code>。</li>
 <li>【Line37】更新 lock 列，写入 primary 锁的 row 和 col。</li>
@@ -507,7 +513,8 @@
 <p>特别注意，在事务 B 提交前，需要检查 lock 是否还在【Line53】，然后才能写 write。同理，在事务 A 清理前，也需要检查 primary lock 是否存在，如果存在，则可以安全清理掉这个 primary lock。看起来挺奇怪的，如果一个锁存在，就清理掉这个锁。</p>
 <p>还有一种情况，当事务已经写完至少一个 write 列后发生崩溃，此时可能 lock 还没有全清理完，write 可能没有全写完。此时需要 roll forward 这个事务。</p>
 <p>总之，整个判断的原则就是 lock 有没有被 write 取代。</p>
-<h3 id="Lazy-clean和Liveness"><a href="#Lazy-clean和Liveness" class="headerlink" title="Lazy clean和Liveness"></a>Lazy clean和Liveness</h3><p>因为 eager clean 会导致事务回滚，带来性能开销。所以只有在该事务的锁被认为是属于某个dead worker时，才会被清理。</p>
+<h3 id="Lazy-clean-和-Liveness"><a href="#Lazy-clean-和-Liveness" class="headerlink" title="Lazy clean 和 Liveness"></a>Lazy clean 和 Liveness</h3><p>因为 eager clean 会导致事务回滚，带来性能开销。所以只有在该事务的锁被认为是属于某个 dead worker 时，才会被清理。</p>
+<h3 id="gc-和清理-secondary-lock"><a href="#gc-和清理-secondary-lock" class="headerlink" title="gc 和清理 secondary lock"></a>gc 和清理 secondary lock</h3><p>在前面提到，如果发现一个 secondary lock，则需要查询 primary lock，根据 primary lock 是否存在而决定是否清理 secondary lock。<br>但考虑一个特殊的情况，在数据库实现中都会加入 gc 机制，用来清理过时的数据。如果允许 primary lock 被作为过时数据清理掉了，那么实际就无法分清 primary lock 不存在是因为被 gc 清理掉了，还是因为被提交而清理掉了，进而无法判断是否要清理 secondary lock。<br>所以，gc 逻辑不能直接清理 secondary lock。</p>
 <h2 id="Timestamps"><a href="#Timestamps" class="headerlink" title="Timestamps"></a>Timestamps</h2><p>TSO(Timestamp Oracle)服务会阶段性地分配一段区间，并将这段区间的最大值持久化，剩下的时候就可以直接从内存提供服务。当TSO服务重启时，timestamp就会来到持久化了的最大值上。</p>
 <p>为了减少TSO的压力，每个Percolator worker会batch自己的请求为一个RPC发送给TSO服务。当TSO的负载变大时，Percolator的batch大小也会变大。</p>
 <p>Percolator的事务性要求 Get() 操作会返回它的 ST 前所有已经被提交的写。考虑一个事务R在TR读，另一个事务W在TW提交了写，且TW &lt; TR，则R能看到W的写。因为TW &lt; TR，那么TW一定在TR的batch，或者TR之前的batch中。因此可以得到下面的顺序</p>
@@ -518,7 +525,9 @@
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">Transaction W       Transaction TR</span><br><span class="line">Prewrite(row1)</span><br><span class="line">W request TW</span><br><span class="line">                    R get TR</span><br><span class="line">                    Get(row) with TR</span><br><span class="line">Commit(row1)</span><br></pre></td></tr></table></figure>
 
 <h1 id="分析"><a href="#分析" class="headerlink" title="分析"></a>分析</h1><h2 id="ACID-性质"><a href="#ACID-性质" class="headerlink" title="ACID 性质"></a>ACID 性质</h2><p>相比于 RR，SI 不会出现幻读问题，但会<a href="/2017/09/20/transaction/">出现 write skew 问题</a>。通过 select for update 可以解决 write skew 问题。</p>
-<h1 id="TiKV-的实现"><a href="#TiKV-的实现" class="headerlink" title="TiKV 的实现"></a>TiKV 的实现</h1><h2 id="乐观事务和悲观事务"><a href="#乐观事务和悲观事务" class="headerlink" title="乐观事务和悲观事务"></a>乐观事务和悲观事务</h2><p>乐观事务就是标准的 Percolator 的 2PC 实现。</p>
+<h2 id="Percolator-和普通-2PC"><a href="#Percolator-和普通-2PC" class="headerlink" title="Percolator 和普通 2PC"></a>Percolator 和普通 2PC</h2><p>Percolator 改进了普通 2PC 协调者的单点问题。</p>
+<h1 id="TiKV-的实现"><a href="#TiKV-的实现" class="headerlink" title="TiKV 的实现"></a>TiKV 的实现</h1><p>注意，需要区分事务 commit 和 percolator 的 prewrite 和 commit 阶段。在事务执行 <code>commit</code> 前，其内容在内存中。在执行 <code>commit</code> 后，才会执行两阶段提交。</p>
+<h2 id="优化锁冲突"><a href="#优化锁冲突" class="headerlink" title="优化锁冲突"></a>优化锁冲突</h2><h3 id="乐观事务和悲观事务"><a href="#乐观事务和悲观事务" class="headerlink" title="乐观事务和悲观事务"></a>乐观事务和悲观事务</h3><p>乐观事务就是标准的 Percolator 的 2PC 实现。</p>
 <p>悲观事务需要区分快照读和当前读：</p>
 <ol>
 <li>SELECT 是快照读，读的是事务开始前的版本。</li>
@@ -526,6 +535,17 @@
 </ol>
 <p>如果使用当前读，则需要加悲观锁。</p>
 <p>但是 TiKV 不支持间隙锁，所以 range 内的 DML 不会被 SELECT FOR UPDATE 阻塞。</p>
+<p>关于悲观锁的实现细节在随后章节中介绍。</p>
+<h3 id="min-commit-ts"><a href="#min-commit-ts" class="headerlink" title="min_commit_ts"></a>min_commit_ts</h3><p>当一个事务被提交时，将更新 <code>min_commit_ts</code>。因此在判断读写冲突的时候，可以先比较自己的 start_ts 和 min_commit_ts，以减少冲突检查的开销。</p>
+<h2 id="悲观锁的实现"><a href="#悲观锁的实现" class="headerlink" title="悲观锁的实现"></a>悲观锁的实现</h2><p>TiKV 的悲观锁实际上就是将原本要在事务提交阶段加的锁提前到 DML 阶段了。如<a href="https://zhuanlan.zhihu.com/p/79034576" target="_blank" rel="noopener">下图</a>所示。</p>
+<p><img src="/img/percolator/pert.png"></p>
+<p>对图上几点进行说明：</p>
+<ol>
+<li>TiKV 的悲观锁和其他数据库的悲观锁仍有不一致。TiKV 需要在执行 DML 之后才会加锁。其他数据库一般在读的时候就上锁，然后才执行 DML 进行修改</li>
+<li>悲观事务需要从 pd 取一个 for_update_ts，而不是用一开始的 start_ts 去读<br> 否则只能读到 start_ts 之前的数据，不能读到后面的修改了。如果不能读到后面的修改，那么就无法判断后面产生的冲突了。<br> 自然而然地，如果使用 for_update_ts 读到一个冲突，那么就可以更新 for_update_ts，然后用它继续尝试加锁。而不需要整个回滚 start_ts。<br> 但是这里不能使用 max_ts。这是为了避免在执⾏ DML 后加锁之前数据被其他事务修改，从而破坏 SI。</li>
+<li>即使一个 key 不存在，TiKV 也会上锁。</li>
+<li>TiKV 也不会对 DML 中每个要修改的 key 都上锁<br> 对 Insert，只上锁 unique index 和 row key。<br> 对 Delete，只上锁 row key。<br> 对 Update，会上锁 old row key。如果 new row key 不等于 old row key，则上锁 new row key。如果新的 row 中有新的 unique index，则上锁 unique index。</li>
+</ol>
 <h2 id="Resolve-Lock"><a href="#Resolve-Lock" class="headerlink" title="Resolve Lock"></a>Resolve Lock</h2><p><a href="https://zhuanlan.zhihu.com/p/447978561" target="_blank" rel="noopener">https://zhuanlan.zhihu.com/p/447978561</a></p>
 <h2 id="SI-处理锁"><a href="#SI-处理锁" class="headerlink" title="SI 处理锁"></a>SI 处理锁</h2><p>SI 相比 RC，要多一个 <code>load_and_check_lock</code> 的过程。</p>
 <p><code>check_lock</code> <a href="https://github.com/tikv/tikv/blob/v3.1.0/src/storage/mvcc/reader/util.rs" target="_blank" rel="noopener">检查锁</a>：</p>
@@ -725,7 +745,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">201</span>
+                <span class="site-state-item-count">203</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -738,7 +758,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">143</span>
+                <span class="site-state-item-count">145</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -831,7 +851,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Snapshot-Isolation"><span class="nav-number">1.</span> <span class="nav-text">Snapshot Isolation</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#2-2-Transactions"><span class="nav-number">2.</span> <span class="nav-text">2.2 Transactions</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Demo"><span class="nav-number">2.1.</span> <span class="nav-text">Demo</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#实现"><span class="nav-number">2.2.</span> <span class="nav-text">实现</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Commit-1"><span class="nav-number">2.2.1.</span> <span class="nav-text">Commit 1</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Prewrite"><span class="nav-number">2.2.2.</span> <span class="nav-text">Prewrite</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Commit-2"><span class="nav-number">2.2.3.</span> <span class="nav-text">Commit 2</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Get"><span class="nav-number">2.2.4.</span> <span class="nav-text">Get</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Failure"><span class="nav-number">2.3.</span> <span class="nav-text">Failure</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Lazy-clean和Liveness"><span class="nav-number">2.3.1.</span> <span class="nav-text">Lazy clean和Liveness</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Timestamps"><span class="nav-number">2.4.</span> <span class="nav-text">Timestamps</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#分析"><span class="nav-number">3.</span> <span class="nav-text">分析</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#ACID-性质"><span class="nav-number">3.1.</span> <span class="nav-text">ACID 性质</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#TiKV-的实现"><span class="nav-number">4.</span> <span class="nav-text">TiKV 的实现</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#乐观事务和悲观事务"><span class="nav-number">4.1.</span> <span class="nav-text">乐观事务和悲观事务</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Resolve-Lock"><span class="nav-number">4.2.</span> <span class="nav-text">Resolve Lock</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#SI-处理锁"><span class="nav-number">4.3.</span> <span class="nav-text">SI 处理锁</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#顺序读"><span class="nav-number">4.4.</span> <span class="nav-text">顺序读</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Refernce"><span class="nav-number">5.</span> <span class="nav-text">Refernce</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Snapshot-Isolation"><span class="nav-number">1.</span> <span class="nav-text">Snapshot Isolation</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#2-2-Transactions"><span class="nav-number">2.</span> <span class="nav-text">2.2 Transactions</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Demo"><span class="nav-number">2.1.</span> <span class="nav-text">Demo</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#实现"><span class="nav-number">2.2.</span> <span class="nav-text">实现</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Commit-1"><span class="nav-number">2.2.1.</span> <span class="nav-text">Commit 1</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Prewrite"><span class="nav-number">2.2.2.</span> <span class="nav-text">Prewrite</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Commit-2"><span class="nav-number">2.2.3.</span> <span class="nav-text">Commit 2</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Get"><span class="nav-number">2.2.4.</span> <span class="nav-text">Get</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Failure"><span class="nav-number">2.3.</span> <span class="nav-text">Failure</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Lazy-clean-和-Liveness"><span class="nav-number">2.3.1.</span> <span class="nav-text">Lazy clean 和 Liveness</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#gc-和清理-secondary-lock"><span class="nav-number">2.3.2.</span> <span class="nav-text">gc 和清理 secondary lock</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Timestamps"><span class="nav-number">2.4.</span> <span class="nav-text">Timestamps</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#分析"><span class="nav-number">3.</span> <span class="nav-text">分析</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#ACID-性质"><span class="nav-number">3.1.</span> <span class="nav-text">ACID 性质</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Percolator-和普通-2PC"><span class="nav-number">3.2.</span> <span class="nav-text">Percolator 和普通 2PC</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#TiKV-的实现"><span class="nav-number">4.</span> <span class="nav-text">TiKV 的实现</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#优化锁冲突"><span class="nav-number">4.1.</span> <span class="nav-text">优化锁冲突</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#乐观事务和悲观事务"><span class="nav-number">4.1.1.</span> <span class="nav-text">乐观事务和悲观事务</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#min-commit-ts"><span class="nav-number">4.1.2.</span> <span class="nav-text">min_commit_ts</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#悲观锁的实现"><span class="nav-number">4.2.</span> <span class="nav-text">悲观锁的实现</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Resolve-Lock"><span class="nav-number">4.3.</span> <span class="nav-text">Resolve Lock</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#SI-处理锁"><span class="nav-number">4.4.</span> <span class="nav-text">SI 处理锁</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#顺序读"><span class="nav-number">4.5.</span> <span class="nav-text">顺序读</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Refernce"><span class="nav-number">5.</span> <span class="nav-text">Refernce</span></a></li></ol></div>
             
 
           </div>
@@ -854,7 +874,7 @@
         <div class="copyright">
   
   &copy;  2015 - 
-  <span itemprop="copyrightYear">2023</span>
+  <span itemprop="copyrightYear">2024</span>
   <span class="with-love">
     <i class="fa fa-heart"></i>
   </span>
