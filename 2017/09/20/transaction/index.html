@@ -114,7 +114,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/dirtyreadtime2.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/occp1.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/occp2.png">
-<meta property="og:updated_time" content="2024-01-09T16:46:25.370Z">
+<meta property="og:updated_time" content="2024-01-21T14:36:21.684Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="数据库系统中的事务">
 <meta name="twitter:description" content="本文主要讲述数据库中事务的控制模型、事务隔离等级和事务并发控制。 本文从分布式一致性和分布式共识协议一文中分离。">
@@ -532,7 +532,7 @@
 <li>不会脏写<br>  写入数据库的时候，只会覆盖已写入的数据。<br>  这个其实RU也提供了。</li>
 </ul>
 <p><strong>如何预防脏写？</strong>很容易想到通过<strong>行锁</strong>。当要修改某个对象的时候，需要获得其所在行的行锁，并持有到事务提交或者中止。<br><strong>如何预防脏读？</strong>偷懒的办法是也用同一个行锁。这样同一个对象只会同时被一个事务访问。可是这个方案性能太不好啦！为了提高性能，可以尝试多版本的方案，例如对于写入的每个对象，数据库会记住<strong>旧版本的值，即上一次被提交的值</strong>。同时，数据库也会维护当前持有锁的事务设置的新值。</p>
-<p>事务A在访问数据时，如果另一个事务在并发修改了该数据且<strong>已</strong>提交，在Read committed隔离级别下可能产生<strong>不可重复读</strong>，或者称为读偏差(Read Skew)。同理还有写偏差(Write Skew)，相比于Spark语境中的Skew，这里的Skew含义是异常的时机。<br>RC隔离级别下，一个事务开始到提交之前，做出的修改对其他事务是不可见的。</p>
+<p>事务A在访问数据时，如果另一个事务在并发修改了该数据且<strong>已</strong>提交，在Read committed隔离级别下可能产生<strong>不可重复读</strong>，或者称为读偏差(Read Skew)。同理还有写偏差(Write Skew)，相比于数据分析语境中的Skew，这里的Skew含义是异常的时机。<br>RC隔离级别下，一个事务开始到提交之前，做出的修改对其他事务是不可见的。</p>
 <h3 id="Repeatable-Read-RR"><a href="#Repeatable-Read-RR" class="headerlink" title="Repeatable Read(RR)"></a>Repeatable Read(RR)</h3><p>在Repeatable Read隔离等级之下，事务A在访问数据时会加S锁，事务开始后其他事务就不能对该数据进行修改了，因此杜绝了不可重复读。</p>
 <h3 id="Snapshot-Isolation-SI"><a href="#Snapshot-Isolation-SI" class="headerlink" title="Snapshot Isolation(SI)"></a>Snapshot Isolation(SI)</h3><p>A Critique of ANSI SQL Isolation Levels这篇文章指出了ANSI SQL-92给出的四种隔离级别存在的问题，并提出了Snapshot Isolation。</p>
 <p>在这篇文章中，作者提出SERIALIZABLE被描述成不会发生脏读、不可重复读以及幻读的一种隔离级别。但这和“可串行”并不等价，因为它存在Write skew的问题。Write skew指的是两个并行事务都基于自己读到的数据去覆盖另一部分数据，这个问题违反了可串行化。</p>
@@ -599,15 +599,15 @@
 </ol>
 <p>容易发现，越乐观的策略下，对冲突的检查就越迟。从最悲观的访问资源之前加锁，到最乐观的Commit前验证，并发的能力是加强的，但是失败回滚的可能性也就越来越大。虽然加锁的方案看似浪费资源，但因为回滚的开销比加锁大，所以当冲突较多时，基于锁的方案反而能有更好的效率(即每个事务被推迟的时间更少)。此外，在回滚不可避免时，基于时间戳的方法能更早检查到。</p>
 <p>需要注意的是，三种策略都有<strong>单版本和多版本</strong>的实现。对于MVCC，因为一次对数据库的修改都会生成一个新的版本，所成功把问题转化到了如何选取版本和管理版本上，在处理隔离性上会更加的灵活。</p>
-<h2 id="记号"><a href="#记号" class="headerlink" title="记号"></a>记号</h2><p><code>r1(A)</code>表示事务1读取元素A。<code>w2(B)</code>表示事务2写元素B。<br>其中事务1可以被写为T1，事务2可以被写为T2。</p>
-<h2 id="调度"><a href="#调度" class="headerlink" title="调度"></a>调度</h2><h3 id="串行调度"><a href="#串行调度" class="headerlink" title="串行调度"></a>串行调度</h3><p>如果一个调度的动作组成首先是事务A的所有动作，然后是事务B的所有动作，那个这个调度就是个串行调度。</p>
-<p>容易发现，执行事务A-&gt;事务B，和执行事务B-&gt;事务A的结果是不同的。</p>
-<h3 id="可串行性"><a href="#可串行性" class="headerlink" title="可串行性"></a>可串行性</h3><p>可串行性要求<a href="https://zhuanlan.zhihu.com/p/127274032" target="_blank" rel="noopener">事务并发执行的效果和事务单独执行的效果</a>是一样的。比如对于非串行事务S，如果存在一个串行事务S’，使得对于每个数据库初态，调度S和调度S’相同，那么S就是可串行化的。</p>
+<h2 id="记号"><a href="#记号" class="headerlink" title="记号"></a>记号</h2><p><code>r1(A)</code> 表示事务 1 读取元素 A。<code>w2(B)</code> 表示事务 2 写元素 B。<br>其中事务 1 可以被写为 T1，事务 2 可以被写为 T2。</p>
+<h2 id="调度"><a href="#调度" class="headerlink" title="调度"></a>调度</h2><h3 id="串行调度"><a href="#串行调度" class="headerlink" title="串行调度"></a>串行调度</h3><p>如果一个调度的动作组成首先是事务 A 的所有动作，然后是事务 B 的所有动作，那个这个调度就是个串行调度。</p>
+<p>容易发现，执行事务 A -&gt;事务 B，和执行事务 B -&gt;事务 A 的结果是不同的。</p>
+<h3 id="可串行性"><a href="#可串行性" class="headerlink" title="可串行性"></a>可串行性</h3><p>可串行性要求<a href="https://zhuanlan.zhihu.com/p/127274032" target="_blank" rel="noopener">事务并发执行的效果和事务单独执行的效果</a>是一样的。比如对于非串行事务 <code>S</code>，如果存在一个串行事务 <code>S&#39;</code>，使得对于每个数据库初态，调度 <code>S</code> 和调度 <code>S&#39;</code> 相同，那么 <code>S</code> 就是可串行化的。</p>
 <p>关于这一点，我们可以类比到CPU并行编程里面的内存模型。如下图所示：</p>
 <ol>
 <li>左边的是串行调度，由定义可知</li>
-<li>右边的是不是串行调度，也不是可串行调度<br> 因为右边的结果和先T1再T2(左图)不一样，也和先T2再T1不一样</li>
-<li>中间的图<strong>不是串行调度</strong>，但是可串行调度<br> 虽然T1和T2是彼此交织的，但是它的<strong>结果和左边的图是一样的</strong>，所以<strong>是可串行调度</strong>。</li>
+<li>右边的是不是串行调度，也不是可串行调度<br> 因为右边的结果和先 T1 再 T2 (左图)不一样，也和先 T2 再 T1 不一样</li>
+<li>中间的图<strong>不是串行调度</strong>，但是可串行调度<br> 虽然 T1 和 T2 是彼此交织的，但是它的<strong>结果和左边的图是一样的</strong>，所以<strong>是可串行调度</strong>。</li>
 </ol>
 <p><img src="/img/dbtrans/cser.png"></p>
 <h3 id="冲突操作"><a href="#冲突操作" class="headerlink" title="冲突操作"></a>冲突操作</h3><p>在事务序列中的两个连续操作，如果交换他们的顺序，则涉及事务中至少有一个的行为会改变，那么这两个操作是冲突的。</p>
@@ -623,66 +623,66 @@
 <li>操作同一元素</li>
 <li>其中一个是写</li>
 </ol>
-<h3 id="冲突可串行性-Conflict-Serializability"><a href="#冲突可串行性-Conflict-Serializability" class="headerlink" title="冲突可串行性(Conflict Serializability)"></a>冲突可串行性(Conflict Serializability)</h3><p>一个调度S在保证冲突操作的次序不变的前提下，通过<strong>交换非冲突操作的次序</strong>得到另一个调度S’。此时，如果S’是可串行的，就说S是一个冲突可串行化的调度。</p>
-<p>考虑这一组图。图1就是一个冲突可串行化的调度。交换T1的<code>read(B)</code>和T2的<code>write(A)</code>可以得到如图2所示的调度。进一步，如果交换T1的<code>read(B)-&gt;write(B)</code>和T2的<code>read(A)-&gt;write(A)</code>，就可以得到如图3的调度。</p>
+<h3 id="冲突可串行性-Conflict-Serializability"><a href="#冲突可串行性-Conflict-Serializability" class="headerlink" title="冲突可串行性(Conflict Serializability)"></a>冲突可串行性(Conflict Serializability)</h3><p>一个调度 S 在保证冲突操作的次序不变的前提下，通过<strong>交换非冲突操作的次序</strong>得到另一个调度 S’。此时，如果 S’ 是可串行的，就说 S  是一个冲突可串行化的调度。</p>
+<p>考虑这一组图。图1就是一个冲突可串行化的调度。交换 T1 的 <code>read(B)</code> 和 T2 的 <code>write(A)</code> 可以得到如图2所示的调度。进一步，如果交换 T1 的 <code>read(B)-&gt;write(B)</code> 和 T2 的 <code>read(A)-&gt;write(A)</code>，就可以得到如图3的调度。</p>
 <p>但是图4就不是一个可串行化调度，因为<code>read(Q)</code>和两个<code>write(Q)</code>都是冲突操作。<br><img src="/img/dbtrans/cser2.png"></p>
 <p>下图展示了通过交换相邻操作(下换线)将冲突可串行化调度转为串行调度的过程。<br><img src="/img/dbtrans/cstrans.png"></p>
 <h3 id="冲突可串行化是一个更强的条件"><a href="#冲突可串行化是一个更强的条件" class="headerlink" title="冲突可串行化是一个更强的条件"></a>冲突可串行化是一个更强的条件</h3><p>冲突可串行化是一个比较强的条件。一个可串行化调度未必是冲突可串行化的，原因是可串行化调度可能交换冲突操作。例如事务<code>w1(A)</code>作用是A+2，事务<code>w2(A)</code>的作用是A+3。那么两个事务还是可串行化的。</p>
 <p>考虑下面的例子，S1是串行的，S2通过交换<code>w2(Y) w2(X)</code>和<code>w1(X)</code>可以得到S1。明显，冲突操作之间发生了交换，这不是冲突可串行化的。但S1却是S2的串行调度。这是因为两种调度最终都使得X的值为w3(X)而Y的值为w2(Y)。</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">S1: w1(Y) w1(X) w2(Y) w2(X) w3(X)</span><br><span class="line">S2: w1(Y) w2(Y) w2(X) w1(X) w3(X)</span><br></pre></td></tr></table></figure>
 
-<h3 id="优先图"><a href="#优先图" class="headerlink" title="优先图"></a>优先图</h3><p>可以通过构造优先图，并判断其中是否有环来判断事务是否是冲突可串行化的。构造方式，对于T1中的A1，和T2中的A2，如果满足：</p>
+<h3 id="优先图"><a href="#优先图" class="headerlink" title="优先图"></a>优先图</h3><p>可以通过构造优先图，并判断其中是否有环来判断事务是否是冲突可串行化的。构造方式，对于 T1 中的 A1，和 T2 中的 A2，如果满足：</p>
 <ol>
-<li>在S中A1在A2前；</li>
-<li>A1和A2涉及同一数据库元素</li>
-<li>A1和A2至少有一个是写操作</li>
+<li>在 S 中 A1 在 A2 前；</li>
+<li>A1 和 A2 涉及同一数据库元素</li>
+<li>A1 和 A2 至少有一个是写操作</li>
 </ol>
-<p>那么就添加一条从1到2的有向弧，称为A1优先于A2。</p>
-<p>优先图的原理是，如果A1在A2前，而我们要将T1和T2串行化，根据定义，那么T1肯定要整体在T2前。</p>
+<p>那么就添加一条从1到2的有向弧，称为 A1 优先于 A2。</p>
+<p>优先图的原理是，如果 A1 在 A2 前，而我们要将 T1 和 T2 串行化，根据定义，那么 T1 肯定要整体在 T2 前。</p>
 <h2 id="基于锁的并发控制"><a href="#基于锁的并发控制" class="headerlink" title="基于锁的并发控制"></a>基于锁的并发控制</h2><p>记：</p>
 <ol>
-<li><code>l1(X)</code>表示事务1请求给X上锁</li>
-<li><code>u1(X)</code>表示事务1释放X的锁</li>
+<li><code>l1(X)</code> 表示事务1请求给 X 上锁</li>
+<li><code>u1(X)</code> 表示事务1释放 X 的锁</li>
 </ol>
 <p>需要保证：</p>
 <ol>
-<li>事务一致性<br> 只要有事务<code>r1(X)</code>和<code>w1(X)</code>，则前面有<code>l1(X)</code>，后面有<code>u1(X)</code>。实际保证访问对象就会上锁。</li>
-<li>事务合法性<br> 只要调度动作中有<code>l1(X)</code>和<code>l2(X)</code>，则中间必然有<code>u1(X)</code>。实际上保证不会重复加锁。</li>
+<li>事务一致性<br> 只要有事务 <code>r1(X)</code> 和 <code>w1(X)</code>，则前面有 <code>l1(X)</code>，后面有 <code>u1(X)</code>。实际保证访问对象就会上锁。</li>
+<li>事务合法性<br> 只要调度动作中有 <code>l1(X)</code> 和 <code>l2(X)</code>，则中间必然有 <code>u1(X)</code>。实际上保证不会重复加锁。</li>
 </ol>
 <p>下面的调度是合法的</p>
-<h3 id="2PL"><a href="#2PL" class="headerlink" title="2PL"></a>2PL</h3><p>2PL用户实现InnoDB和SQL Server中的S级别，以及DB2中的RR级别。其思路是通过为每个对象加锁来解决冲突。这些锁可以是共享的，也可以是排他的，具体来说：</p>
+<h3 id="2PL"><a href="#2PL" class="headerlink" title="2PL"></a>2PL</h3><p>2PL 用户实现 InnoDB 和 SQL Server 中的 S 级别，以及 DB2 中的 RR 级别。其思路是通过为每个对象加锁来解决冲突。这些锁可以是共享的，也可以是排他的，具体来说：</p>
 <ol>
 <li>如果需要读取，那么可以使用共享锁</li>
 <li>如果需要写入，必须使用排它锁</li>
 <li>如果先读后写，需要将共享锁升级为排它锁，升级过程如同重新获得排它锁</li>
-<li>获得锁之后，必须持有锁到事务提交或者中止<br> 这应该是S2PL和SS2PL的规定。</li>
+<li>获得锁之后，必须持有锁到事务提交或者中止<br> 这应该是 S2PL 和 SS2PL 的规定。</li>
 </ol>
-<p>其中做最重要的过程是，2PL将加解锁过程分为两个阶段，在第一阶段只能加锁或者操作数据，不能解锁；在第二阶段只能解锁或者操作数据，不能加锁。<br>我们认为在解开第一个锁时，事务成功。【Q】这是在《数据库系统实现里面的措辞》，但在解锁之后，还是可以操作数据的啊，这些数据还没操作，为什么这个事务就算成功了？其实这个涉及级联回滚的细节，我们还真有S2PL和SS2PL来要求在Commit之后再释放锁。</p>
-<p>数据库实现了死锁检测和死锁超时机制。以InnoDB为例，如果启动死锁检测(<code>innodb_lock_wait_timeout</code>)，那么会在死锁发生时会选择将持有最少行级X锁的事务进行回滚。当然也可以选择等待(<code>innodb_lock_wait_timeout</code>)超时。</p>
-<h3 id="2PL可串行性的证明"><a href="#2PL可串行性的证明" class="headerlink" title="2PL可串行性的证明"></a>2PL可串行性的证明</h3><p>假设在2PL条件下，Ti在S中有第一个解锁动作<code>ui(x)</code>，则可以断言我们能将Ti的动作不经过任何有冲突的读和写移动到开始。</p>
-<p>我们不放假设Ti的某个动作<code>wi(Y)</code>前有Tj的动作<code>wj(Y)</code>。那么根据事务一致性原则，在调度S中，<code>uj(Y)</code>和<code>li(Y)</code>必然出现在下面的序列中。</p>
+<p>其中做最重要的过程是，2PL 将加解锁过程分为两个阶段，在第一阶段只能加锁或者操作数据，不能解锁；在第二阶段只能解锁或者操作数据，不能加锁。<br>我们认为在解开第一个锁时，事务成功。【Q】这是在《数据库系统实现里面的措辞》，但在解锁之后，还是可以操作数据的啊，这些数据还没操作，为什么这个事务就算成功了？其实这个涉及级联回滚的细节，我们还真有 S2PL 和 SS2PL 来要求在 Commit 之后再释放锁。</p>
+<p>数据库实现了死锁检测和死锁超时机制。以 InnoDB 为例，如果启动死锁检测(<code>innodb_lock_wait_timeout</code>)，那么会在死锁发生时会选择将持有最少行级 X 锁的事务进行回滚。当然也可以选择等待(<code>innodb_lock_wait_timeout</code>)超时。</p>
+<h3 id="2PL可串行性的证明"><a href="#2PL可串行性的证明" class="headerlink" title="2PL可串行性的证明"></a>2PL可串行性的证明</h3><p>假设在 2PL 条件下，Ti 在 S 中有第一个解锁动作 <code>ui(x)</code>，则可以断言我们能将 Ti 的动作不经过任何有冲突的读和写移动到开始。</p>
+<p>我们不妨假设 Ti 的某个动作 <code>wi(Y)</code> 前有 Tj 的动作 <code>wj(Y)</code>。那么根据事务一致性原则，在调度 S 中，<code>uj(Y)</code> 和 <code>li(Y)</code> 必然出现在下面的序列中。</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">wj(Y) uj(Y) li(Y) wi(Y)</span><br></pre></td></tr></table></figure>
 
-<p>下面，我们将“第一个解锁动作<code>ui(x)</code>”加入到序列S中，它至少处于如下位置(可能还会更靠左)。仔细查看下面式子，这违反了2PL的条件，因为T在上锁Y之前解锁了X。</p>
+<p>下面，我们将“第一个解锁动作 <code>ui(x)</code> ”加入到序列S中，它至少处于如下位置(可能还会更靠左)。仔细查看下面式子，这违反了 2PL 的条件，因为 T 在上锁 Y 之前解锁了 X。</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">wj(Y) ui(X) uj(Y) li(Y) wi(Y)</span><br></pre></td></tr></table></figure>
 
-<h3 id="死锁"><a href="#死锁" class="headerlink" title="死锁"></a>死锁</h3><h4 id="2PL不能避免死锁"><a href="#2PL不能避免死锁" class="headerlink" title="2PL不能避免死锁"></a>2PL不能避免死锁</h4><p><strong>2PL不能避免死锁</strong>，如下所示。两个事务按照2PL加锁，假定第一个事务1请求到了4，第二个事务请求到了3，那么1和2就会陷入死锁。那么我们就必须干掉其中一个事务。</p>
+<h3 id="死锁"><a href="#死锁" class="headerlink" title="死锁"></a>死锁</h3><h4 id="2PL不能避免死锁"><a href="#2PL不能避免死锁" class="headerlink" title="2PL不能避免死锁"></a>2PL不能避免死锁</h4><p><strong>2PL不能避免死锁</strong>，如下所示。两个事务按照 2PL 加锁，假定第一个事务1请求到了4，第二个事务请求到了3，那么1和2就会陷入死锁。那就必须干掉其中一个事务。</p>
 <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">START</span> <span class="keyword">TRANSACTION</span>;</span><br><span class="line"><span class="keyword">UPDATE</span> StockPrice <span class="keyword">SET</span> <span class="keyword">close</span> = <span class="number">45</span> <span class="keyword">WHERE</span> stock_id = <span class="number">4</span>;</span><br><span class="line"><span class="keyword">UPDATE</span> StockPrice <span class="keyword">SET</span> <span class="keyword">close</span> = <span class="number">19</span> <span class="keyword">WHERE</span> stock_id = <span class="number">3</span>;</span><br><span class="line"><span class="keyword">COMMIT</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">START</span> <span class="keyword">TRANSACTION</span>;</span><br><span class="line"><span class="keyword">UPDATE</span> StockPrice <span class="keyword">SET</span> <span class="keyword">close</span> = <span class="number">22</span> <span class="keyword">WHERE</span> stock_id = <span class="number">3</span>;</span><br><span class="line"><span class="keyword">UPDATE</span> StockPrice <span class="keyword">SET</span> <span class="keyword">close</span> = <span class="number">44</span> <span class="keyword">WHERE</span> stock_id = <span class="number">4</span>;</span><br><span class="line"><span class="keyword">COMMIT</span>;</span><br></pre></td></tr></table></figure>
 
-<p>2PL不能避免死锁。既然如此，为什么还需要引入2PL呢？</p>
+<p>2PL 不能避免死锁。既然如此，为什么还需要引入 2PL 呢？</p>
 <ol>
-<li><p>2PL这里的顺序并不是锁的顺序，而是所有的加锁工作必须在解锁工作完成前完成，显然这不能避免死锁<br> 为了解决死锁问题，一个方案就是<strong>原子地</strong>获得所有的锁，这实际上破坏了占有且申请的条件。但这种办法对数据库来说很困难，因为它很难知道用户具体要那些资源，并且这样一次性锁协议牺牲了并发性。<br> 【Q】我们知道指定加锁顺序，例如先获取第一个锁，然后才能获取第二个锁，可以避免死锁；或者遍历链表的时候，始终沿着同一个方向遍历等。我们能设计出这样的加锁协议，从而避免死锁？</p>
+<li><p>2PL 这里的顺序并不是锁的顺序，而是所有的加锁工作必须在解锁工作完成前完成，显然这不能避免死锁<br> 为了解决死锁问题，一个方案就是<strong>原子地</strong>获得所有的锁，这实际上破坏了占有且申请的条件。但这种办法对数据库来说很困难，因为它很难知道用户具体要那些资源，并且这样一次性锁协议牺牲了并发性。<br> 【Q】我们知道指定加锁顺序，例如先获取第一个锁，然后才能获取第二个锁，可以避免死锁；或者遍历链表的时候，始终沿着同一个方向遍历等。我们能设计出这样的加锁协议，从而避免死锁？</p>
 </li>
-<li><p>2PL的目的是为了保证<strong>可串行性</strong>，进而是为了保证隔离性。<br> 如果不满足2PL，那么可能破坏隔离性。考虑下面的Case</p>
+<li><p>2PL 的目的是为了保证<strong>可串行性</strong>，进而是为了保证隔离性。<br> 如果不满足 2PL，那么可能破坏隔离性。考虑下面的 Case</p>
  <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">Ta                                  Tb</span><br><span class="line">xl(A)</span><br><span class="line">w(A)</span><br><span class="line">u(A)</span><br><span class="line">                                    xl(A)</span><br><span class="line">                                    w(A)</span><br><span class="line">                                    u(A)</span><br><span class="line">sl(A)</span><br><span class="line">r(A)</span><br><span class="line">u(A)</span><br></pre></td></tr></table></figure>
 
-<p> 容易看出，Ta先加写锁进行了写入，然后释放锁。Tb再加写锁进行了另一次写入。后面Ta重新加读锁进行了读取，此时Ta读到的不是自己刚写入的。事务的隔离性会被破坏。</p>
+<p> 容易看出，Ta 先加写锁进行了写入，然后释放锁。Tb 再加写锁进行了另一次写入。后面 Ta 重新加读锁进行了读取，此时 Ta 读到的不是自己刚写入的。事务的隔离性会被破坏。</p>
 </li>
 </ol>
-<h4 id="通过等待图检测死锁"><a href="#通过等待图检测死锁" class="headerlink" title="通过等待图检测死锁"></a>通过等待图检测死锁</h4><h4 id="通过时间戳预防死锁"><a href="#通过时间戳预防死锁" class="headerlink" title="通过时间戳预防死锁"></a>通过时间戳预防死锁</h4><p>引入一个新的时间戳来解决死锁问题。这个时间戳不同于“基于时间戳的并发控制”中介绍的时间戳，例如当事务回滚后，并发控制的时间戳会重置为一个更晚的，但死锁检测的时间戳不会重置。<br>当事务T发现自己需要等待事务U的锁时，将会比较时间戳，并选择Wait-Die和Wound-Wait两种方案之一来执行</p>
+<h4 id="通过等待图检测死锁"><a href="#通过等待图检测死锁" class="headerlink" title="通过等待图检测死锁"></a>通过等待图检测死锁</h4><h4 id="通过时间戳预防死锁"><a href="#通过时间戳预防死锁" class="headerlink" title="通过时间戳预防死锁"></a>通过时间戳预防死锁</h4><p>引入一个新的时间戳来解决死锁问题。这个时间戳不同于“基于时间戳的并发控制”中介绍的时间戳，例如当事务回滚后，并发控制的时间戳会重置为一个更晚的，但死锁检测的时间戳不会重置。<br>当事务 T 发现自己需要等待事务 U 的锁时，将会比较时间戳，并选择 Wait-Die 和 Wound-Wait 两种方案之一来执行</p>
 <ol>
-<li>Wait-Die<br> 如果T比U老(时间戳小)，则T等待U。也就是老等新。<br> 否则，T回滚。也就是新自杀。</li>
-<li>Wound-Wait<br> 如果T比U老，它将主动“伤害”U，使U回滚，并放弃所有T需要的锁。也就是新自杀。<br> 否则，T等待U。也就是新等老。</li>
+<li>Wait-Die<br> 如果 T 比 U 老(时间戳小)，则 T 等待 U。也就是老等新。<br> 否则，T 回滚。也就是新自杀。</li>
+<li>Wound-Wait<br> 如果 T 比 U 老，它将主动“伤害” U，使 U 回滚，并放弃所有 T 需要的锁。也就是新自杀。<br> 否则，T 等待 U。也就是新等老。</li>
 </ol>
 <p>共同点：</p>
 <ol>
@@ -1036,7 +1036,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">145</span>
+                <span class="site-state-item-count">146</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
