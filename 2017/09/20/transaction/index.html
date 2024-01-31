@@ -114,7 +114,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/dirtyreadtime2.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/occp1.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/occp2.png">
-<meta property="og:updated_time" content="2024-01-29T17:53:41.419Z">
+<meta property="og:updated_time" content="2024-01-31T12:05:44.552Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="数据库系统中的事务">
 <meta name="twitter:description" content="本文主要讲述数据库中事务的控制模型、事务隔离等级和事务并发控制。 本文从分布式一致性和分布式共识协议一文中分离。">
@@ -485,7 +485,7 @@
 </ol>
 <p>也就是说，<strong>x和y的值交换了</strong>。这个不仅不符合我们的期望，也破坏了完整性约束，从而导致数据库不满足一致性。另一些写偏差的例子：</p>
 <ol>
-<li>on call系统<br> 约束：至少有一个医生on call。<br> 假设 A 和 B 在同时开启申请不 on call 事务，可能发生：<ol>
+<li>on call系统<br> 约束：至少有一个医生 on call。<br> 假设 A 和 B 在同时开启申请不 on call 事务，可能发生：<ol>
 <li>事务 P 检查今晚有多少个医生可以 on call，发现至少有两个医生 A 和 B</li>
 <li>事务 P 通过了 A 的请假</li>
 <li>在快照隔离下，事务 Q 通过读取快照同样发现至少有两个医生</li>
@@ -569,10 +569,11 @@
 </ol>
 </li>
 </ol>
-<h4 id="MVCC和SI的区别和联系"><a href="#MVCC和SI的区别和联系" class="headerlink" title="MVCC和SI的区别和联系"></a>MVCC和SI的区别和联系</h4><p><strong>MVCC 和锁都是 SI 的实现手段</strong>，当然，也可以有一些方案完全无锁地实现 SI。<br><a href="https://zhuanlan.zhihu.com/p/59115828" target="_blank" rel="noopener">数据行可见性的区别</a>：</p>
+<h4 id="MVCC和SI的区别和联系"><a href="#MVCC和SI的区别和联系" class="headerlink" title="MVCC和SI的区别和联系"></a>MVCC和SI的区别和联系</h4><p><strong>MVCC 和锁都是 SI 的实现手段</strong>，当然，也可以有一些方案完全无锁地实现 SI。</p>
 <ol>
-<li>MVCC<br> 事务 T1 的快照记录是在生成快照时的活跃事务集合。这个集合的时间区间是 [min, max]，其中所有比 min 小的事务都被<strong>提交</strong>了，所有比 max 大的事务都<strong>没有启动</strong>。如果落在这个区间内，还需要去真正比较是否在这个集合中。详见对 MVCC 的介绍。</li>
+<li>MVCC<br> <a href="https://zhuanlan.zhihu.com/p/59115828" target="_blank" rel="noopener">这篇文章</a>中说，事务 T1 的快照记录是在生成快照时的活跃事务集合。这个集合的时间区间是 [min, max]，其中所有比 min 小的事务都被<strong>提交</strong>了，所有比 max 大的事务都<strong>没有启动</strong>。如果落在这个区间内，还需要去真正比较是否在这个集合中。详见对 MVCC 的介绍。</li>
 <li>Percolator<br> 保证能够读到 <code>R.start_ts &gt; W.commit_ts</code>。也就是说，当且仅当任意的事务 W 的 commit_ts 小于 R 的 start_ts，它能被事务 R 读到。<br> 【Q】这个是不是和 SI 不太一样？SI 貌似是 CT2 和 [ST1,CT1] 比较的。这里注意，和 [ST1,CT1] 比较的目的是检测冲突。</li>
+<li>锁<br> 也就是直接禁止掉冲突事务。</li>
 </ol>
 <h3 id="Serializable-S"><a href="#Serializable-S" class="headerlink" title="Serializable(S)"></a>Serializable(S)</h3><p>等同于在每个读的数据行上加S锁，从而解决了幻读的问题。但这种方法具有很差的并发性，会导致大量超时和锁竞争。<br>【Q】就我理解而言，RU/RC/RR这三个事务等级都是对于一个记录R而言的，但是S隔离等级涉及多个记录R。我们可以类比记录到变量？</p>
 <p>S的实现通常有下面几种方案：</p>
@@ -602,17 +603,17 @@
 <li>RU<br> 读到的是20</li>
 <li>RC、RR、S<br> 读到的是10</li>
 </ol>
-<h1 id="并发事务控制"><a href="#并发事务控制" class="headerlink" title="并发事务控制"></a>并发事务控制</h1><p>为了保证<a href="http://catkang.github.io/2018/09/19/concurrency-control.html" target="_blank" rel="noopener">并发执行的事务在<strong>某一隔离级别</strong>上的正确执行的机制</a>，我们需要并发事务控制来解决并发事务之间<strong>隔离性</strong>的问题。<br>并发控制的主要思想可以根据乐观程度进行分类：</p>
+<h1 id="并发事务控制"><a href="#并发事务控制" class="headerlink" title="并发事务控制"></a>并发事务控制</h1><p>为了保证<a href="http://catkang.github.io/2018/09/19/concurrency-control.html" target="_blank" rel="noopener">并发执行的事务在<strong>某一隔离级别</strong>上的隔离性</a>，引入并发事务控制。<br>并发控制的主要思想可以根据乐观程度进行分类：</p>
 <ol>
 <li>基于锁<br> 这个方法是最悲观的，也就是在访问资源之前，需要加锁。如果获取不到锁，就阻塞事务。</li>
 <li>基于时间戳<br> 在每个<strong>事务开始时</strong>，获得时间戳，并期望事务按照时间戳的顺序执行。如果发现冲突，可以选择阻塞或者回滚。</li>
 <li>基于有效性确认<br> 在<strong>事务提交时</strong>，再进行验证。如果发生冲突，只能回滚。<br> 当然，这种可能产生活锁，比如两个事务交替回滚。一个解决方案是在反复几次后，尝试加锁。</li>
 </ol>
-<p>容易发现，越乐观的策略下，对冲突的检查就越迟。从最悲观的访问资源之前加锁，到最乐观的Commit前验证，并发的能力是加强的，但是失败回滚的可能性也就越来越大。虽然加锁的方案看似浪费资源，但因为回滚的开销比加锁大，所以当冲突较多时，基于锁的方案反而能有更好的效率(即每个事务被推迟的时间更少)。此外，在回滚不可避免时，基于时间戳的方法能更早检查到。</p>
-<p>需要注意的是，三种策略都有<strong>单版本和多版本</strong>的实现。对于MVCC，因为一次对数据库的修改都会生成一个新的版本，所成功把问题转化到了如何选取版本和管理版本上，在处理隔离性上会更加的灵活。</p>
+<p>容易发现，越乐观的策略下，对冲突的检查就越迟。从最悲观的访问资源之前加锁，到最乐观的 Commit 前验证，并发的能力是加强的，但是失败回滚的可能性也就越来越大。虽然加锁的方案看似浪费资源，但因为回滚的开销比加锁大，所以当冲突较多时，基于锁的方案反而能有更好的效率(即每个事务被推迟的时间更少)。此外，在回滚不可避免时，基于时间戳的方法能更早检查到。</p>
+<p>需要注意的是，三种策略都有<strong>单版本和多版本</strong>的实现。对于 MVCC，因为一次对数据库的修改都会生成一个新的版本，所成功把问题转化到了如何选取版本和管理版本上，在处理隔离性上会更加的灵活。</p>
 <h2 id="记号"><a href="#记号" class="headerlink" title="记号"></a>记号</h2><p><code>r1(A)</code> 表示事务 1 读取元素 A。<code>w2(B)</code> 表示事务 2 写元素 B。<br>其中事务 1 可以被写为 T1，事务 2 可以被写为 T2。</p>
 <h2 id="调度"><a href="#调度" class="headerlink" title="调度"></a>调度</h2><h3 id="串行调度"><a href="#串行调度" class="headerlink" title="串行调度"></a>串行调度</h3><p>如果一个调度的动作组成首先是事务 A 的所有动作，然后是事务 B 的所有动作，那个这个调度就是个串行调度。</p>
-<p>容易发现，执行事务 A -&gt;事务 B，和执行事务 B -&gt;事务 A 的结果是不同的。</p>
+<p>容易发现，执行事务 A -&gt; 事务 B，和执行事务 B -&gt; 事务 A 的结果是不同的。</p>
 <h3 id="可串行性"><a href="#可串行性" class="headerlink" title="可串行性"></a>可串行性</h3><p>可串行性要求<a href="https://zhuanlan.zhihu.com/p/127274032" target="_blank" rel="noopener">事务并发执行的效果和事务单独执行的效果</a>是一样的。比如对于非串行事务 <code>S</code>，如果存在一个串行事务 <code>S&#39;</code>，使得对于每个数据库初态，调度 <code>S</code> 和调度 <code>S&#39;</code> 相同，那么 <code>S</code> 就是可串行化的。</p>
 <p>关于这一点，我们可以类比到CPU并行编程里面的内存模型。如下图所示：</p>
 <ol>
@@ -1035,7 +1036,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">203</span>
+                <span class="site-state-item-count">204</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
