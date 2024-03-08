@@ -101,7 +101,7 @@
 <meta property="og:description" content="本文介绍 C++ 中的类型转换。部分内容来自C++元编程。隐式转换部分和重载决议有关，需要结合起来看。">
 <meta property="og:locale" content="zh-Hans">
 <meta property="og:image" content="http://www.calvinneo.com/img/cpp_meta_programming/implicit_conversion_cat11.jpg">
-<meta property="og:updated_time" content="2023-06-15T12:38:19.778Z">
+<meta property="og:updated_time" content="2024-02-01T14:59:59.502Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="C++中类型和类型转换">
 <meta name="twitter:description" content="本文介绍 C++ 中的类型转换。部分内容来自C++元编程。隐式转换部分和重载决议有关，需要结合起来看。">
@@ -432,6 +432,43 @@
 <li>an lvalue 是一个 glvalue，但不是 xvalue。</li>
 <li>an rvalue 是一个 prvalue 或者 xvalue。</li>
 </ol>
+<h2 id="一些定义"><a href="#一些定义" class="headerlink" title="一些定义"></a>一些定义</h2><h3 id="temporary-materialization"><a href="#temporary-materialization" class="headerlink" title="temporary materialization"></a>temporary materialization</h3><p>提一个<a href="https://en.cppreference.com/w/cpp/language/implicit_conversion#Temporary_materialization" target="_blank" rel="noopener">temporary materialization</a> 的概念。指的是一个完整类型 T 的 prvalue，可以被转换成同类型 T 的一个 xvalue。</p>
+<p>下面是天书，看不懂。</p>
+<blockquote>
+<p>This conversion initializes a temporary object of type T from the prvalue by evaluating the prvalue with the temporary object as its result object, and produces an xvalue denoting the temporary object. If T is a class or array of class type, it must have an accessible and non-deleted destructor.</p>
+</blockquote>
+<p>根据下面的例子来看，应该是 <code>S()</code> 是个 prvalue，然后通过 evaluating <code>S()</code> 得到了一个 temporary object 作为 result object，然后创建了一个 xvalue 去表示这个 temporary object。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">S</span> &#123;</span> <span class="keyword">int</span> m; &#125;;</span><br><span class="line"><span class="keyword">int</span> i = S().m; <span class="comment">// member access expects glvalue as of C++17;</span></span><br><span class="line">               <span class="comment">// S() prvalue is converted to xvalue</span></span><br></pre></td></tr></table></figure>
+
+<p>Temporary materialization occurs in the following situations:</p>
+<ol>
+<li>when binding a reference to a prvalue;</li>
+<li>when performing a member access on a class prvalue;</li>
+<li>when performing an array-to-pointer conversion (see above) or subscripting on an array prvalue;</li>
+<li>when initializing an object of type <code>std::initializer_list&lt;T&gt;</code> from a braced-init-list;</li>
+<li>when typeid is applied to a prvalue (this is part of an unevaluated expression);</li>
+<li>when sizeof is applied to a prvalue (this is part of an unevaluated expression);</li>
+<li>when a prvalue appears as a discarded-value expression.</li>
+</ol>
+<h3 id="Move-eligible-expressions"><a href="#Move-eligible-expressions" class="headerlink" title="Move-eligible expressions"></a>Move-eligible expressions</h3><p>Although an expression consisting of the name of any variable is an lvalue expression, such expression may be move-eligible if it appears as the operand of</p>
+<ol>
+<li>a return statement</li>
+<li>a co_return statement (since C++20)</li>
+<li>a throw expression (since C++17)</li>
+</ol>
+<p>If an expression is move-eligible, it is treated:</p>
+<ol>
+<li>either as an rvalue or as an lvalue(until C++23)</li>
+<li>as an rvalue(since C++23)</li>
+</ol>
+<p>…for the purpose of overload resolution (thus it may select the move constructor).</p>
+<p>但这里还有个特例，就是 Guaranteed copy elision</p>
+<blockquote>
+<p>If expression is a prvalue, the result object is initialized directly by that expression. This does not involve a copy or move constructor when the types match (see copy elision).</p>
+</blockquote>
+<p>我理解这里的 Move-eligible expressions 就是像下面这个语句，是可以 implicit move 的。在其他情况下，都应该显式 <code>std::move()</code>。后面在支持协程的时候，可能标准委员会发现要加点补丁这样子了。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">A <span class="title">func</span><span class="params">(A a)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">return</span> a; <span class="comment">// uses A::A(A&amp;&amp;) if it exists</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
 <h2 id="lvalue"><a href="#lvalue" class="headerlink" title="lvalue"></a>lvalue</h2><ol>
 <li>解引用</li>
 <li>++a 等</li>
@@ -439,12 +476,21 @@
 <li><code>a.m</code> 和 <code>a.*mp</code></li>
 <li><code>p-&gt;m</code> 和 <code>p-&gt;*mp</code></li>
 <li>逗号运算符</li>
-<li>某些三目运算符的计算结果</li>
+<li><code>a ? b : c</code> 的一些情况<br> 可以参考 <a href="https://en.cppreference.com/w/cpp/language/operator_other#Conditional_operator%EF%BC%8C%E4%BD%86%E8%BF%99%E9%87%8C%E9%9D%9E%E5%B8%B8%E5%A4%8D%E6%9D%82%E3%80%82" target="_blank" rel="noopener">https://en.cppreference.com/w/cpp/language/operator_other#Conditional_operator，但这里非常复杂。</a></li>
 <li>字符串直接量</li>
 <li>返回左值的 cast</li>
-<li></li>
 </ol>
-<h2 id="xvalue"><a href="#xvalue" class="headerlink" title="xvalue"></a>xvalue</h2><h2 id="prvalue"><a href="#prvalue" class="headerlink" title="prvalue"></a>prvalue</h2><ol>
+<h2 id="xvalue"><a href="#xvalue" class="headerlink" title="xvalue"></a>xvalue</h2><ol>
+<li><code>a.m</code> 和 <code>a.*mp</code><br> 其中 a 是一个 rvalue，m 是 a 的一个非静态成员。<br> 这里区分同种类型中是左值的情况。</li>
+<li><code>a, b</code><br> 其中 b 是 xvalue。</li>
+<li><code>a ? b : c</code><br> 可以参考 <a href="https://en.cppreference.com/w/cpp/language/operator_other#Conditional_operator%EF%BC%8C%E4%BD%86%E8%BF%99%E9%87%8C%E9%9D%9E%E5%B8%B8%E5%A4%8D%E6%9D%82%E3%80%82" target="_blank" rel="noopener">https://en.cppreference.com/w/cpp/language/operator_other#Conditional_operator，但这里非常复杂。</a></li>
+<li>一个函数调用，或者一个 operator，它返回的是 rvalue，例如 <code>std::move(x)</code></li>
+<li><code>a[n]</code><br> 对数组取下标。我理解就不包含 operator[]，这不废话么，operator[] 按照上一条不也是一样的么</li>
+<li>any expression that designates a temporary object, after temporary materialization</li>
+<li>一个 <a href="https://en.cppreference.com/w/cpp/language/value_category#Move-eligible_expressions" target="_blank" rel="noopener">Move-eligible expression</a></li>
+</ol>
+<p>In particular, like all rvalues, xvalues bind to rvalue references, and like all glvalues, xvalues may be polymorphic, and non-class xvalues may be cv-qualified.</p>
+<h2 id="prvalue"><a href="#prvalue" class="headerlink" title="prvalue"></a>prvalue</h2><ol>
 <li>literal</li>
 <li>一个函数调用或者 overloaded operator expression，它的返回值如果不是引用</li>
 <li>某些 builtin operator<br> a++ 等，注意 ++a 是 lvalue。</li>
@@ -529,11 +575,7 @@
 <li>integral constant expression, where a literal class is used (T is any integral or unscoped (since C++11) enumeration type, the selected user-defined conversion function must be constexpr);</li>
 <li>the controlling expression of the switch statement (T is any integral or enumeration type).</li>
 </ol>
-<h3 id="Value-transformations"><a href="#Value-transformations" class="headerlink" title="Value transformations"></a>Value transformations</h3><h4 id="temporary-materialization"><a href="#temporary-materialization" class="headerlink" title="temporary materialization"></a>temporary materialization</h4><p>提一个 temporary materialization 的概念。指的是一个完整类型 T 的 prvalue，可以被转换成同类型的一个 xvalue。这个转换会创建一个临时的 T 的对象，by evaluating the prvalue with the temporary object as its result object and produces an xvalue denoting the temporary object。</p>
-<p>如果 T 是一个类，或者一个成员为类的数组，它必须有可访问的、非 delete 的修够函数。</p>
-<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">S</span> &#123;</span> <span class="keyword">int</span> m; &#125;;</span><br><span class="line"><span class="keyword">int</span> i = S().m; <span class="comment">// member access expects glvalue as of C++17;</span></span><br><span class="line">               <span class="comment">// S() prvalue is converted to xvalue</span></span><br></pre></td></tr></table></figure>
-
-<h4 id="Lvalue-to-rvalue-conversion"><a href="#Lvalue-to-rvalue-conversion" class="headerlink" title="Lvalue-to-rvalue conversion"></a>Lvalue-to-rvalue conversion</h4><p>不考虑旧版本，从 C++11 开始说。<br>一个非 function 且非 array 类型的 glvalue T 可以被隐式转换为一个 prvalue。此时：</p>
+<h3 id="Value-transformations"><a href="#Value-transformations" class="headerlink" title="Value transformations"></a>Value transformations</h3><h4 id="Lvalue-to-rvalue-conversion"><a href="#Lvalue-to-rvalue-conversion" class="headerlink" title="Lvalue-to-rvalue conversion"></a>Lvalue-to-rvalue conversion</h4><p>不考虑旧版本，从 C++11 开始说。<br>一个非 function 且非 array 类型的 glvalue T 可以被隐式转换为一个 prvalue。此时：</p>
 <ol>
 <li>如果 T 不是 class type, 那么这个 prvalue 的类型是 T，但会去掉 cv 限定符。</li>
 <li>如果 T 是 class type，那么这个 prvalue 的类型是 T。</li>
@@ -734,7 +776,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">204</span>
+                <span class="site-state-item-count">208</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -747,7 +789,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">146</span>
+                <span class="site-state-item-count">147</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -840,7 +882,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#涉及-type-的一些概念"><span class="nav-number">1.</span> <span class="nav-text">涉及 type 的一些概念</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Incomplete-type"><span class="nav-number">1.1.</span> <span class="nav-text">Incomplete type</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#typd-id"><span class="nav-number">1.2.</span> <span class="nav-text">typd-id</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#显式类型转换"><span class="nav-number">2.</span> <span class="nav-text">显式类型转换</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Value-categories"><span class="nav-number">3.</span> <span class="nav-text">Value categories</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#lvalue"><span class="nav-number">3.1.</span> <span class="nav-text">lvalue</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#xvalue"><span class="nav-number">3.2.</span> <span class="nav-text">xvalue</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#prvalue"><span class="nav-number">3.3.</span> <span class="nav-text">prvalue</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#User-defined-conversion-function"><span class="nav-number">4.</span> <span class="nav-text">User-defined conversion function</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#隐式类型转换"><span class="nav-number">5.</span> <span class="nav-text">隐式类型转换</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Converting-constructor"><span class="nav-number">5.1.</span> <span class="nav-text">Converting constructor</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#一个有趣的问题"><span class="nav-number">5.1.1.</span> <span class="nav-text">一个有趣的问题</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#decay"><span class="nav-number">5.2.</span> <span class="nav-text">decay</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#各种-convertion-类型"><span class="nav-number">5.3.</span> <span class="nav-text">各种 convertion 类型</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Contextual-conversions"><span class="nav-number">5.3.1.</span> <span class="nav-text">Contextual conversions</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Value-transformations"><span class="nav-number">5.3.2.</span> <span class="nav-text">Value transformations</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#temporary-materialization"><span class="nav-number">5.3.2.1.</span> <span class="nav-text">temporary materialization</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Lvalue-to-rvalue-conversion"><span class="nav-number">5.3.2.2.</span> <span class="nav-text">Lvalue-to-rvalue conversion</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Array-to-pointer-conversion"><span class="nav-number">5.3.2.3.</span> <span class="nav-text">Array-to-pointer conversion</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Function-to-pointer-conversion"><span class="nav-number">5.3.2.4.</span> <span class="nav-text">Function-to-pointer conversion</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Numeric-promotions"><span class="nav-number">5.3.3.</span> <span class="nav-text">Numeric promotions</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#Integral-promotion"><span class="nav-number">5.3.3.1.</span> <span class="nav-text">Integral promotion</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Floating-point-promotion"><span class="nav-number">5.3.3.2.</span> <span class="nav-text">Floating-point promotion</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Numeric-conversions"><span class="nav-number">5.3.4.</span> <span class="nav-text">Numeric conversions</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#Integral-conversions"><span class="nav-number">5.3.4.1.</span> <span class="nav-text">Integral conversions</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Floating-point-conversions"><span class="nav-number">5.3.4.2.</span> <span class="nav-text">Floating-point conversions</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Floating–integral-conversions"><span class="nav-number">5.3.4.3.</span> <span class="nav-text">Floating–integral conversions</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Pointer-conversions"><span class="nav-number">5.3.4.4.</span> <span class="nav-text">Pointer conversions</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Pointer-to-member-conversions"><span class="nav-number">5.3.4.5.</span> <span class="nav-text">Pointer-to-member conversions</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Boolean-conversions"><span class="nav-number">5.3.4.6.</span> <span class="nav-text">Boolean conversions</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Qualification-conversions"><span class="nav-number">5.3.5.</span> <span class="nav-text">Qualification conversions</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#【C-17】Function-pointer-conversions"><span class="nav-number">5.3.6.</span> <span class="nav-text">【C++17】Function pointer conversions</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#重载决议的顺序-rank"><span class="nav-number">5.4.</span> <span class="nav-text">重载决议的顺序(rank)</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">6.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#涉及-type-的一些概念"><span class="nav-number">1.</span> <span class="nav-text">涉及 type 的一些概念</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Incomplete-type"><span class="nav-number">1.1.</span> <span class="nav-text">Incomplete type</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#typd-id"><span class="nav-number">1.2.</span> <span class="nav-text">typd-id</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#显式类型转换"><span class="nav-number">2.</span> <span class="nav-text">显式类型转换</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Value-categories"><span class="nav-number">3.</span> <span class="nav-text">Value categories</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#一些定义"><span class="nav-number">3.1.</span> <span class="nav-text">一些定义</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#temporary-materialization"><span class="nav-number">3.1.1.</span> <span class="nav-text">temporary materialization</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Move-eligible-expressions"><span class="nav-number">3.1.2.</span> <span class="nav-text">Move-eligible expressions</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#lvalue"><span class="nav-number">3.2.</span> <span class="nav-text">lvalue</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#xvalue"><span class="nav-number">3.3.</span> <span class="nav-text">xvalue</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#prvalue"><span class="nav-number">3.4.</span> <span class="nav-text">prvalue</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#User-defined-conversion-function"><span class="nav-number">4.</span> <span class="nav-text">User-defined conversion function</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#隐式类型转换"><span class="nav-number">5.</span> <span class="nav-text">隐式类型转换</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Converting-constructor"><span class="nav-number">5.1.</span> <span class="nav-text">Converting constructor</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#一个有趣的问题"><span class="nav-number">5.1.1.</span> <span class="nav-text">一个有趣的问题</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#decay"><span class="nav-number">5.2.</span> <span class="nav-text">decay</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#各种-convertion-类型"><span class="nav-number">5.3.</span> <span class="nav-text">各种 convertion 类型</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Contextual-conversions"><span class="nav-number">5.3.1.</span> <span class="nav-text">Contextual conversions</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Value-transformations"><span class="nav-number">5.3.2.</span> <span class="nav-text">Value transformations</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#Lvalue-to-rvalue-conversion"><span class="nav-number">5.3.2.1.</span> <span class="nav-text">Lvalue-to-rvalue conversion</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Array-to-pointer-conversion"><span class="nav-number">5.3.2.2.</span> <span class="nav-text">Array-to-pointer conversion</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Function-to-pointer-conversion"><span class="nav-number">5.3.2.3.</span> <span class="nav-text">Function-to-pointer conversion</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Numeric-promotions"><span class="nav-number">5.3.3.</span> <span class="nav-text">Numeric promotions</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#Integral-promotion"><span class="nav-number">5.3.3.1.</span> <span class="nav-text">Integral promotion</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Floating-point-promotion"><span class="nav-number">5.3.3.2.</span> <span class="nav-text">Floating-point promotion</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Numeric-conversions"><span class="nav-number">5.3.4.</span> <span class="nav-text">Numeric conversions</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#Integral-conversions"><span class="nav-number">5.3.4.1.</span> <span class="nav-text">Integral conversions</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Floating-point-conversions"><span class="nav-number">5.3.4.2.</span> <span class="nav-text">Floating-point conversions</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Floating–integral-conversions"><span class="nav-number">5.3.4.3.</span> <span class="nav-text">Floating–integral conversions</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Pointer-conversions"><span class="nav-number">5.3.4.4.</span> <span class="nav-text">Pointer conversions</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Pointer-to-member-conversions"><span class="nav-number">5.3.4.5.</span> <span class="nav-text">Pointer-to-member conversions</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Boolean-conversions"><span class="nav-number">5.3.4.6.</span> <span class="nav-text">Boolean conversions</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Qualification-conversions"><span class="nav-number">5.3.5.</span> <span class="nav-text">Qualification conversions</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#【C-17】Function-pointer-conversions"><span class="nav-number">5.3.6.</span> <span class="nav-text">【C++17】Function pointer conversions</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#重载决议的顺序-rank"><span class="nav-number">5.4.</span> <span class="nav-text">重载决议的顺序(rank)</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">6.</span> <span class="nav-text">Reference</span></a></li></ol></div>
             
 
           </div>
