@@ -74,7 +74,7 @@
 <link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="C++,Linux,网络,并行计算,多线程,atomic,CPU,多进程," />
+  <meta name="keywords" content="C++,网络,Linux,并行计算,多线程,atomic,CPU,多进程," />
 
 
 
@@ -93,7 +93,7 @@
 
 
 <meta name="description" content="在本篇中比较了各种并发、并行技术。并发(concurrency) 强调的是逻辑上的同时发生，是语义上的模型(semantic model)，在实际上并发程序可能是由一个处理器同时(simultaneously)处理多个任务，因此并发过程中常出现一个线程等待其他资源的情况。此时常伴随着线程的阻塞和调度。并发过程通常可划分为多个级别：Blocking、Obstruction-Free、Lock-Fre">
-<meta name="keywords" content="C++,Linux,网络,并行计算,多线程,atomic,CPU,多进程">
+<meta name="keywords" content="C++,网络,Linux,并行计算,多线程,atomic,CPU,多进程">
 <meta property="og:type" content="article">
 <meta property="og:title" content="并发编程重要概念及比较">
 <meta property="og:url" content="http://www.calvinneo.com/2017/12/28/Concurrency-Programming-Compare/index.html">
@@ -126,7 +126,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/concur/acquire_fence.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/concur/dclpjj.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/concur/chenshuo2.png">
-<meta property="og:updated_time" content="2024-02-24T15:47:28.998Z">
+<meta property="og:updated_time" content="2024-03-08T15:15:48.141Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="并发编程重要概念及比较">
 <meta name="twitter:description" content="在本篇中比较了各种并发、并行技术。并发(concurrency) 强调的是逻辑上的同时发生，是语义上的模型(semantic model)，在实际上并发程序可能是由一个处理器同时(simultaneously)处理多个任务，因此并发过程中常出现一个线程等待其他资源的情况。此时常伴随着线程的阻塞和调度。并发过程通常可划分为多个级别：Blocking、Obstruction-Free、Lock-Fre">
@@ -848,6 +848,7 @@
 <h3 id="场景讨论"><a href="#场景讨论" class="headerlink" title="场景讨论"></a>场景讨论</h3><p>我们的愿景是最大化真实并发，因此要追求较小粒度的锁(small granularity)，一个较小的粒度表现在锁所保护的临界数据较少，并且持有锁的时间较短，但粒度不可能无限小。</p>
 <h4 id="删除链表节点"><a href="#删除链表节点" class="headerlink" title="删除链表节点"></a>删除链表节点</h4><p>考虑删除双向链表中的一个节点，需要修改三个节点的数据。但如果对这三个修改以此单独加锁，其实等于没有加锁。一个直截了当的解决方案是在删除过程中锁住整个链表，但粒度有点大了。</p>
 <p>如果是仍然希望为每个节点维护一把锁，那么对于删除操作必须获得被删除节点和其相邻的共三把锁，当重新连接节点时，必须在获得当前节点锁的前提下尝试获取下一节点的锁（但一旦持有了下一节点的锁就可以释放当前节点的锁了），以防后继节点产生变化，这有点类似于数据库上的蟹行协议，称为lock coupling。与此同时，在遍历时同样需要按照和删除相同的上锁步骤。我有个朋友当时就对这一点很疑惑，他说我添加删除都上锁了，那为啥访问还需要加锁？锁这玩意，防君子不防小人，那我访问的时候完全可以不去获取锁的嘛，那你那边的线程加不加锁管我什么事，除非加锁、解锁和改指针的操作是原子的。那么在遍历的时候是只锁一个节点就行了，还是要蟹行呢？我们可以举一个很夸张的例子，例如我们从头遍历链表<code>[a,b,c]</code>并试图删除<code>b</code>，其过程是获取<code>a</code>的锁，然后获取<code>b=a.next</code>，然后锁住<code>b</code>，然后移除从<code>a</code>到<code>b</code>的指针。那么我们同时有一个遍历线程，它是龟兔赛跑里面属兔子的，乌龟还没出发，他就遍历到<code>a</code>了，这时候<code>a</code>没有被锁住，然后这位兔子线程释放了<code>a</code>的锁（蛮良心的，睡觉前懂得释放锁），然后拿着<code>a</code>的后继也就是<code>b</code>去睡觉去了。这时候乌龟线程才开始锁住<code>a</code>和<code>b</code>，并删除掉了<code>b</code>。乌龟线程释放完锁继续往后面遍历了，这时候<code>a</code>的后继已经是<code>c</code>了，兔子线程醒来了， 此时他还以为<code>b</code>是真的后继呢！</p>
+<p>TODO 这里可以看下 6.852。</p>
 <h4 id="线程安全的栈"><a href="#线程安全的栈" class="headerlink" title="线程安全的栈"></a>线程安全的栈</h4><p>下面再考虑一个线程安全的栈，其中实现了 <code>empty()</code>、<code>top()</code>、<code>size()</code>、<code>push()</code>、<code>pop()</code> 等常见方法。在多线程下，下面的代码中 <code>pop()</code> 可能使得 <code>top()</code> 的结果无效，这是因为在1和2两个方法<strong>间</strong>可能有另一个线程执行了<code>pop()</code>。容易看出无论这些方法内部怎么加锁都无法避免这种情况，因为这里的竞态发生在这些方法<strong>之间</strong>，C++ Concurrency in Action特别指出这属于接口设计的问题。在后面内存模型的部分，我们能看到<strong>类似的问题</strong>，原子操作虽然避免了竞态，但原子操作之间可能存在的乱序必须要被考虑。书中还指出了另一个更严重的2和3之间竞争的错误，假设有两个线程并行执行该段代码，我们期望的顺序是<code>top[1] -&gt; pop[1] -&gt; top[2] -&gt; pop[2]</code>，中括号表示执行该方法的线程。然而实际执行顺序可能是<code>top[1] -&gt; top[2] -&gt; pop[1] -&gt; pop[2]</code>。这就导致了从栈顶开始的两个元素有一个被处理了两次，另一个完全没有被处理。一个简单的解决方案是将这两个调用<strong>合并成一个带返回值的pop</strong>，使用一个mutex来管理，但Tom Cargill指出这处理方式是有问题的。这涉及到为什么标准库在设计时选择将<code>top()</code>和<code>pop()</code>两个方法，原因是可能发生在成功将元素pop后而拷贝函数失败，这个元素就被丢失，所以先取<code>top()</code>再<code>pop()</code>保证了<code>top()</code>失败情况下可以选择不执行<code>pop()</code>。</p>
 <figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">stack</span>&lt;<span class="keyword">int</span>&gt; s;</span><br><span class="line"><span class="keyword">if</span> (! s.empty())&#123;    <span class="comment">// 1</span></span><br><span class="line">  <span class="keyword">int</span> <span class="keyword">const</span> value = s.top();    <span class="comment">// 2</span></span><br><span class="line">  s.pop();    <span class="comment">// 3</span></span><br><span class="line">  do_something(value);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
@@ -1762,9 +1763,9 @@
           
             <a href="/tags/C/" rel="tag"># C++</a>
           
-            <a href="/tags/Linux/" rel="tag"># Linux</a>
-          
             <a href="/tags/网络/" rel="tag"># 网络</a>
+          
+            <a href="/tags/Linux/" rel="tag"># Linux</a>
           
             <a href="/tags/并行计算/" rel="tag"># 并行计算</a>
           
@@ -1878,7 +1879,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">208</span>
+                <span class="site-state-item-count">209</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>

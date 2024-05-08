@@ -92,27 +92,27 @@
 
 
 
-<meta name="description" content="在比较早的时候，我使用腾讯文档记录一些数据库的论文。但我越来越无法忍受腾讯文档的 bug 等不便利。因此我打算将这些文章转移到博客中，即使它们中的部分的完成度并不是很高。">
+<meta name="description" content="在比较早的时候，我使用腾讯文档记录一些数据库的论文。但我越来越无法忍受腾讯文档的 bug 等不便利。因此我打算将这些文章转移到博客中，即使它们中的部分的完成度并不是很高。 这篇文章中，包含 CStore、Kudu、Masstree 和 Ceph。">
 <meta name="keywords" content="数据库">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Database paper part 1">
 <meta property="og:url" content="http://www.calvinneo.com/2024/03/08/database-paper-1/index.html">
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
-<meta property="og:description" content="在比较早的时候，我使用腾讯文档记录一些数据库的论文。但我越来越无法忍受腾讯文档的 bug 等不便利。因此我打算将这些文章转移到博客中，即使它们中的部分的完成度并不是很高。">
+<meta property="og:description" content="在比较早的时候，我使用腾讯文档记录一些数据库的论文。但我越来越无法忍受腾讯文档的 bug 等不便利。因此我打算将这些文章转移到博客中，即使它们中的部分的完成度并不是很高。 这篇文章中，包含 CStore、Kudu、Masstree 和 Ceph。">
 <meta property="og:locale" content="zh-Hans">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/cstore/joinindex.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/masstree/1.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/masstree/3.png">
-<meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/masstree/get.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/masstree/split.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/masstree/6.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/masstree/7.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/masstree/remove.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/ceph/1.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/ceph/3.png">
-<meta property="og:updated_time" content="2024-03-08T15:05:26.223Z">
+<meta property="og:updated_time" content="2024-03-08T15:13:37.853Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Database paper part 1">
-<meta name="twitter:description" content="在比较早的时候，我使用腾讯文档记录一些数据库的论文。但我越来越无法忍受腾讯文档的 bug 等不便利。因此我打算将这些文章转移到博客中，即使它们中的部分的完成度并不是很高。">
+<meta name="twitter:description" content="在比较早的时候，我使用腾讯文档记录一些数据库的论文。但我越来越无法忍受腾讯文档的 bug 等不便利。因此我打算将这些文章转移到博客中，即使它们中的部分的完成度并不是很高。 这篇文章中，包含 CStore、Kudu、Masstree 和 Ceph。">
 <meta name="twitter:image" content="http://www.calvinneo.com/img/dbpaper/cstore/joinindex.png">
 
 
@@ -387,6 +387,7 @@
 
       
         <p>在比较早的时候，我使用腾讯文档记录一些数据库的论文。但我越来越无法忍受腾讯文档的 bug 等不便利。因此我打算将这些文章转移到博客中，即使它们中的部分的完成度并不是很高。</p>
+<p>这篇文章中，包含 CStore、Kudu、Masstree 和 Ceph。</p>
 <a id="more"></a>
 
 <h1 id="CStore"><a href="#CStore" class="headerlink" title="CStore"></a>CStore</h1><p>按照 projection 存储，一个 projection 对应了一个表的一个或者几个列。<br>每个 projection 有自己独立的 sort key。不同的 projection 之间，用 join indexes 来维护它们的对应关系。<br>每个 projection 会水平分区为多个 segment，每个 segment 有自己的一个 sid。<br>每个 segment 分为 RS 和 WS。<br>定义 storage key：<br>1.在 RS 上，直接按序存储，通过遍历获得 index<br>2.在 WS 上，每次插入获取一个 storage key，大于 RS 上的最大值</p>
@@ -464,7 +465,7 @@
 <p>这里的过程只涉及到一个 key，也就是k1，所以并不需要更新 n 的 version 或者 permutation。我们回顾上文，会比较明白为什么之前这么设计了。<br>这个场景下需要注意的点是，reader 需要区分 value 和 pointer。因为 pointer 和 layermarker 是分别存放的。首先 writer 要把 key 标记为 UNSTABLE 状态，然后 reader 检查到这个标记的时候就会 retry。然后 writer 会写入 layer pointer 指针，最后把 key 标记为 LAYER。<br>这里的 UNSTABLE 或者 LAYER 啥的，根据上文，是由 keylen 这个字段来区分的。</p>
 <h4 id="Splits"><a href="#Splits" class="headerlink" title="Splits"></a>Splits</h4><p>Split 相比非 Split 操作，需要将一些 key 移动到另一个 node 中。所以 get 操作很容易就会丢掉这些被转移了的 key。所以，writer 需要去更新 version 里面的 split 字段。</p>
 <p>Split 操作用了 hand-over-hand locking。这个实际上就是同时持有 cur 和 next 的 lock。在 Masstree 里面就是较低层的节点被 lock，并且被 mark 为 splitting。然后依次再更高层上在做同样的工作。这里认为 root 是最高的层。<br>不妨考虑下面的场景，B 需要分裂出一个 B‘ 新节点。其中虚线箭头表示要被迁移到 B’ 上的 pointer。</p>
-<p><img src="/img/dbpaper/masstree/get.png"></p>
+<p><img src="/img/dbpaper/masstree/split.png"></p>
 <p>行为如下：</p>
 <ol>
 <li>B 和 B’ 都被标注为 splitting</li>
@@ -594,6 +595,10 @@
 
           <div class="post-nav-prev post-nav-item">
             
+              <a href="/2024/04/07/rust-borrow-checker/" rel="prev" title="Rust 的 Borrow Checker">
+                Rust 的 Borrow Checker <i class="fa fa-chevron-right"></i>
+              </a>
+            
           </div>
         </div>
       
@@ -671,7 +676,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">208</span>
+                <span class="site-state-item-count">209</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
