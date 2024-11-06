@@ -91,19 +91,19 @@
 
 
 
-<meta name="description" content="Grafana 上如果观测离群点，会发现它的值漂移地很厉害。往往一个实际 2min 的指标能显示出是几个 hour。如 https://github.com/pingcap/tiflash/issues/8076 所述。这个问题发生需要同时使用 histogram_quantile 和 rate。">
+<meta name="description" content="Grafana 上如果观测离群点，会发现它的值漂移地很厉害。往往一个实际 2min 的指标能显示出是几个 hour。如 https://github.com/pingcap/tiflash/issues/8076 所述。这个问题发生需要同时使用 histogram_quantile 和 rate。 此外，可以从这个解决方案延伸出一个浮点压缩算法 ALP。">
 <meta name="keywords" content="grafana">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Grafana 使用 histogram_quantile 和 rate 的精度问题">
 <meta property="og:url" content="http://www.calvinneo.com/2023/09/11/grafana-issue-floating/index.html">
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
-<meta property="og:description" content="Grafana 上如果观测离群点，会发现它的值漂移地很厉害。往往一个实际 2min 的指标能显示出是几个 hour。如 https://github.com/pingcap/tiflash/issues/8076 所述。这个问题发生需要同时使用 histogram_quantile 和 rate。">
+<meta property="og:description" content="Grafana 上如果观测离群点，会发现它的值漂移地很厉害。往往一个实际 2min 的指标能显示出是几个 hour。如 https://github.com/pingcap/tiflash/issues/8076 所述。这个问题发生需要同时使用 histogram_quantile 和 rate。 此外，可以从这个解决方案延伸出一个浮点压缩算法 ALP。">
 <meta property="og:locale" content="zh-Hans">
 <meta property="og:image" content="http://www.calvinneo.com/img/grafana/1.jpg">
-<meta property="og:updated_time" content="2023-12-18T15:48:09.856Z">
+<meta property="og:updated_time" content="2024-10-31T13:30:02.212Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Grafana 使用 histogram_quantile 和 rate 的精度问题">
-<meta name="twitter:description" content="Grafana 上如果观测离群点，会发现它的值漂移地很厉害。往往一个实际 2min 的指标能显示出是几个 hour。如 https://github.com/pingcap/tiflash/issues/8076 所述。这个问题发生需要同时使用 histogram_quantile 和 rate。">
+<meta name="twitter:description" content="Grafana 上如果观测离群点，会发现它的值漂移地很厉害。往往一个实际 2min 的指标能显示出是几个 hour。如 https://github.com/pingcap/tiflash/issues/8076 所述。这个问题发生需要同时使用 histogram_quantile 和 rate。 此外，可以从这个解决方案延伸出一个浮点压缩算法 ALP。">
 <meta name="twitter:image" content="http://www.calvinneo.com/img/grafana/1.jpg">
 
 
@@ -380,6 +380,7 @@
 
       
         <p>Grafana 上如果观测离群点，会发现它的值漂移地很厉害。往往一个实际 2min 的指标能显示出是几个 hour。<br>如 <a href="https://github.com/pingcap/tiflash/issues/8076" target="_blank" rel="noopener">https://github.com/pingcap/tiflash/issues/8076</a> 所述。这个问题发生需要同时使用 histogram_quantile 和 rate。</p>
+<p>此外，可以从这个解决方案延伸出一个浮点压缩算法 ALP。</p>
 <a id="more"></a>
 
 <p>其原因是 rate 会将 count 除成小数，因为 IEEE 浮点数不能精确表示，所以引入了噪音数据。<br>如下所示，8.192 和 67108.864 这两个桶对应的 sum 应该是相等的。但因为浮点数加法的问题，它们不相等了。因此这些立群值就会被放到 bucket 序号更大的桶里面了。<br><img src="/img/grafana/1.jpg"></p>
@@ -387,6 +388,8 @@
 <p>The problem is that the rate function, while doing its magic, turns counts into fractions. Most fractions can’t be expressed exactly as a floating point number (IEEE754 standard). The resulting number that represents the fraction is just an approximation that uses up all bits of mantissa.</p>
 <p>因为精度的问题，导致在某个 edge 上会进一位。所以可以用 <code>histogram_quantile(1.0, sum(round(1000000000*rate(xxx{}[5m]))) by (le) / 1000000000)</code> 这样来规避。</p>
 <p>这也体现出浮点数的性质不咋样，连结合律都不满足。在工程上来讲，不满足结合律意味着没法分治。</p>
+<h1 id="ALP-压缩算法"><a href="#ALP-压缩算法" class="headerlink" title="ALP 压缩算法"></a>ALP 压缩算法</h1><p>这个算法是给浮点数乘一个 <code>10**e</code> 让它变成一个整数。从上面可以知道，这个 e 可能要远大于实际的小数位数，才能在除回来之后是无损的。为了免于存储后面大量的 0，算法还引入一个 f，表示最后 f 个零，我们就不放在整数里面了。</p>
+<p>但是经过同事测试，选择 vector 长度为 10k，exceptional vector 的长度确实是有限的大约在 800 左右，说明选择合适的 e 和 f 还是能取得比较好的覆盖率的。但是实际压缩率只有 0.5，这是非常差的成绩，就算按照 (e,f,int) 三个 int 换一个的方式压缩，都不至于这么低。据说这是因为对 integer 的 bitpacking 压缩效率不是很高。这里原因是 f32 也是会被编码为 u64 的，所以后面很依赖 bitpacking 的压缩。</p>
 
       
     </div>
@@ -516,8 +519,17 @@
       
 
       
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
 
-      <section class="site-overview sidebar-panel sidebar-panel-active">
+      <section class="site-overview sidebar-panel">
         <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
           <img class="site-author-image" itemprop="image"
                src="/favicon.jpg"
@@ -532,7 +544,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">212</span>
+                <span class="site-state-item-count">215</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -545,7 +557,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">148</span>
+                <span class="site-state-item-count">150</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -628,6 +640,22 @@
 
       </section>
 
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#ALP-压缩算法"><span class="nav-number">1.</span> <span class="nav-text">ALP 压缩算法</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
       
 
       
