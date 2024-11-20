@@ -73,7 +73,7 @@
 <link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="分布式,raft,一致性,论文阅读," />
+  <meta name="keywords" content="分布式,raft,论文阅读,一致性," />
 
 
 
@@ -92,7 +92,7 @@
 
 
 <meta name="description" content="本文来自我的文章分布式一致性和分布式共识协议太长，因此将其中的Raft部分单独列出来作为一篇文章。 Raft协议的设计者们认为Paxos协议非常难于理解，并且需要作出很多修改才能够应用到工程中，因此设计了偏重于实现的Raft协议，这甚至体现在他们的论文标题《In Search of an Understandable Consensus Algorithm(Extended Version)》上，">
-<meta name="keywords" content="分布式,raft,一致性,论文阅读">
+<meta name="keywords" content="分布式,raft,论文阅读,一致性">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Raft共识算法">
 <meta property="og:url" content="http://www.calvinneo.com/2019/03/12/raft-algorithm/index.html">
@@ -106,7 +106,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/fbs/raft_exam/1.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/fbs/raft_exam/2.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/fbs/raft_exam/3.png">
-<meta property="og:updated_time" content="2024-11-05T03:52:02.304Z">
+<meta property="og:updated_time" content="2024-11-18T16:02:51.941Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Raft共识算法">
 <meta name="twitter:description" content="本文来自我的文章分布式一致性和分布式共识协议太长，因此将其中的Raft部分单独列出来作为一篇文章。 Raft协议的设计者们认为Paxos协议非常难于理解，并且需要作出很多修改才能够应用到工程中，因此设计了偏重于实现的Raft协议，这甚至体现在他们的论文标题《In Search of an Understandable Consensus Algorithm(Extended Version)》上，">
@@ -660,7 +660,7 @@
 <h3 id="1"><a href="#1" class="headerlink" title="1"></a>1</h3><p>下面四幅图中，哪些 Server Configuation 在 Raft 中是合法的呢？<br><img src="/img/fbs/raft_exam/1.png"><br>a 是不合法的，这是因为 term 应该是递增的。创建 <code>index=4</code> 的 Leader 一定是从一个 term 大于等于 3 的 Leader 中获得 <code>index=3</code> 的条目的，我认为，AppendEntriesRPC 附有当前 Leader 的 term，当 <code>index=4</code> 的 Leader 在添加 index=3 的条目时候，它的 term 必然不会小于当前 Leader 的 term，即 3。<br>d 是不合法的，Raft 日志不允许空洞，但 Paxos 允许。</p>
 <h3 id="2"><a href="#2" class="headerlink" title="2"></a>2</h3><p>下面哪些日志是可能被安全地 <strong>apply</strong> 的？我们把机器从上到小编号为 S1 到 S5。<br><img src="/img/fbs/raft_exam/2.png"></p>
 <p>首先，我们现在的 term 是4。在这个任期中，Leader 创建了一个&lt;7,4&gt;，没有达到 quorum，这个肯定是提交不了的。<br>用类似的办法，通过比较 quorum，可以排除到只剩下面5个条目，用 <code>&lt;Index,Term&gt;</code> 表示如下。</p>
-<figure class="highlight lsl"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">&lt;<span class="number">1</span>,<span class="number">1</span>&gt;, &lt;<span class="number">2</span>,<span class="number">1</span>&gt;, &lt;<span class="number">3</span>,<span class="number">2</span>&gt;, &lt;<span class="number">4</span>,<span class="number">2</span>&gt;, &lt;<span class="number">5</span>,<span class="number">2</span>&gt;</span><br></pre></td></tr></table></figure>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">&lt;1,1&gt;, &lt;2,1&gt;, &lt;3,2&gt;, &lt;4,2&gt;, &lt;5,2&gt;</span><br></pre></td></tr></table></figure>
 
 <p>我们知道，“当Leader创建的某日志条目被成功复制到过半数的服务器上时，Leader可以提交该条目”，但我们不能忽略Figure8的情况，即“不能提交来自较旧任期的日志条目”，所以要等到&lt;7,4&gt;被提交之后，才能安全提交S1的1到5的日志。<br>后来看答案发现，题目不是这个意思，比如说<strong>commitIndex是volatile的</strong>，没啥讨论的意义。所以题目的意思是，从一个全局的视野，<strong>根据Log判断哪些Entry是可以被安全地commit的</strong>。实际上，虽然我们有了Leader for term 4，但由于这个Leader可能没来得及提交&lt;7,4&gt;就Fail，导致重新选举，到时候新Leader可能就不是它了。所以这个问题等价于<strong>从日志判断讨论Leader可能是谁</strong>，然后我们假设这些节点分别成为了Leader，可能移除掉哪些Entry。<br>S1：LastLogTerm为4，秒杀所有，足够quorum。<br>S2：LastLogTerm秒杀除S1外所有，足够quorum。<br>S3：它的LastLogTerm比S4要大，有1票；它的LastLogTerm和S5一样，此时需要比较LastLogIndex，这个比不过S5，因此总共2票，不够quorum。<br>S4：它的LastLogTerm比S1/S2/S3/S4要小，只有1票，不够quorum。<br>S5：它的LastLogTerm比S4要大，有1票；它的LastLogTerm和S3一样，但是LastLogIndex比S3大，因此总共3票，足够quorum。</p>
 <p>下面，我们就要在S1、S2和S5中间取一个交集。特别地，如果S2当选，可能会移除掉S1现有的从index=3开始的所有条目。这也对应了我们“已经被存储到大多数节点中的较旧的日志条目也可能被未来的Leader所覆盖掉”的论述。<br>综上，只有1和2是可以safely applied的。</p>
@@ -748,9 +748,9 @@
           
             <a href="/tags/raft/" rel="tag"># raft</a>
           
-            <a href="/tags/一致性/" rel="tag"># 一致性</a>
-          
             <a href="/tags/论文阅读/" rel="tag"># 论文阅读</a>
+          
+            <a href="/tags/一致性/" rel="tag"># 一致性</a>
           
         </div>
       
@@ -854,7 +854,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">215</span>
+                <span class="site-state-item-count">219</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
