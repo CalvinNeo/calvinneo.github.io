@@ -110,7 +110,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/serverless/22.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/serverless/t6.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/serverless/yy.png">
-<meta property="og:updated_time" content="2024-11-20T16:05:17.131Z">
+<meta property="og:updated_time" content="2024-11-20T17:12:16.352Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Database paper part 4">
 <meta name="twitter:description" content="这篇文章中，包含 Column Stores vs Row Stores、To BLOB or Not To BLOB: Large Object Storage in a Database or a Filesystem?、Cloud Programming Simplified: A Berkeley View on Serverless Computing。">
@@ -411,7 +411,13 @@
 <p>论文通过在 CStore 中移除不同的优化手段，来度量它们的作用。如果压缩可行的话，则压缩能够提供数量级的提升。延迟物化能提升三倍性能。block iteration 以及 invisible join 提升 1.5 倍性能。<br>TiFlash 的延迟物化在 chbenchmark 上除了 q10（特大查询，过滤率较低）之外提升 10% 左右。在 tpc-h 上性能提升不大，因为没有过滤率很高的条件。在 tpc-ds 这种偏向于小表上的复杂 ap 查询上的场景有限。</p>
 <h2 id="STAR-SCHEMA-BENCHMARK"><a href="#STAR-SCHEMA-BENCHMARK" class="headerlink" title="STAR SCHEMA BENCHMARK"></a>STAR SCHEMA BENCHMARK</h2><p>这个 benchmark 是从tpch 上派生出来的。不同于 tpch，它使用了纯粹的教科书级别的星形模型。它的查询比 tpch 要少。选择它主要是因为它比 tpch 更容易实现，所以就不需要修改 CStore 就能跑。<br>Schema：这个 benchmark 只包含一张事实表，也就是 lineorder 表，它合并了 tpch 中的 lineitem 和 orders 表。</p>
 <p><img src="/img/dbpaper/rvsc/1.png"></p>
-<p>Queries：包含了 13 个 query，可以被分为 4 类，或者四个 flight：<br>1.Flight 1 包含 3 个 queries。这些 query 的约束条件是 1 dimension attribute，以及 discount 和 quantity 列。目的是在不同折扣下计算 gain in revenue(EXTENDEDPRICE * DISCOUNT)。<br>2.Flight 2 包含 3 个 query。约束条件是 2 dimension attributes。计算在特定 region 特定 produce class 的 revenue，并且按照 product class 和 year 去 group。<br>3.Flight 3 包含 4 个 query。约束条件是 3 dimention attributes。计算特定区域的特定时间内的 revenue，按照 customernation、supplier nation 和 year 做 group。<br>4.Flight 4 包含 3 个 query。Queries restrict on three dimension columns, and compute profit (REVENUE - SUPPLYCOST) grouped by year, nation, and category for query 1; and for queries 2 and 3, region and category. The LINEORDER selectivities for the three queries are 1.6×10−2 , 4.5×10−3 , and 9.1 × 10−5 , respectively</p>
+<p>Queries：包含了 13 个 query，可以被分为 4 类，或者四个 flight：</p>
+<ol>
+<li>Flight 1 包含 3 个 queries。这些 query 的约束条件是 1 dimension attribute，以及 discount 和 quantity 列。目的是在不同折扣下计算 gain in revenue(EXTENDEDPRICE * DISCOUNT)。</li>
+<li>Flight 2 包含 3 个 query。约束条件是 2 dimension attributes。计算在特定 region 特定 produce class 的 revenue，并且按照 product class 和 year 去 group。</li>
+<li>Flight 3 包含 4 个 query。约束条件是 3 dimention attributes。计算特定区域的特定时间内的 revenue，按照 customernation、supplier nation 和 year 做 group。</li>
+<li>Flight 4 包含 3 个 query。Queries restrict on three dimension columns, and compute profit (REVENUE - SUPPLYCOST) grouped by year, nation, and category for query 1; and for queries 2 and 3, region and category. The LINEORDER selectivities for the three queries are 1.6×10−2 , 4.5×10−3 , and 9.1 × 10−5 , respectively</li>
+</ol>
 <h2 id="ROW-ORIENTED-EXECUTION"><a href="#ROW-ORIENTED-EXECUTION" class="headerlink" title="ROW-ORIENTED EXECUTION"></a>ROW-ORIENTED EXECUTION</h2><h3 id="Vertical-Partitioning"><a href="#Vertical-Partitioning" class="headerlink" title="Vertical Partitioning"></a>Vertical Partitioning</h3><p>在实现时，需要一个措施让属于相同的 row 的 field 能够彼此连接起来。在列存中这是隐式实现的，因为所有的列中的 field 都是按照相同的顺序来存储的。在行存中，一个简单的办法是对每个表中添加一个 position 列。这样每个 column都对应一个 physical 表，第 i 个表有两个 column，第一个是逻辑表中 column i 的值，第二个是 position 列中对应的值。Queries are then rewritten to perform joins on the position attribute when fetching multiple columns from the same relation. In our implementation, by default, System X chose to use hash joins for this purpose, which proved to be expensive. For that reason, we experimented with adding clustered indices on the position column of every table, and forced System X to use index joins, but this did not improve performance – 因为索引引起的额外的 io 导致了它比 hash join 还要慢。</p>
 <h3 id="Index-only-plans"><a href="#Index-only-plans" class="headerlink" title="Index-only plans"></a>Index-only plans</h3><p>Vertical Partitioning 有两个问题。第一个是每个 column 都需要存一个 position 列，浪费空间和磁盘带宽。第二个是大多数行存会为每个 tuple 存一个相对比较大的 header，从而进一步浪费空间。而列存几乎总是将 header 存在各自的 column 中，从而避免类似的开销。【Q】这个 header 是指的为 MVCC 服务的隐藏列么？<br>因此，现在这个设计中，base relation 会被存在一个标准的行存中，但是一个额外的、unclustered 的 B+ 树索引会被加载每个 table 的每个 column 上。<br>Index-only plan 需要数据库的额外的支持。首先对每个表，建立满足 predicate (record-id, value) 对的 list，然后如果在同一个表上有多个 predicate，则需要在内存中 merge 这些 rids-list。当这些 fields 没有 predicate，那么就可以返回这一列中所有的 (record-id, value) 对。可以看到，这样的 plan 并不需要访问磁盘上的真实 tuple。虽然这些 index 能够显式存放 rid，但是它们不会存储一份重复的 value 了。所以，它有 a lower per-tuple overhead than the vertical-partitioning approach，因为 tuple header 并没被存在 index 中。<br>容易发现，这个问题是如果一个 column 上没有 predicate，就需要扫描一遍 index 从而去提取出需要的 value。相比于 vertical partition 的扫 heap file 会更慢一点。【Q】我理解就是这时候要回表，就比较慢。<br>一个优化是建立 composite keys 的索引。例如 <code>SELECT AVG(salary) FROM emp WHERE age &gt; 40</code> 这个 query，如果建立了一个 (age, salary) 上的 composite index，就可以从这个索引中快速回答这个 query。如果我们为 age 和 salary 分别建立了索引，那么 index-only-plan 就需要首先根据 age 的索引找到所有的 record-ids，然后再去和整个 (record-id, salary) 列表去 merge，而这个就需要加载整个 salary 索引，所以就很慢了。<br>We use this optimization in our implementation by storing the primary key of each dimension table as a secondary sort attribute on the indices over the attributes of that dimension table. 这样，就可以有效访问 the primary key values of the dimension that need to be joined with the fact table. </p>
 <h3 id="Materialized-Views"><a href="#Materialized-Views" class="headerlink" title="Materialized Views"></a>Materialized Views</h3><p>对于每个 query flight，狗仔一个 optimal set of materialized view，其中只包含所有需要的 column。我们没有 pre-join columns needed to answer queries in these views。Our objective with this strategy is to allow System X to access just the data it needs from disk, avoiding the overheads of explicitly storing record-id or positions, and storing tuple headers just once per tuple. 因此，我们期望它比其他两个方式表现更好，尽管它要求 query 的 workload 需要被提前知道。</p>
@@ -728,7 +734,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">219</span>
+                <span class="site-state-item-count">223</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -741,7 +747,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">150</span>
+                <span class="site-state-item-count">154</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

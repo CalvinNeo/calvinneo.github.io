@@ -73,7 +73,7 @@
 <link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="分布式," />
+  <meta name="keywords" content="分布式,arch," />
 
 
 
@@ -92,14 +92,14 @@
 
 
 <meta name="description" content="介绍软件工程领域一些通用的设计方案。">
-<meta name="keywords" content="分布式">
+<meta name="keywords" content="分布式,arch">
 <meta property="og:type" content="article">
 <meta property="og:title" content="通用架构设计归纳">
 <meta property="og:url" content="http://www.calvinneo.com/2024/02/24/common-arch-design/index.html">
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="介绍软件工程领域一些通用的设计方案。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2024-02-24T16:18:28.682Z">
+<meta property="og:updated_time" content="2024-12-17T14:50:31.822Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="通用架构设计归纳">
 <meta name="twitter:description" content="介绍软件工程领域一些通用的设计方案。">
@@ -383,15 +383,35 @@
 <h1 id="Lease"><a href="#Lease" class="headerlink" title="Lease"></a>Lease</h1><p>通过 Lease 可以解决或者缓解下面的一些问题：</p>
 <ol>
 <li>减少 invalidation 检查的开销</li>
-<li>减少惊群带来的大量无效计算</li>
+<li>减少惊群带来的大量无效计算<br> 例如在选举模型中，在 lease 期间，voter 就不会发起投票驱逐 leader，即使它们暂时联系不上 leader。</li>
 </ol>
-<h1 id="Backoff"><a href="#Backoff" class="headerlink" title="Backoff"></a>Backoff</h1><h1 id="Cache"><a href="#Cache" class="headerlink" title="Cache"></a>Cache</h1><h1 id="Partial-Ordering"><a href="#Partial-Ordering" class="headerlink" title="Partial Ordering"></a>Partial Ordering</h1><p>通常面临这样的场景，很多个命令构成了全序关系，但其实它们可以被拆成多组彼此 concurrent 的偏序关系：</p>
+<h1 id="Backoff"><a href="#Backoff" class="headerlink" title="Backoff"></a>Backoff</h1><h1 id="Cache"><a href="#Cache" class="headerlink" title="Cache"></a>Cache</h1><h2 id="Cache-miss"><a href="#Cache-miss" class="headerlink" title="Cache miss"></a>Cache miss</h2><p>Cache miss 往往和随机读有关。</p>
+<h2 id="Flyweight-Pattern"><a href="#Flyweight-Pattern" class="headerlink" title="Flyweight Pattern"></a>Flyweight Pattern</h2><h1 id="Amortize"><a href="#Amortize" class="headerlink" title="Amortize"></a>Amortize</h1><h1 id="Batching"><a href="#Batching" class="headerlink" title="Batching"></a>Batching</h1><h1 id="Pipeline"><a href="#Pipeline" class="headerlink" title="Pipeline"></a>Pipeline</h1><h1 id="Locality"><a href="#Locality" class="headerlink" title="Locality"></a>Locality</h1><h1 id="分层和打洞"><a href="#分层和打洞" class="headerlink" title="分层和打洞"></a>分层和打洞</h1><h1 id="Parallel"><a href="#Parallel" class="headerlink" title="Parallel"></a>Parallel</h1><p>这个策略包含了数据并行和模型并行。前者分割数据，每一个并行单元处理一部分数据；后者分割代码，每个并行单元处理一部分逻辑。</p>
+<h2 id="SIMD"><a href="#SIMD" class="headerlink" title="SIMD"></a>SIMD</h2><h2 id="机器学习中的模型并行"><a href="#机器学习中的模型并行" class="headerlink" title="机器学习中的模型并行"></a>机器学习中的模型并行</h2><p>机器学习中的模型，其实也是一部分数据。例如神经网络中，它可能就是表示权值的矩阵。如果这个模型比较大，则它对应的矩阵可以被切分。<br>注意，这种情况下，子模型之间存在依赖关系，所以需要同步和通信。</p>
+<h1 id="Provision"><a href="#Provision" class="headerlink" title="Provision"></a>Provision</h1><p>这个思路会尝试预测资源的使用，从而提前分配，以一个较小的预测失误的代价，获取预测成功的大幅性能提升。</p>
+<h2 id="Prefetch"><a href="#Prefetch" class="headerlink" title="Prefetch"></a>Prefetch</h2><p>包含：</p>
 <ol>
-<li>在 NewSQL 的事务层+共识层的架构中，将 (start_ts, commit_ts) 的事务拆到多个共识组中，多个共识组之间可以并发 apply。对于共识组中不相交的事务，可以通过并行 apply 继续提高并发度。</li>
-<li>CPU 中的 superscalar 技术</li>
+<li>prefetch 数据</li>
+<li>prefetch 代码，也就是 branch prefiction</li>
 </ol>
-<h1 id="GC"><a href="#GC" class="headerlink" title="GC"></a>GC</h1><p>我们往往在异步线程中预处理一些对象，并最后将它们 link 到主干上，或者从主干上 unlink 对象，并最后 gc 掉。如果这中间发生重启，那么这些对象就会游离在存储中。如何区分被 unlink 但尚未被回收的对象，和刚被创建但还没有被 link 的对象呢？这里的通用思路是在重启后对比主干和存储中的对象，所有不出现在主干中的对象就需要被删掉。然后依赖重放来解决第一种情况。</p>
-<h1 id="Trade-off"><a href="#Trade-off" class="headerlink" title="Trade off"></a>Trade off</h1><h2 id="读和写"><a href="#读和写" class="headerlink" title="读和写"></a>读和写</h2><h2 id="锁和非锁"><a href="#锁和非锁" class="headerlink" title="锁和非锁"></a>锁和非锁</h2><p>锁意味着串行逻辑，通常用来避免写写冲突。<br>非锁的方案往往涉及多个版本：</p>
+<h2 id="Warm-up"><a href="#Warm-up" class="headerlink" title="Warm-up"></a>Warm-up</h2><h1 id="Ordering"><a href="#Ordering" class="headerlink" title="Ordering"></a>Ordering</h1><h2 id="Partial-Ordering"><a href="#Partial-Ordering" class="headerlink" title="Partial Ordering"></a>Partial Ordering</h2><p>通常面临这样的场景，很多个命令构成了全序关系，但其实它们可以被拆成多组彼此 concurrent 的偏序关系：</p>
+<ol>
+<li>在 NewSQL 的事务层+共识层的架构中，将 <code>(start_ts, commit_ts)</code> 的事务拆到多个共识组中，多个共识组之间可以并发 apply。对于共识组中不相交的事务，可以通过并行 apply 继续提高并发度。</li>
+<li>CPU 中的 superscalar 技术<br> 不相关的指令可以乱序执行。</li>
+</ol>
+<h2 id="Pipeline-1"><a href="#Pipeline-1" class="headerlink" title="Pipeline"></a>Pipeline</h2><p>Pipeline 可以作为一个 first-class 的优化类型了。但是我觉得它也是一个 Ordering 的优化。</p>
+<h2 id="Parallel-1"><a href="#Parallel-1" class="headerlink" title="Parallel"></a>Parallel</h2><h1 id="重放"><a href="#重放" class="headerlink" title="重放"></a>重放</h1><h2 id="GC"><a href="#GC" class="headerlink" title="GC"></a>GC</h2><p>我们往往在异步线程中预处理一些对象，并最后将它们 link 到主干上，或者从主干上 unlink 对象，并最后 gc 掉。如果这中间发生重启，那么这些对象就会游离在存储中。如何区分被 unlink 但尚未被回收的对象，和刚被创建但还没有被 link 的对象呢？这里的通用思路是在重启后对比主干和存储中的对象，所有不出现在主干中的对象就需要被删掉。然后依赖重放来解决第一种情况。</p>
+<h1 id="Trade-off"><a href="#Trade-off" class="headerlink" title="Trade off"></a>Trade off</h1><p>Trade off 的思路是权衡两个方案 A 或者 B，在它们各自的好处和坏处中取得一个妥协。</p>
+<h2 id="质量和速度"><a href="#质量和速度" class="headerlink" title="质量和速度"></a>质量和速度</h2><ol>
+<li>向量搜索中的 ANN</li>
+<li>机器学习中的量化</li>
+<li>图像处理中的有损压缩</li>
+</ol>
+<h2 id="熵和它的代价"><a href="#熵和它的代价" class="headerlink" title="熵和它的代价"></a>熵和它的代价</h2><ol>
+<li>存储系统中，如果追求低熵，那么就会产生资源消耗。例如 LSM 中的写放大是提升系统的 Ordering。</li>
+</ol>
+<h2 id="读和写"><a href="#读和写" class="headerlink" title="读和写"></a>读和写</h2><p>读优化和写优化的 trade off 是非常常见的。</p>
+<h2 id="锁和非锁"><a href="#锁和非锁" class="headerlink" title="锁和非锁"></a>锁和非锁</h2><p>锁意味着串行逻辑，通常用来避免写写冲突。<br>非锁的方案往往涉及多个版本：</p>
 <ol>
 <li>CAS 的方案本质上是异步完成新版本的构建，再原子替换上去。它并不是避免冲突，而是在冲突时退出。</li>
 <li>MVCC 的方案本质上是让读不会阻塞写，解决读写冲突。</li>
@@ -402,7 +422,14 @@
 <li>Masstree 中使用锁解决写写冲突，引入版本号解决读写冲突。</li>
 <li>Snapshot Isolation 中，读不会被写影响。</li>
 </ol>
-
+<h2 id="存储和计算"><a href="#存储和计算" class="headerlink" title="存储和计算"></a>存储和计算</h2><p>例如，可以存一部分中间结果，从而减少重新计算的开销。包含：</p>
+<ol>
+<li>动态规划类算法</li>
+</ol>
+<h2 id="对特定访问模式的优化"><a href="#对特定访问模式的优化" class="headerlink" title="对特定访问模式的优化"></a>对特定访问模式的优化</h2><h2 id="Eager-vs-Lazy"><a href="#Eager-vs-Lazy" class="headerlink" title="Eager vs Lazy"></a>Eager vs Lazy</h2><h3 id="COW"><a href="#COW" class="headerlink" title="COW"></a>COW</h3><p>C++ 中 COW 字符串最初被用来优化内存使用，以及减少不必要的复制。它也被认为是读多写少场景下的一种优化策略。但是它后续被废弃了，原因是它在多线程中的表现不佳。</p>
+<h1 id="转移代价"><a href="#转移代价" class="headerlink" title="转移代价"></a>转移代价</h1><p>相比于 trade off，另一种思路是将代价转移。此时，接纳方案 A 和 B 的大部分的好处，承担第三个方案/操作 C 的代价，使得 A + B + C 的开销小于单独的 A 或者 B。</p>
+<h2 id="一些算法的例子"><a href="#一些算法的例子" class="headerlink" title="一些算法的例子"></a>一些算法的例子</h2><h3 id="LRU-cache"><a href="#LRU-cache" class="headerlink" title="LRU cache"></a>LRU cache</h3><p>它使用了双向链表来支持的插入和删除，以及排序；然后又引入了 hash table 来支持快速的查询。它的操作 C 是去维护两个数据结构。而维护链表和 hash 表的代价要比单独使用一个，然后接受另一个的代价要低很多。</p>
+<h3 id="雪花算法"><a href="#雪花算法" class="headerlink" title="雪花算法"></a>雪花算法</h3><h2 id="分离读优化和写优化"><a href="#分离读优化和写优化" class="headerlink" title="分离读优化和写优化"></a>分离读优化和写优化</h2><h2 id="分离冷数据和热数据"><a href="#分离冷数据和热数据" class="headerlink" title="分离冷数据和热数据"></a>分离冷数据和热数据</h2><h2 id="Scale-out"><a href="#Scale-out" class="headerlink" title="Scale out"></a>Scale out</h2>
       
     </div>
 
@@ -453,6 +480,8 @@
         <div class="post-tags">
           
             <a href="/tags/分布式/" rel="tag"># 分布式</a>
+          
+            <a href="/tags/arch/" rel="tag"># arch</a>
           
         </div>
       
@@ -556,7 +585,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">219</span>
+                <span class="site-state-item-count">223</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -569,7 +598,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">150</span>
+                <span class="site-state-item-count">154</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -662,7 +691,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Lease"><span class="nav-number">1.</span> <span class="nav-text">Lease</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Backoff"><span class="nav-number">2.</span> <span class="nav-text">Backoff</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Cache"><span class="nav-number">3.</span> <span class="nav-text">Cache</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Partial-Ordering"><span class="nav-number">4.</span> <span class="nav-text">Partial Ordering</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#GC"><span class="nav-number">5.</span> <span class="nav-text">GC</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Trade-off"><span class="nav-number">6.</span> <span class="nav-text">Trade off</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#读和写"><span class="nav-number">6.1.</span> <span class="nav-text">读和写</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#锁和非锁"><span class="nav-number">6.2.</span> <span class="nav-text">锁和非锁</span></a></li></ol></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Lease"><span class="nav-number">1.</span> <span class="nav-text">Lease</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Backoff"><span class="nav-number">2.</span> <span class="nav-text">Backoff</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Cache"><span class="nav-number">3.</span> <span class="nav-text">Cache</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Cache-miss"><span class="nav-number">3.1.</span> <span class="nav-text">Cache miss</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Flyweight-Pattern"><span class="nav-number">3.2.</span> <span class="nav-text">Flyweight Pattern</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Amortize"><span class="nav-number">4.</span> <span class="nav-text">Amortize</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Batching"><span class="nav-number">5.</span> <span class="nav-text">Batching</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Pipeline"><span class="nav-number">6.</span> <span class="nav-text">Pipeline</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Locality"><span class="nav-number">7.</span> <span class="nav-text">Locality</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#分层和打洞"><span class="nav-number">8.</span> <span class="nav-text">分层和打洞</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Parallel"><span class="nav-number">9.</span> <span class="nav-text">Parallel</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#SIMD"><span class="nav-number">9.1.</span> <span class="nav-text">SIMD</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#机器学习中的模型并行"><span class="nav-number">9.2.</span> <span class="nav-text">机器学习中的模型并行</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Provision"><span class="nav-number">10.</span> <span class="nav-text">Provision</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Prefetch"><span class="nav-number">10.1.</span> <span class="nav-text">Prefetch</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Warm-up"><span class="nav-number">10.2.</span> <span class="nav-text">Warm-up</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Ordering"><span class="nav-number">11.</span> <span class="nav-text">Ordering</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Partial-Ordering"><span class="nav-number">11.1.</span> <span class="nav-text">Partial Ordering</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Pipeline-1"><span class="nav-number">11.2.</span> <span class="nav-text">Pipeline</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Parallel-1"><span class="nav-number">11.3.</span> <span class="nav-text">Parallel</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#重放"><span class="nav-number">12.</span> <span class="nav-text">重放</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#GC"><span class="nav-number">12.1.</span> <span class="nav-text">GC</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Trade-off"><span class="nav-number">13.</span> <span class="nav-text">Trade off</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#质量和速度"><span class="nav-number">13.1.</span> <span class="nav-text">质量和速度</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#熵和它的代价"><span class="nav-number">13.2.</span> <span class="nav-text">熵和它的代价</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#读和写"><span class="nav-number">13.3.</span> <span class="nav-text">读和写</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#锁和非锁"><span class="nav-number">13.4.</span> <span class="nav-text">锁和非锁</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#存储和计算"><span class="nav-number">13.5.</span> <span class="nav-text">存储和计算</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#对特定访问模式的优化"><span class="nav-number">13.6.</span> <span class="nav-text">对特定访问模式的优化</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Eager-vs-Lazy"><span class="nav-number">13.7.</span> <span class="nav-text">Eager vs Lazy</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#COW"><span class="nav-number">13.7.1.</span> <span class="nav-text">COW</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#转移代价"><span class="nav-number">14.</span> <span class="nav-text">转移代价</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#一些算法的例子"><span class="nav-number">14.1.</span> <span class="nav-text">一些算法的例子</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#LRU-cache"><span class="nav-number">14.1.1.</span> <span class="nav-text">LRU cache</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#雪花算法"><span class="nav-number">14.1.2.</span> <span class="nav-text">雪花算法</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#分离读优化和写优化"><span class="nav-number">14.2.</span> <span class="nav-text">分离读优化和写优化</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#分离冷数据和热数据"><span class="nav-number">14.3.</span> <span class="nav-text">分离冷数据和热数据</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Scale-out"><span class="nav-number">14.4.</span> <span class="nav-text">Scale out</span></a></li></ol></li></ol></div>
             
 
           </div>

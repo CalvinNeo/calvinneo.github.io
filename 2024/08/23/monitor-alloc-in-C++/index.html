@@ -73,7 +73,7 @@
 <link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="C++,内存管理," />
+  <meta name="keywords" content="C++,内存管理,profiling," />
 
 
 
@@ -92,7 +92,7 @@
 
 
 <meta name="description" content="介绍 C++ 上的内存监控方案。 默认使用 jemalloc。">
-<meta name="keywords" content="C++,内存管理">
+<meta name="keywords" content="C++,内存管理,profiling">
 <meta property="og:type" content="article">
 <meta property="og:title" content="C++ 内存监控方案">
 <meta property="og:url" content="http://www.calvinneo.com/2024/08/23/monitor-alloc-in-C++/index.html">
@@ -101,7 +101,7 @@
 <meta property="og:locale" content="zh-Hans">
 <meta property="og:image" content="http://www.calvinneo.com/img/monitor-memory/11.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/monitor-memory/heap-hire.png">
-<meta property="og:updated_time" content="2024-11-18T09:21:20.390Z">
+<meta property="og:updated_time" content="2024-12-09T16:38:37.610Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="C++ 内存监控方案">
 <meta name="twitter:description" content="介绍 C++ 上的内存监控方案。 默认使用 jemalloc。">
@@ -386,7 +386,14 @@
 
 <h1 id="MemoryTracker"><a href="#MemoryTracker" class="headerlink" title="MemoryTracker"></a>MemoryTracker</h1><p>原理是每次分配内存的时候，manually 去向⼀个 MemoryTracker 注册。下层级的 Tracker 和上层级的 Tracker ⼀起组成树状结构。</p>
 <h1 id="prof-dump"><a href="#prof-dump" class="headerlink" title="prof.dump"></a>prof.dump</h1><p>可以定期通过 prof.dump 的方式 dump 下堆文件。<br>需要配置 MALLOC_CONF 为 <code>prof:true</code>，否则会报错 Resource temporarily unavailable。可以设置 <code>prof.activate:false</code> 避免在不需要 profile 的时候，产生开销。</p>
-<p>注意，prof:true 是不可以运行期修改的。但是 prof.activate 是可以的。</p>
+<p>注意，<code>prof:true</code> 是不可以运行期修改的。但是 <code>prof.activate</code> 是可以的。</p>
+<h2 id="有关-dl-iterate-phdr-的死锁"><a href="#有关-dl-iterate-phdr-的死锁" class="headerlink" title="有关 dl_iterate_phdr 的死锁"></a>有关 dl_iterate_phdr 的死锁</h2><p>在 <a href="https://github.com/tikv/pprof-rs/pull/85/files#diff-65a1ed4903a387e1d45937ab46e839563c38fc24dc6be2c8e7ae021621c3b0da" target="_blank" rel="noopener">Rust</a> 中因为 <code>Backtrace::new()</code> 会调用 <code>dl_iterate_phdr</code>，而这个函数会调用 mutex。如果一个 signal 在获得这个锁之后过来，就会死锁。在 tikv 中，很容易就会调用到 <code>Backtrace</code>，特别是在有错误的时候。在 <code>_Unwind_Backtrace</code> 中，也会调用这个锁。对应的 libunwind 的 <a href="https://github.com/libunwind/libunwind/issues/16" target="_blank" rel="noopener">issue</a>。</p>
+<p>解决方案是在 prof-rs 中禁用掉 <code>[&quot;libc&quot;, &quot;libgcc&quot;, &quot;pthread&quot;, &quot;vdso&quot;]</code> 这几个库的 unwind。</p>
+<h2 id="有关-dwarf-下-prof-变慢"><a href="#有关-dwarf-下-prof-变慢" class="headerlink" title="有关 dwarf 下 prof 变慢"></a>有关 dwarf 下 prof 变慢</h2><p>【这里几个图在我的破 QQ 文档里面我就懒得放了】<br>事情的起因是无论是手动调用 profile 还是自动进行的 continuous profiling，预期 10s 的 profile 时，实际会花一分钟左右，从而将 status_server 线程卡住而无法处理 prometheus 的 http 请求。<br>经过加日志断点，发现时间主要花在生成火焰图上，耗时约 40s。<br>观察生成火焰图的火焰图，发现花费大量时间在 miniz_oxide 上。<br>后面发现这个错误在 frame pointer 上不存在。当然 frame pointer 上有 bug，所以我们对于 x86 统一换成了 dwarf。另外，如果我们将 TiFlash 的压缩 debug section 去掉，耗时也会显著减少。这个是在 cmake/tiflash_linux_post_install.cmake 里面 –compress-debug-sections=zlib-gnu 来清理的。但去掉之后，binary 大小是原来的三倍，所以去掉也不是长久之计。<br>去掉之后发现是 addr2line 耗时比较多。这里发现有个 do_rallocx 函数，对应了 Report::pprof 中将符号入栈的操作。它花了不少时间。<br>这从而也启发到我同事，说可以比较下 dwarf 拿到 backtrace 和 frame pointer 的栈的深度。可能 dwarf 拿到的栈会深很多（比如 inline 的函数可能能拿到），所以从地址转换成符号花的时间更长。这个比较下来，实际上两个栈差不多大。<br>然后同事发现，在 <a href="https://github.com/tikv/pprof-rs/blob/1f4ef0991dc780ed11dc17954a38d0a3abd59c61/src/report.rs#L72" target="_blank" rel="noopener">https://github.com/tikv/pprof-rs/blob/1f4ef0991dc780ed11dc17954a38d0a3abd59c61/src/report.rs#L72</a> 处一个循环耗时很高，循坏一千多次花费四十多秒。<br>进而进入 Frames::from 中，这里根据 dwarf(即 bracktrace-rs) 或者 framepointer 实现，会选择不同的 Frame 实现。而在 backtrace 中的 resolve_frame 中会先读 mapping_for_lib，这是个 cache，如果 cache 不够才会读别的。<br>这里我怀疑可能是因为 dwarf 里面 symbol 比较多，然后 cache 被 evict 掉了。<br>根因应该是 dwarf 的 backtrace 深度比较深，涉及的 so 会更多，而 backtrace-rs 里 lib cache 最多只有4个，所以 dwarf cache miss 会比较频繁，需要不断地对 so 的 debug_section 解压缩和 addr2line。<a href="https://github.com/rust-lang/backtrace-rs/issues/499%E3%80%82" target="_blank" rel="noopener">https://github.com/rust-lang/backtrace-rs/issues/499。</a></p>
+<p>发现其实如果用 addr2line 去读 heap，耗时也会很长，感觉还是和 binary 的压缩有关。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">root      986545  1.8  0.1 520308 515644 pts/32  S+   17:39   0:16 perl ./jeprof --add_lib bin/tiflash/libtiflash_proxy.so --add_lib bin/tiflash/libgmssld.so.3 --svg bin/tiflash/tiflash jeprof.910766.14.i14.heap</span><br><span class="line">root      988390  0.0  0.0   7120  3460 pts/32   S+   17:40   0:00 sh -c addr2line -f -C -e 。。。/libtiflash_proxy.so -i &lt;/tmp/jeprof986545.sym</span><br></pre></td></tr></table></figure>
+
+<p>另外，binutils 也要升级，不然会出 invalid or unhandled FORM value 0x25 错误。</p>
 <h1 id="Jemalloc-allocatedptr"><a href="#Jemalloc-allocatedptr" class="headerlink" title="Jemalloc allocatedptr"></a>Jemalloc allocatedptr</h1><p>这个方案要求感知线程的创建和销毁，在对应的时候，通过 <code>thread.allocatedp</code> 和 <code>thread.deallocatedp</code> 来注册。这样就可以知道每个线程分配或者释放了多少内存。<br>该⽅案能够很好看到内存分配和释放的速率和增量，例如如果观察到 allocated 斜率⼤幅增加，则说明该线程最近在⾼速分配内存。但难以判断某个线程到底 own 了多少内存，原因是：</p>
 <ol>
 <li>⼀个线程可能释放另⼀个线程分配的内存。例如同一个模块中线程 bg-1 分配的内存可能被另⼀个线程 bg-2 释放。</li>
@@ -437,7 +444,19 @@
 <ol>
 <li>std::make_shared 直接调⽤ ::new，因此对此没有作⽤</li>
 </ol>
+<h1 id="我的一些实践"><a href="#我的一些实践" class="headerlink" title="我的一些实践"></a>我的一些实践</h1><h2 id="TiFlash-的-heap-profiling"><a href="#TiFlash-的-heap-profiling" class="headerlink" title="TiFlash 的 heap profiling"></a>TiFlash 的 heap profiling</h2><p>提供了几种方案：</p>
+<ol>
+<li><p>heap_activate、heap_deactivate<br> 这个接口会启动一个线程定期调用 prof.dump。后续可以通过 heap_list 获取所有的 heap 文件，然后 curl 命令下载某个文件到本地。</p>
+</li>
+<li><p>set_prof_active、set_prof_inactive<br> 这个接口只会操作 <code>prof.activate</code>。用户需要手动在某个时候触发 prof.dump。这是因为只要 activate 了，就会开始记录堆分配的情况，不触发 prof.dump 这样就可以避免产生较多的文件，从而污染客户的环境。</p>
+</li>
+<li><p>heap、symbol<br> 这个接口最为灵活，因为它支持 jeprof 从外部环境访问这个接口，从而避免访问用户的机器，或者 binary。</p>
+ <figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//go:embed jeprof.in</span></span><br><span class="line"><span class="keyword">var</span> jeprof <span class="keyword">string</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">fetch</span><span class="params">()</span></span> &#123;</span><br><span class="line">    cmd := exec.Command(<span class="string">"perl"</span>, <span class="string">"/dev/stdin"</span>, <span class="string">"--raw"</span>, scheme+<span class="string">"://"</span>+op.ip+<span class="string">":"</span>+strconv.Itoa(op.port)+op.path) </span><br><span class="line">    cmd.Stdin = strings.NewReader(jeprof)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
+<p> 注意，这种方式一般要持续开启 <code>prof.activate</code>。因为临时开启，则收集的时间过于短暂，可能无法生成有信息的报告。</p>
+</li>
+</ol>
+<h2 id="TiFlash-的-continuous-profiling"><a href="#TiFlash-的-continuous-profiling" class="headerlink" title="TiFlash 的 continuous profiling"></a>TiFlash 的 continuous profiling</h2>
       
     </div>
 
@@ -490,6 +509,8 @@
             <a href="/tags/C/" rel="tag"># C++</a>
           
             <a href="/tags/内存管理/" rel="tag"># 内存管理</a>
+          
+            <a href="/tags/profiling/" rel="tag"># profiling</a>
           
         </div>
       
@@ -593,7 +614,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">219</span>
+                <span class="site-state-item-count">223</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -606,7 +627,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">150</span>
+                <span class="site-state-item-count">154</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -699,7 +720,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#MemoryTracker"><span class="nav-number">1.</span> <span class="nav-text">MemoryTracker</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#prof-dump"><span class="nav-number">2.</span> <span class="nav-text">prof.dump</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Jemalloc-allocatedptr"><span class="nav-number">3.</span> <span class="nav-text">Jemalloc allocatedptr</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Jemalloc-Arena"><span class="nav-number">4.</span> <span class="nav-text">Jemalloc Arena</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#thread-local-memory-tracker"><span class="nav-number">5.</span> <span class="nav-text">thread_local memory tracker</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Jemalloc-mallocx"><span class="nav-number">6.</span> <span class="nav-text">Jemalloc mallocx</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-的堆内存管理层级"><span class="nav-number">7.</span> <span class="nav-text">C++ 的堆内存管理层级</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-Custom-Allocator"><span class="nav-number">8.</span> <span class="nav-text">C++ Custom Allocator</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#pmr"><span class="nav-number">8.1.</span> <span class="nav-text">pmr</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-Custom-global-operator-new"><span class="nav-number">9.</span> <span class="nav-text">C++ Custom global operator new</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-Custom-class-operator-new"><span class="nav-number">10.</span> <span class="nav-text">C++ Custom class operator new</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#MemoryTracker"><span class="nav-number">1.</span> <span class="nav-text">MemoryTracker</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#prof-dump"><span class="nav-number">2.</span> <span class="nav-text">prof.dump</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#有关-dl-iterate-phdr-的死锁"><span class="nav-number">2.1.</span> <span class="nav-text">有关 dl_iterate_phdr 的死锁</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#有关-dwarf-下-prof-变慢"><span class="nav-number">2.2.</span> <span class="nav-text">有关 dwarf 下 prof 变慢</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Jemalloc-allocatedptr"><span class="nav-number">3.</span> <span class="nav-text">Jemalloc allocatedptr</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Jemalloc-Arena"><span class="nav-number">4.</span> <span class="nav-text">Jemalloc Arena</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#thread-local-memory-tracker"><span class="nav-number">5.</span> <span class="nav-text">thread_local memory tracker</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Jemalloc-mallocx"><span class="nav-number">6.</span> <span class="nav-text">Jemalloc mallocx</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-的堆内存管理层级"><span class="nav-number">7.</span> <span class="nav-text">C++ 的堆内存管理层级</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-Custom-Allocator"><span class="nav-number">8.</span> <span class="nav-text">C++ Custom Allocator</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#pmr"><span class="nav-number">8.1.</span> <span class="nav-text">pmr</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-Custom-global-operator-new"><span class="nav-number">9.</span> <span class="nav-text">C++ Custom global operator new</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-Custom-class-operator-new"><span class="nav-number">10.</span> <span class="nav-text">C++ Custom class operator new</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#我的一些实践"><span class="nav-number">11.</span> <span class="nav-text">我的一些实践</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#TiFlash-的-heap-profiling"><span class="nav-number">11.1.</span> <span class="nav-text">TiFlash 的 heap profiling</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#TiFlash-的-continuous-profiling"><span class="nav-number">11.2.</span> <span class="nav-text">TiFlash 的 continuous profiling</span></a></li></ol></li></ol></div>
             
 
           </div>

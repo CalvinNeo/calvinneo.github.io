@@ -106,7 +106,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/fbs/raft_exam/1.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/fbs/raft_exam/2.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/fbs/raft_exam/3.png">
-<meta property="og:updated_time" content="2024-11-18T16:02:51.941Z">
+<meta property="og:updated_time" content="2024-11-24T06:46:19.693Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Raft共识算法">
 <meta name="twitter:description" content="本文来自我的文章分布式一致性和分布式共识协议太长，因此将其中的Raft部分单独列出来作为一篇文章。 Raft协议的设计者们认为Paxos协议非常难于理解，并且需要作出很多修改才能够应用到工程中，因此设计了偏重于实现的Raft协议，这甚至体现在他们的论文标题《In Search of an Understandable Consensus Algorithm(Extended Version)》上，">
@@ -678,7 +678,7 @@
 <p>在答案中，还举例解释了可能的后果，即这会导致这些被提交的entry被覆盖。同样地，对于一个3节点的集群：<br>S1作为term2的Leader，添加了index=1的条目&lt;1,2,X&gt;，X是这个条目的内容。稍后，由于这个记录已经被复制到了S1和S2，所以它被成功提交。<br>此后，S2重启，并丢失了所有记录。<br>后面由于一些网络抖动的因素，S1被分区，S3变成了term3的Leader（通过S2和S3的票，因为他们的LogEntries都是空），然后它添加了index=1的条目&lt;1,3,Y&gt;，这个条目同样可以被提交。那么此时index=1处的值既被提交为了X又被提交为了Y，不一致性发生了。</p>
 <h3 id="7"><a href="#7" class="headerlink" title="7"></a>7</h3><p>即使其它服务器认为Leader 崩溃并选出了新Leader后，老Leader依然可能继续运行。新的 Leader 将与集群中的多数派联系并更新它们的term，因此，老的Leader将在与多数派中的任何一台服务器通信后立即下台。<br>然而在此期间，它也可以继续充当Leader，并向尚未被新Leader联系到的Follower发出请求；此外，客户端可以继续向老的Leader发送请求。<br>我们知道，在选举结束后，老的Leader不能commit任何新的Log Entry，因为这样做获得多数派中的至少一台服务器的认可。但是，老的Leader是否有可能执行一个成功AppendEntries RPC，从而完成对<strong>选举开始前</strong>收到的旧日志记录的提交？如果可以，这是否会给Raft协议带来问题？</p>
 <p>这个题目描述的场景我没有真实遇到过，所以只能分析。首先老Leader的RPC只能发给少数派Follower，这些Follower也并未知晓新Leader的产生。但是如果新选出的Leader有包含老Leader的旧日志的话，那么其实这些旧日志是能够达到Majority的要求的。但对于是否会被覆盖这一点，我并没有什么结论。</p>
-<p>看答案，实际上是可能存在这种情况的，这也发生在新Leader包含了老Leader这一部分的日志。<br>在答案中给了一个具体的例子，涉及到一个5个节点的集群。<br>S1，日志为空，通过S1、S2和S3的票成为了term2的Leader。稍后，它添加日志&lt;1,2,X&gt;，并且复制到S2。<br>此后，这个S2通过S2、S4、S5的票成为了Leader。这里按照投票原则，S3也应该会投票的啊？其实S3和S1被分区了。<br>在这之后，S1完成发送&lt;1,2,X&gt;到S3，在此时，S1完成了&lt;1,2,X&gt;的提交，即使它不再是这个term的Leader了。这个论述其实和我上面的论述是一致的，而下面给出了为啥不会被覆盖的论证。</p>
+<p>看答案，实际上是可能存在这种情况的，这也发生在新Leader包含了老Leader这一部分的日志。<br>在答案中给了一个具体的例子，涉及到一个5个节点的集群。<br>S1，日志为空，通过S1、S2和S3的票成为了term2的Leader。稍后，它添加日志<code>&lt;1,2,X&gt;</code>，并且复制到S2。<br>此后，这个S2通过S2、S4、S5的票成为了Leader。这里按照投票原则，S3也应该会投票的啊？其实S3和S1被分区了。<br>在这之后，S1完成发送&lt;1,2,X&gt;到S3，在此时，S1完成了&lt;1,2,X&gt;的提交，即使它不再是这个term的Leader了。这个论述其实和我上面的论述是一致的，而下面给出了为啥不会被覆盖的论证。</p>
 <p>这个是安全的，因为新Leader也具有老Leader提交的Entry，这会导致这个Entry被持久化，这是因为：<br>这Entry肯定也在一些给新Leader L投票的机器S上存在，并且必须在S投票之前就存在。log completeness check要求在投票时检查对端的lastLogTerm和lastLogIndex必须至少都大于等于自己的。下面我们分类讨论：<br>如果L是S之后的第一个Leader，那么必然有<code>L.lastLogTerm == S.lastLogTerm &amp;&amp; L.lastLogIndex &gt;= S.lastLogIndex</code>，即L拥有S拥有的所有Entry，包括我们担心的那一条。<br>如果L是S之后的第二个Leader，那么如果他从前一个Leader M中收到了Entry，那么必然有<code> L.lastLogTerm &gt; S.lastLogTerm</code>，但是M肯定在复制自己的Entry之前，就已经将我们担心的那一条日志复制给了L，因此这也是安全的。由此扩展，我们可以推论到任何其他的Leader。</p>
 <h3 id="8"><a href="#8" class="headerlink" title="8"></a>8</h3><p>在配置变更过程中，如果当前Leader不在C-new中，一旦C-new的日志记录被提交，它就会下台。然而，这意味着有一段时间，Leader不属于它所领导的集群（Leader上存储的当前配置条目是C-new，C-new不包括 Leader）。假设修改协议，如果C-new不包含Leader，则使Leader在其日志存储了C-new时就立即下台。这种方法可能发生的最坏情况是什么？</p>
 <p>首先，下台意味着什么呢？在C-new之前，C-old已经结束使命，配置C-joint已被提交，任何决议的提交都需要经过new和old的过半数的同意才行。那么下台意味着只要C-new日志被Leader存储，它就立即变成Follower，那么这个集群不再具有Leader，从而会发生选举，选举也是按照C-joint来选举的。考虑如果选出一个在C-old中的Leader，那么它会重复之前的流程，增加一个C-new，然后下台。这个流程会一直重复到C-old中的Majority都得到了C-new日志，这样剩余没有C-new日志的C-old机器也不能被选举为Leader了。这里注意，我们在讨论一个最坏的情况，就是每一次选举都是C-old中被选中，并且也不进行任何复制，因此所有C-new中的所有机器都没有收到C-new的日志。所以产生的结果就是最坏会有|C-old/2|次冗余选举。</p>
@@ -854,7 +854,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">219</span>
+                <span class="site-state-item-count">223</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -867,7 +867,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">150</span>
+                <span class="site-state-item-count">154</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
