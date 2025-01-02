@@ -73,7 +73,7 @@
 <link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="profiling,CPU,性能," />
+  <meta name="keywords" content="profiling,CPU,性能,benchmark," />
 
 
 
@@ -92,14 +92,14 @@
 
 
 <meta name="description" content="记录了自己在执行 CPU Profiling 的时候遇到的一些经验。 相关文章：  heap profiling">
-<meta name="keywords" content="profiling,CPU,性能">
+<meta name="keywords" content="profiling,CPU,性能,benchmark">
 <meta property="og:type" content="article">
 <meta property="og:title" content="CPU Profiling 经验之谈">
 <meta property="og:url" content="http://www.calvinneo.com/2024/11/21/cpu-profiling/index.html">
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="记录了自己在执行 CPU Profiling 的时候遇到的一些经验。 相关文章：  heap profiling">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2024-11-20T17:17:49.462Z">
+<meta property="og:updated_time" content="2024-12-24T17:09:29.716Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="CPU Profiling 经验之谈">
 <meta name="twitter:description" content="记录了自己在执行 CPU Profiling 的时候遇到的一些经验。 相关文章：  heap profiling">
@@ -385,9 +385,62 @@
 <a id="more"></a>
 
 <h1 id="Profiling-基础"><a href="#Profiling-基础" class="headerlink" title="Profiling 基础"></a>Profiling 基础</h1><p>首先，<a href="/2023/12/17/patmc/">Performance analysis and tuning on modern CPUs</a> 这本书是值得阅读的基础。但是里面讲述的很多内容，我目前还没有机会完全实践。</p>
-<h1 id="关于线程池"><a href="#关于线程池" class="headerlink" title="关于线程池"></a>关于线程池</h1><p>一些程序会同时记录所有线程的 CPU 用量，以及当前进程的 CPU 总用量。这两个是一致的么？至少在一个使用线程池的程序中，未必一致。</p>
+<h1 id="关于线程池"><a href="#关于线程池" class="headerlink" title="关于线程池"></a>关于线程池</h1><h2 id="记录线程名"><a href="#记录线程名" class="headerlink" title="记录线程名"></a>记录线程名</h2><p>有一些方法设置线程名，包括：</p>
+<ol>
+<li>pthread_setname_np</li>
+<li>prctl</li>
+</ol>
+<p>出于下列原因，建议线程名具有唯一性：</p>
+<ol>
+<li>诸如一些线程池的实际工作内容不一样，最好以数字区分。</li>
+<li>有一些库会扩展 std::mutex，记录上锁的线程名，用来避免重复加锁。当然这个并不好，最好用线程 id。</li>
+</ol>
+<p>在一些很老的 C 库中，没有提供 pthread_setname_np 函数。CK 会写一个 dummy 的函数来替换，这可能导致<a href="https://github.com/pingcap/tiflash/issues/6616" target="_blank" rel="noopener">一些情况下</a>不能设置成功线程名。</p>
+<h2 id="线程名的切换问题"><a href="#线程名的切换问题" class="headerlink" title="线程名的切换问题"></a>线程名的切换问题</h2><p>一些程序会同时记录所有线程的 CPU 用量，以及当前进程的 CPU 总用量。这两个是一致的么？至少在一个使用线程池的程序中，未必一致。</p>
 <p>这里的原因是线程池中往往会将线程按照 <code>${task_name}_${task_id}</code> 这样重新命名，从而区分用途。而处于避免线程启动和销毁的开销，又倾向于维护一个全局常驻线程池，新开辟的线程池会先尝试从这个全局线程池中取，然后用完之后再归还。这就导致如果在这个过程中线程名字发生了从 A 到 B 的变换，则可能会看到 B 对应的指标有一个很高的 delta（比如在 grafana 中能看到一个尖峰）。原因是 <code>/proc/$pid/stat</code> 或者 <code>/proc/tasks/$tid/stat</code> 里面的信息都是从启动开始经历的时钟周期，无论是 stime 还是 utime。所以，如果一开始线程名是 A，后来被某个线程池借走了，名字变成 B，但此时 A 的数据还在。如果此时，线程被归还了，名字改为 A，那么 A 的变化率就是这段时间的 jiffies 增量除以这段时间的长度。</p>
 <h1 id="On-CPU-和-Off-CPU-time"><a href="#On-CPU-和-Off-CPU-time" class="headerlink" title="On CPU 和 Off CPU time"></a>On CPU 和 Off CPU time</h1><p>off-CPU 例如在等待阻塞 IO、锁、page swap 等的时间。这些时间不会通过普通的火焰图被反映出来，但却是影响读取性能的一个因素。我们常常要回答问题，为什么 CPU 没有被用满，但是查询依然比较慢。</p>
+<h2 id="使用-perf-probe-记录函数调用耗时"><a href="#使用-perf-probe-记录函数调用耗时" class="headerlink" title="使用 perf probe 记录函数调用耗时"></a>使用 perf probe 记录函数调用耗时</h2><p>该方案整理自某同事的 idea。</p>
+<p>考虑下面的场景，我们需要查看某动态链接库 <code>/path/to/libtiflash_proxy.so</code> 中 <code>handle_pending_applies</code> 函数每次调用的耗时。此时，可以借助 <code>perf probe</code> 去打点 <code>$tok</code> 和 <code>$tok%return</code>，它们分别对应函数入口和函数出口。这里需要借助于一个 while 循环是因为函数可能有多个重载。</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">perf probe --del <span class="string">'probe_libtiflash_proxy:*'</span></span><br><span class="line">BIN=/path/to/libtiflash_proxy.so</span><br><span class="line">TOKEN=handle_pending_applies</span><br><span class="line">ITER=0</span><br><span class="line">objdump <span class="variable">$BIN</span> --syms | grep <span class="variable">$TOKEN</span> | awk <span class="string">'&#123;print $6&#125;'</span> | <span class="keyword">while</span> <span class="built_in">read</span> -r tok ; <span class="keyword">do</span></span><br><span class="line">    ITER=$(expr <span class="variable">$ITER</span> + 1)</span><br><span class="line">    NAME=<span class="variable">$TOKEN</span>\_<span class="variable">$ITER</span></span><br><span class="line">    <span class="built_in">echo</span> <span class="variable">$NAME</span>, <span class="variable">$TOKEN</span>, <span class="variable">$ITER</span>, <span class="variable">$TOKEN</span>\_<span class="variable">$ITER</span></span><br><span class="line">    perf probe -x <span class="variable">$BIN</span> --no-demangle <span class="variable">$NAME</span>=<span class="variable">$tok</span></span><br><span class="line">    perf probe -x <span class="variable">$BIN</span> --no-demangle <span class="variable">$NAME</span>=<span class="variable">$tok</span>%<span class="built_in">return</span></span><br><span class="line"><span class="keyword">done</span></span><br><span class="line">perf record -e probe_libtiflash_proxy:\* -aR sleep 10</span><br><span class="line">perf script -s perf-script.py</span><br></pre></td></tr></table></figure>
+
+<p><a href="/asset/highconcurrency/perf-script.py">附上 perf-script.py</a></p>
+<h1 id="关于-benchmark"><a href="#关于-benchmark" class="headerlink" title="关于 benchmark"></a>关于 benchmark</h1><h2 id="pitfall"><a href="#pitfall" class="headerlink" title="pitfall"></a>pitfall</h2><ul>
+<li>需要多次运行</li>
+<li>需要预热，加载缓存<br>  通常可以使用启发式的方法，等待性能收敛。</li>
+<li>使用高精度时钟</li>
+<li>监控系统负载</li>
+<li>避免编译器优化</li>
+<li>缓存影响</li>
+<li>考虑动态内存分配如 new 或者 delete 对 benchmark 的影响，必要时使用预分配内存池</li>
+</ul>
+<h2 id="google-benchmark"><a href="#google-benchmark" class="headerlink" title="google benchmark"></a>google benchmark</h2><h1 id="关于死锁"><a href="#关于死锁" class="headerlink" title="关于死锁"></a>关于死锁</h1><h2 id="寻找死锁的原因"><a href="#寻找死锁的原因" class="headerlink" title="寻找死锁的原因"></a>寻找死锁的原因</h2><p>通过 gdb 可以找到对应 mutex 结构中的 owner，对应的值表示 LWP 的编号。<br>对于一些程序，可能 debug info 被优化掉了，<a href="https://stackoverflow.com/questions/76489792/how-to-identify-which-thread-holds-the-stdrecursive-mutex-by-gdb" target="_blank" rel="noopener">此时可以选择</a>：</p>
+<ol>
+<li>根据提示的行号，拷贝一份对应的源码到指定位置</li>
+<li>自己编译一个同样 layout 的对象，然后 load 进去解析</li>
+</ol>
+<h1 id="一些工具"><a href="#一些工具" class="headerlink" title="一些工具"></a>一些工具</h1><h2 id="pstack"><a href="#pstack" class="headerlink" title="pstack"></a>pstack</h2><p>可以通过 <a href="https://gist.github.com/JaySon-Huang/e374da1fafa41a3fa30a24e135c60825" target="_blank" rel="noopener">https://gist.github.com/JaySon-Huang/e374da1fafa41a3fa30a24e135c60825</a> 去合并相同的堆栈。</p>
+<p>如果 pstack 没有安装，可以借助于 GDB 的 <code>thread apply all bt</code> 命令。但这个命令会对屏幕输入一堆字符，不是很好看。因此可以</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">set logging file mylog.txt</span><br><span class="line">set logging on</span><br></pre></td></tr></table></figure>
+
+<p>或者使用命令行直接输出</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">gdb -ex <span class="string">"thread apply all bt"</span> -batch -p <span class="variable">$PID</span></span><br></pre></td></tr></table></figure>
+
+<h2 id="uprobe"><a href="#uprobe" class="headerlink" title="uprobe"></a>uprobe</h2><h2 id="func-latency-工具"><a href="#func-latency-工具" class="headerlink" title="func_latency 工具"></a>func_latency 工具</h2><p>这也是 bcc 套装里面的一个工具。</p>
+<h2 id="PT-PERF-技术"><a href="#PT-PERF-技术" class="headerlink" title="PT_PERF 技术"></a>PT_PERF 技术</h2><p>主要是看 <a href="http://mysql.taobao.org/monthly/2024/04/02/" target="_blank" rel="noopener">mysql 内核月报</a> 和<a href="http://mysql.taobao.org/monthly/2024/04/03/" target="_blank" rel="noopener">续集</a>学的，它还给了一个<a href="http://mysql.taobao.org/monthly/2024/07/04/" target="_blank" rel="noopener">应用场景</a>。<br>这个工具的原理是 Intel CPU 的一个 Processor Trace 技术。主要特点是开销小。它记录程序控制流，特别是 branch 跳转的信息。</p>
+<p>这个工具可以：</p>
+<ol>
+<li>跟踪某个函数在历史时间中执行时间的分布情况。</li>
+<li>跟踪该函数所有子函数的执行情况，包含各自花了多久，占比如何。</li>
+<li>跟踪 Off-CPU，参数 -o。</li>
+<li>通过 –history=1 记录，拷贝数据到另一台机器上通过 –history=2 分析。</li>
+<li>通过 <code>-a do_command#67108864,134217727</code> 指定对应父函数以及耗时范围，从而精准定位子函数存在的问题。</li>
+</ol>
+<p>需要：</p>
+<ol>
+<li>修改 perf_event_mlock_kb 支持更大的 trace buffer，减少 trace 数据丢失。</li>
+<li>修改 kptr_restrict 支持追踪内核函数，如追踪 off-cpu 分析需要的 schedule 内核函数。</li>
+</ol>
+<p>此外对 Linux 版本也有依赖。</p>
 
       
     </div>
@@ -443,6 +496,8 @@
             <a href="/tags/CPU/" rel="tag"># CPU</a>
           
             <a href="/tags/性能/" rel="tag"># 性能</a>
+          
+            <a href="/tags/benchmark/" rel="tag"># benchmark</a>
           
         </div>
       
@@ -546,7 +601,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">223</span>
+                <span class="site-state-item-count">227</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -652,7 +707,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Profiling-基础"><span class="nav-number">1.</span> <span class="nav-text">Profiling 基础</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#关于线程池"><span class="nav-number">2.</span> <span class="nav-text">关于线程池</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#On-CPU-和-Off-CPU-time"><span class="nav-number">3.</span> <span class="nav-text">On CPU 和 Off CPU time</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Profiling-基础"><span class="nav-number">1.</span> <span class="nav-text">Profiling 基础</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#关于线程池"><span class="nav-number">2.</span> <span class="nav-text">关于线程池</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#记录线程名"><span class="nav-number">2.1.</span> <span class="nav-text">记录线程名</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#线程名的切换问题"><span class="nav-number">2.2.</span> <span class="nav-text">线程名的切换问题</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#On-CPU-和-Off-CPU-time"><span class="nav-number">3.</span> <span class="nav-text">On CPU 和 Off CPU time</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#使用-perf-probe-记录函数调用耗时"><span class="nav-number">3.1.</span> <span class="nav-text">使用 perf probe 记录函数调用耗时</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#关于-benchmark"><span class="nav-number">4.</span> <span class="nav-text">关于 benchmark</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#pitfall"><span class="nav-number">4.1.</span> <span class="nav-text">pitfall</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#google-benchmark"><span class="nav-number">4.2.</span> <span class="nav-text">google benchmark</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#关于死锁"><span class="nav-number">5.</span> <span class="nav-text">关于死锁</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#寻找死锁的原因"><span class="nav-number">5.1.</span> <span class="nav-text">寻找死锁的原因</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#一些工具"><span class="nav-number">6.</span> <span class="nav-text">一些工具</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#pstack"><span class="nav-number">6.1.</span> <span class="nav-text">pstack</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#uprobe"><span class="nav-number">6.2.</span> <span class="nav-text">uprobe</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#func-latency-工具"><span class="nav-number">6.3.</span> <span class="nav-text">func_latency 工具</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#PT-PERF-技术"><span class="nav-number">6.4.</span> <span class="nav-text">PT_PERF 技术</span></a></li></ol></li></ol></div>
             
 
           </div>
@@ -675,7 +730,7 @@
         <div class="copyright">
   
   &copy;  2015 - 
-  <span itemprop="copyrightYear">2024</span>
+  <span itemprop="copyrightYear">2025</span>
   <span class="with-love">
     <i class="fa fa-heart"></i>
   </span>

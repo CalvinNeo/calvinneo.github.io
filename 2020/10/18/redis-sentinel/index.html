@@ -99,7 +99,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="Sentinel(哨兵)监控Redis集群中Master状态，是Redis 的高可用性解决方案。它监视一系列Master-Slave集群（和其他Sentinel）。当某个Master下线时，自动将该Master下的某个Slave升级为Master。 Sentinel的代码阅读难度相对较大，这是因为它是时钟驱动的一个状态机，所以在逻辑上有点不是很连贯。本文使用的版本和Redis底层对象实现原理分析这">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2023-05-21T07:42:21.909Z">
+<meta property="og:updated_time" content="2024-12-19T12:58:33.643Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Redis Sentinel实现原理分析">
 <meta name="twitter:description" content="Sentinel(哨兵)监控Redis集群中Master状态，是Redis 的高可用性解决方案。它监视一系列Master-Slave集群（和其他Sentinel）。当某个Master下线时，自动将该Master下的某个Slave升级为Master。 Sentinel的代码阅读难度相对较大，这是因为它是时钟驱动的一个状态机，所以在逻辑上有点不是很连贯。本文使用的版本和Redis底层对象实现原理分析这">
@@ -731,7 +731,7 @@
 <h3 id="【接上】sentinelReceiveHelloMessages"><a href="#【接上】sentinelReceiveHelloMessages" class="headerlink" title="【接上】sentinelReceiveHelloMessages"></a>【接上】sentinelReceiveHelloMessages</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* This is our Pub/Sub callback for the Hello channel. It's useful in order</span></span><br><span class="line"><span class="comment"> * to discover other sentinels attached at the same master. */</span></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">sentinelReceiveHelloMessages</span><span class="params">(redisAsyncContext *c, <span class="keyword">void</span> *reply, <span class="keyword">void</span> *privdata)</span> </span>&#123;</span><br><span class="line">    sentinelRedisInstance *ri = privdata;</span><br><span class="line">    redisReply *r;</span><br><span class="line">    UNUSED(c);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!reply || !ri) <span class="keyword">return</span>;</span><br><span class="line">    r = reply;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* Update the last activity in the pubsub channel. Note that since we</span></span><br><span class="line"><span class="comment">     * receive our messages as well this timestamp can be used to detect</span></span><br><span class="line"><span class="comment">     * if the link is probably disconnected even if it seems otherwise. */</span></span><br><span class="line">    ri-&gt;link-&gt;pc_last_activity = mstime();</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* Sanity check in the reply we expect, so that the code that follows</span></span><br><span class="line"><span class="comment">     * can avoid to check for details. */</span></span><br><span class="line">    <span class="keyword">if</span> (r-&gt;type != REDIS_REPLY_ARRAY ||</span><br><span class="line">        r-&gt;elements != <span class="number">3</span> ||</span><br><span class="line">        r-&gt;element[<span class="number">0</span>]-&gt;type != REDIS_REPLY_STRING ||</span><br><span class="line">        r-&gt;element[<span class="number">1</span>]-&gt;type != REDIS_REPLY_STRING ||</span><br><span class="line">        r-&gt;element[<span class="number">2</span>]-&gt;type != REDIS_REPLY_STRING ||</span><br><span class="line">        <span class="built_in">strcmp</span>(r-&gt;element[<span class="number">0</span>]-&gt;str,<span class="string">"message"</span>) != <span class="number">0</span>) <span class="keyword">return</span>;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* We are not interested in meeting ourselves */</span></span><br><span class="line">    <span class="keyword">if</span> (<span class="built_in">strstr</span>(r-&gt;element[<span class="number">2</span>]-&gt;str,sentinel.myid) != <span class="literal">NULL</span>) <span class="keyword">return</span>;</span><br><span class="line"></span><br><span class="line">    sentinelProcessHelloMessage(r-&gt;element[<span class="number">2</span>]-&gt;str, r-&gt;element[<span class="number">2</span>]-&gt;len);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
 <h4 id="sentinelProcessHelloMessage"><a href="#sentinelProcessHelloMessage" class="headerlink" title="sentinelProcessHelloMessage"></a>sentinelProcessHelloMessage</h4><p>这个函数会处理包括新Sentinel发现、Sentinel地址变更、TODO之类的逻辑。<br>这个函数在Master/Slave实例中处理收到的Hello信息，或者sent directly to this sentinel via the (fake) PUBLISH command of Sentinel.<br>再次复习一下消息的格式</p>
-<figure class="highlight lsl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">0</span>           <span class="number">1</span>             <span class="number">2</span>              <span class="number">3</span>             <span class="number">4</span>           <span class="number">5</span>         <span class="number">6</span>           <span class="number">7</span></span><br><span class="line">sentinel_ip,sentinel_port,sentinel_runid,current_epoch,master_name,master_ip,master_port,master_config_epoch</span><br></pre></td></tr></table></figure>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">0           1             2              3             4           5         6           7</span><br><span class="line">sentinel_ip,sentinel_port,sentinel_runid,current_epoch,master_name,master_ip,master_port,master_config_epoch</span><br></pre></td></tr></table></figure>
 
 <p>下面看具体函数，主要过程是：</p>
 <ol>
@@ -831,7 +831,7 @@
 <p>下面就是SDOWN判断了，如果下面两个条件满足，设置SDOWN这个flag</p>
 <ol>
 <li><p>对方Instance无应答<br> 这里的<code>down_after_period</code>即如下，默认是30秒。</p>
- <figure class="highlight livecodeserver"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sentinel down-<span class="keyword">after</span>-<span class="built_in">milliseconds</span> mymaster <span class="number">60000</span></span><br></pre></td></tr></table></figure></li>
+ <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sentinel down-after-milliseconds mymaster 60000</span><br></pre></td></tr></table></figure></li>
 <li><p>目前我们认为该Instance是Master<br> 但它报告它将成为Slave<br> 但经过<code>down_after_period</code>和两个<code>SENTINEL_INFO_PERIOD</code>之后，这个操作仍然没有完成。</p>
 </li>
 </ol>
@@ -1499,7 +1499,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">223</span>
+                <span class="site-state-item-count">227</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -1628,7 +1628,7 @@
         <div class="copyright">
   
   &copy;  2015 - 
-  <span itemprop="copyrightYear">2024</span>
+  <span itemprop="copyrightYear">2025</span>
   <span class="with-love">
     <i class="fa fa-heart"></i>
   </span>

@@ -107,7 +107,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/hologres/3.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/cockroach/1.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/cockroach/2.png">
-<meta property="og:updated_time" content="2024-12-01T14:03:10.729Z">
+<meta property="og:updated_time" content="2024-12-17T16:26:21.176Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Database paper part 3">
 <meta name="twitter:description" content="这篇文章中，包含 DuckDB、BitCask、Hologres、Cockroach。">
@@ -452,10 +452,10 @@
 <p>有两种类型的 tablet，row 和 column。<br>row tablet 用来优化点查性能。memtable 是用 Masstree 来维护的，shard files 是 block-wise structure。shard file 包含 data block 和 index block。连续的 records 组成一个 data block，在 index block 中记录每个 data block 的 starting key，格式记录为 &lt;key, block_offset&gt;。<br>为了支持多版本，在 row tablet 中的数据会多加 del_bit 和 LSN 两列。对于同一行，memtable 和 shard file 中可能有多个记录，但是 LSN 是不同的。</p>
 <p><img src="/img/dbpaper/hologres/2.png"></p>
 <p>在 row tablet 里面的每一个 read 都包含一个 key，以及一个LSN_read。这个结果是通过搜索 memtable 和 shard file 完成的，两者可以并行做。所有 LSN 小于等于 LSN_read 的 key 都是candidate，然后会被按照 LSN 顺序进行 merge。如果看到 del_bit 是 1，或者找不到candidate record，就说明没找到。<br>写入包含了 key、value 和 LSN_write。删除也是一种写入，只是 del_bit 为 1。</p>
-<p>Column tablet 被设计来辅助 column scan。它抱恨一个 column LSM 和一个 delete map。column LSM 树中的 value 实际上包含 value col 以及 LSN。memtable 按照 Apache Arrow 的方式来存储，records 根据 arriving order 在 memtable 中存储。row group 中的每一个 column 会被存为一个独立的 data block。同一个 column 的 data block 会被连续地存储在 shard file 中，从而优化顺序 scan。我们在 meta block 中维护每个 column 和整个 shard file 的 meta data，从而加速 large-scale data retrieving。在 meta block 中存有：</p>
+<p>Column tablet 被设计来辅助 column scan。它包含一个 column LSM 和一个 delete map。column LSM 树中的 value 实际上包含 value col 以及 LSN。memtable 按照 Apache Arrow 的方式来存储，records 根据 arriving order 在 memtable 中存储。row group 中的每一个 column 会被存为一个独立的 data block。同一个 column 的 data block 会被连续地存储在 shard file 中，从而优化顺序 scan。我们在 meta block 中维护每个 column 和整个 shard file 的 meta data，从而加速 large-scale data retrieving。在 meta block 中存有：</p>
 <ol>
 <li>每个 column 在 data block 中的唯一</li>
-<li>每个 shard file 的压缩算法、总行数、LSN 和key 的 range。</li>
+<li>每个 shard file 的压缩算法、总行数、LSN 和 key 的 range。</li>
 </ol>
 <p>在 index block 中存有 sorted first keys of row groups。</p>
 <p>Thee delete map is a row tablet, where the key is the ID of a shard file (with the memory table treated as a special shard file) in the column LSM tree, and the value is a bitmap indicating which records are newly deleted at the corresponding LSN in the shard file. With the help of the delete map, column tablets can massively parallelize sequential scan as explained below.</p>
@@ -466,6 +466,7 @@
 <li>否则，这个 file 中只有一部分可见</li>
 </ol>
 <p>读取：在第三种情况中，会扫描这个 file 的 LSN column，生成一个 LSN bitmap，用来决定哪些 row 是可见的。然后我们会通过 shard_file 的 ID 读取 delete map，获取哪些 row 是被删除了的。获得的 bitmap 回合 LSN bitmap 取交集，最终得到去除了 delete 和 invisible row 的最终结果。注意，不同于 row tablet，在一个 column tablet 中，每个 shard file 可以被独立读取，而不需要 consolidate 不同 level 的 shard file，因为 delete map 可以根据 LSN_read 和 shard file 的 ID 去有效率地返回哪些 row 是被删除了的。</p>
+<p>【Q】我理解这样的话，delete map 是不是本身也要支持版本？其实另一个做法是不独立维护 version 列（这里的 LSN）列了，而是在删除的时候，直接记录 <code>pk-&gt;{deleted, LSN}</code></p>
 <p>写入：删除操作中，会根据 key 找到我们要在哪个 shard file 中删除这个 row，以及对应的 row number。我们会在 LSN_write version 上，对这个 delete map 中进行一次插入，此时 key 是 file ID，value 是被删除了的 row number。update 操作就是先删除后插入。</p>
 <h2 id="Hierarchical-Cache"><a href="#Hierarchical-Cache" class="headerlink" title="Hierarchical Cache"></a>Hierarchical Cache</h2><p>三层 cache 来减少 IO 和计算的开销。分别是 local disk cache、block cache 和 row cache。每个 tablet 对应了分布式系统中存储的一系列 shard file。local disk cache 用来在 local disk 也就是 SSD 中 cache shard file，从而减少 file system 中昂贵的 IO 操作。在 SSD cache 上面，有个内存中的 block cache。为了兼容行存和列存的不同的 data access pattern，将 block cache 分为行存和列存。在 block cache 上面，我们有一个内存中的 row cache，去存储最近 row tablet 中的点查的结果。</p>
 <h2 id="QUERY-PROCESSING-amp-SCHEDULING"><a href="#QUERY-PROCESSING-amp-SCHEDULING" class="headerlink" title="QUERY PROCESSING &amp; SCHEDULING"></a>QUERY PROCESSING &amp; SCHEDULING</h2><p>收到一个 query 后，FE 中的 optimizer 会生成一个 DAG 显示的 query plan。将这个DAG 按照 shuffle boundaries 分成多个 fragment。有三种 fragment：read、write、query。一个 read 或者 write fragment 包含一个访问 table 的 operator。一个 query fragment 只包含非 read 或者 write 的 operator。一个 fragment 会随后被并行化为多个 fragment instance，这是通过 data parallel 的方式，比如一个 read 或者 write fragment instance 会在一个 TGS 中处理。<br>FE node 将 query plan 发送给 coordinator。这个 coordinator 会随后将 fragment instance 发送给 worker nodes。read write fragment instance 总是会被发送到 host 对应 TGS 的 worker node。query fragment 可以被在任何 worker node 上执行。因此，会从 load balancing 的角度进行 dispatch。locality 和 workload information 会和 storage manager 以及 resource manager 分别进行同步。<br>在 worker node 中 fragment instance 会被 map 到多个 work units 也就是 WU 中。这是 Hologres 中的基本的query 执行单位。一个 WU 可以在运行期动态地 spawn 另一个 WU。具体规则是：</p>
@@ -689,7 +690,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">223</span>
+                <span class="site-state-item-count">227</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -818,7 +819,7 @@
         <div class="copyright">
   
   &copy;  2015 - 
-  <span itemprop="copyrightYear">2024</span>
+  <span itemprop="copyrightYear">2025</span>
   <span class="with-love">
     <i class="fa fa-heart"></i>
   </span>

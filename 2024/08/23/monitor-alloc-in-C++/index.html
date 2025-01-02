@@ -101,7 +101,7 @@
 <meta property="og:locale" content="zh-Hans">
 <meta property="og:image" content="http://www.calvinneo.com/img/monitor-memory/11.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/monitor-memory/heap-hire.png">
-<meta property="og:updated_time" content="2024-12-09T16:38:37.610Z">
+<meta property="og:updated_time" content="2024-12-19T16:32:23.312Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="C++ 内存监控方案">
 <meta name="twitter:description" content="介绍 C++ 上的内存监控方案。 默认使用 jemalloc。">
@@ -399,7 +399,13 @@
 <li>⼀个线程可能释放另⼀个线程分配的内存。例如同一个模块中线程 bg-1 分配的内存可能被另⼀个线程 bg-2 释放。</li>
 <li>Rust 的 move 语义和协程机制会加剧这个问题。</li>
 </ol>
-<h1 id="Jemalloc-Arena"><a href="#Jemalloc-Arena" class="headerlink" title="Jemalloc Arena"></a>Jemalloc Arena</h1><p>该⽅案可以看做是对 allocatedptr 的补充。通过 thread.arena 绑定⼀个线程到某个 arena，则可以通过该 arena 获知该线程 own 了多少内存，所以这是看存量的⼯具。<br>但线程 own 多少内存，并不等于某个模块占⽤了多少内存。原因：</p>
+<p>其实 allocatedp 这个调用是成对的，还有一个 <code>thread.allocated</code> 可以立即返回当前的 caller thread 分配了多少内存。而 <code>thread.allocatedp</code> 可以返回一个指针，解引用这个指针可以返回对应线程当前分配了多少内存。通过 allocatedp 可以避免频繁的 mallctl 调用，也可以实现从其他线程进行观测。但其中比较困难的一点就是如何监测线程的启动和释放，从而判断对应的指针是否能够被读取。一种做法是包装线程池的 API，在每个线程启动和释放的时候加上 hook。</p>
+<p>此外，这种方式对于 Rust 程序会有一些问题：</p>
+<ol>
+<li>Rust 的移动语义会导致一些线程分配的内存会被另一个线程释放<br> 比如返回一个 T : Send 给另一个线程作为 Result。通常在需要使用线程池进行处理的逻辑中。</li>
+<li>协程跑在 executor 上面，难以分清辨认出具体的用途</li>
+</ol>
+<h1 id="Jemalloc-Arena"><a href="#Jemalloc-Arena" class="headerlink" title="Jemalloc Arena"></a>Jemalloc Arena</h1><p>该⽅案可以看做是对 allocatedptr 的补充。通过 <code>arena.create</code> 创建一个 arena，通过 thread.arena 绑定⼀个线程到某个 arena，则可以通过该 arena 获知该线程 own 了多少内存，所以这是看存量的⼯具。<br>但线程 own 多少内存，并不等于某个模块占⽤了多少内存。原因：</p>
 <ol>
 <li>内存的 ownership 会在平⾏的模块之间转移。例如 P 模块分配出来的内存，可能会被转移给 S 模块。所以即便能够看到 S 线程池对应的 arena 的占⽤上升，也难以判断是 S 模块的原因，还是 P 转移过来的内存。</li>
 <li>上级模块从同线程中调⽤下级模块，⽆法区分出上级和下级分别消耗了多少内存。</li>
@@ -409,6 +415,7 @@
 <li>我们更需要找内存增⻓的根因，知道内存都在哪些 arena ⾥⾯未必是⾜够的。</li>
 <li>一些使用线程池的模块中的内存分配⼤致满⾜“⾃⼰⽤⾃⼰弃”的 pattern，因此可以通过减法来算出存量。因此，“Jemalloc Arena” 相⽐ “Jemalloc allocatedptr” 的⽅案的作⽤不是很⼤</li>
 </ol>
+<p>可以使用 mallocx 为某个模块指定对应的 arena。TiKV 的 <a href="https://github.com/tikv/tikv/pull/16255" target="_blank" rel="noopener">benchmark</a> 展示这不会产生很明显的 overhead。</p>
 <h1 id="thread-local-memory-tracker"><a href="#thread-local-memory-tracker" class="headerlink" title="thread_local memory tracker"></a>thread_local memory tracker</h1><p>来⾃ Doris 的 Memtracker ⽅案。<br>该⽅案可以作为 “Jemalloc allocatedptr” ⽅案的补充。对于“上级模块从同线程中调⽤下级模块”的情况，可以使⽤⼀个 thread_local 变量记录栈中的⼀部分的内存开销。如下所⽰ kvs_page_mem 这个 thread_local 变量记录了 thread 1 中从 KVStore 调⽤到 PageStorage ⼀部分的开销。因此再结合 “Jemalloc allocatedptr” ⽅案本⾝的数据，就可以区分开来 PageStorage 产⽣<br>的内存（如新建⽴的 PageDirectoy）和调⽤链路上其他的内存，如 KVStore 和 PageStorage 中缓存的其他内容。<br>thread_local 的信息会被定时地上报给全局的 tracker，并由 tracker 做聚合后上报给 Prometheus。<br>也可以直接复⽤当前的逻辑，由 tracker 直接做聚合，但这样就需要⼀个全局的 hook 去线程启动的事件。</p>
 <p><img src="/img/monitor-memory/11.png"></p>
 <p>缺点：</p>
@@ -456,6 +463,7 @@
 <p> 注意，这种方式一般要持续开启 <code>prof.activate</code>。因为临时开启，则收集的时间过于短暂，可能无法生成有信息的报告。</p>
 </li>
 </ol>
+<p>另外，注意在 jeprof.in 中使用 llvm-addrline，不然可能会出现 0x25 的报错，并且生成的 svg 图有缺失。</p>
 <h2 id="TiFlash-的-continuous-profiling"><a href="#TiFlash-的-continuous-profiling" class="headerlink" title="TiFlash 的 continuous profiling"></a>TiFlash 的 continuous profiling</h2>
       
     </div>
@@ -614,7 +622,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">223</span>
+                <span class="site-state-item-count">227</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -743,7 +751,7 @@
         <div class="copyright">
   
   &copy;  2015 - 
-  <span itemprop="copyrightYear">2024</span>
+  <span itemprop="copyrightYear">2025</span>
   <span class="with-love">
     <i class="fa fa-heart"></i>
   </span>

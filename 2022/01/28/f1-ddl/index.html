@@ -100,7 +100,7 @@
 <meta property="og:description" content="介绍 F1 的在线异步 DDL schema 变更。">
 <meta property="og:locale" content="zh-Hans">
 <meta property="og:image" content="http://www.calvinneo.com/img/f1/f1_schema_change.png">
-<meta property="og:updated_time" content="2024-11-05T03:49:36.359Z">
+<meta property="og:updated_time" content="2024-12-19T16:26:17.587Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="F1的在线异步DDL">
 <meta name="twitter:description" content="介绍 F1 的在线异步 DDL schema 变更。">
@@ -382,12 +382,14 @@
         <p>介绍 F1 的在线异步 DDL schema 变更。</p>
 <a id="more"></a>
 
+<p>如果将不同表的 schema 当做各个 row，那么 DDL 可以看做是写这些 row，而 DML 和 DQL 则需要读这些 row。因此，可以给每个 schema 赋予版本号，从而实现类似 MVCC 的性质。</p>
+<p>但是 DDL 的版本和 DML 的版本是不协调的。所以可能出现不一致的问题。</p>
 <h1 id="简要问题"><a href="#简要问题" class="headerlink" title="简要问题"></a>简要问题</h1><h2 id="定义问题"><a href="#定义问题" class="headerlink" title="定义问题"></a>定义问题</h2><p>需要处理 DDL 执行进度不一致的问题，比如：</p>
 <ol>
-<li>Node A已经处理了a/b/c三个DDL</li>
-<li>Node B刚处理完a这个DDL</li>
+<li>Node A 已经处理了a/b/c 三个 DDL</li>
+<li>Node B 刚处理完 a 这个 DDL</li>
 </ol>
-<p>假定c是创建一个表，那么Node A能看见这个表，而Node B则看不见。那么分别从Node A和B查询，就会发现数据不一致的情况。</p>
+<p>假定 c 是创建一个表，那么 Node A 能看见这个表，而 Node B 则看不见。那么分别从 Node A 和 B 查询，就会发现数据不一致的情况。</p>
 <p>具体来说，有两类不一致问题需要考虑：</p>
 <ol>
 <li>orphan data anomaly<br> 违反1/3/5/7</li>
@@ -403,35 +405,35 @@
 <li>没有违反 Constraint 的数据。</li>
 <li>不存在未知的 KV(特指除上述 1，3 以外的未知 KV)。</li>
 </ol>
-<h2 id="分步解决问题"><a href="#分步解决问题" class="headerlink" title="分步解决问题"></a>分步解决问题</h2><p>目标1：在同一时刻改变所有Node的状态。很遗憾，因为各种延迟并不能做到。<br>妥协后的目标1：在某一时刻修改Schema，在确定的时间长度T之后，整个集群中不会有使用旧Schema的Node继续提供服务。这样在T之后这个修改就是确定生效的了。<br>方案：</p>
+<h2 id="分步解决问题"><a href="#分步解决问题" class="headerlink" title="分步解决问题"></a>分步解决问题</h2><p>目标1：在同一时刻改变所有 Node 的状态。很遗憾，因为各种延迟并不能做到。<br>妥协后的目标1：在某一时刻修改 Schema，在确定的时间长度 T 之后，整个集群中不会有使用旧 Schema 的 Node 继续提供服务。这样在 T 之后这个修改就是确定生效的了。<br>方案：</p>
 <ol>
-<li>定时刷新<br> 每个节点会按照固定时间刷新自己的Schema。<br> 例如，可以选举出一个Owner，每个节点定时向Owner请求当前的Schema。</li>
-<li>强制失败<br> 如果刷新失败，则停止服务，而不是继续按照旧Schema服务。</li>
+<li>定时刷新<br> 每个节点会按照固定时间刷新自己的 Schema。<br> 例如，可以选举出一个 Owner，每个节点定时向 Owner 请求当前的 Schema。</li>
+<li>强制失败<br> 如果刷新失败，则停止服务，而不是继续按照旧 Schema 服务。</li>
 </ol>
-<p>目标1.1：在集群间同步最新的Schema<br>方案：借助于Spanner</p>
+<p>目标1.1：在集群间同步最新的 Schema<br>方案：借助于 Spanner</p>
 <ol>
-<li>每次刷新时，从Spanner上的某个固定位置加载Schema。</li>
+<li>每次刷新时，从 Spanner 上的某个固定位置加载 Schema。</li>
 </ol>
-<p>在实现目标1后，发现还是有问题。例如，虽然a/b在a+T/b+T时刻被完成，但在a+T之前的某个时刻，我们仍然不知道当前状态是a已生效，还是ab都已生效。如果在加上个c，那么情况更复杂。</p>
-<p>目标2：在同一时刻，只会有最多两个Schema生效。例如在同一时刻内，最多只有DDL a之前的状态和DDL a之后的状态生效。<br>分析：直接Bruteforce搞就行，比如插一个barrier，等到DDL a确定生效(等到a+T)后，再执行DDL b。<br>方案：</p>
+<p>在实现目标1后，发现还是有问题。例如，虽然 a/b 在 a+T/b+T 时刻被完成，但在 a+T 之前的某个时刻，我们仍然不知道当前状态是 a 已生效，还是 a、b 都已生效。如果在加上个 c，那么情况更复杂。</p>
+<p>目标2：在同一时刻，只会有最多两个 Schema 生效。例如在同一时刻内，最多只有 DDL a 之前的状态和 DDL a 之后的状态生效。<br>分析：直接 Bruteforce 搞就行，比如插一个 barrier，等到 DDL a 确定生效(等到a+T)后，再执行 DDL b。<br>方案：</p>
 <ol>
-<li>引入Lease，长度等于DDL确定生效的时间</li>
-<li>每个Lease中只能执行一个DDL</li>
-<li>我们在T+2个Lease时一定可以执行DDL b</li>
+<li>引入 Lease，长度等于 DDL 确定生效的时间</li>
+<li>每个 Lease中只能执行一个 DDL</li>
+<li>我们在 T+2 个 Lease 时一定可以执行 DDL b</li>
 </ol>
-<p>目标2.1：不会产生不合法的DML。<br>方案：write fencing</p>
+<p>目标2.1：不会产生不合法的 DML。<br>方案：write fencing</p>
 <ol>
-<li>事务允许跨越多个Lease。</li>
-<li>但是，如果事务中有写操作，写操作只允许在当前Lease中进行：<ol>
-<li>写操作在他们submit时，转换为Spanner上的KV操作</li>
-<li>如果写操作跨Lease，可能会违反同一时刻集群中最多只有两个Schema版本生效的限制。</li>
+<li>事务允许跨越多个 Lease。</li>
+<li>但是，如果事务中有写操作，写操作只允许在当前 Lease 中进行：<ol>
+<li>写操作在他们 submit 时，转换为 Spanner 上的 KV 操作</li>
+<li>如果写操作跨 Lease，可能会违反同一时刻集群中最多只有两个 Schema 版本生效的限制。</li>
 </ol>
 </li>
 </ol>
-<p>通过实现之前的目标进行了问题的分解，不需要处理多个DDL的进度不一致问题了。但仍然存在问题，考虑一个add index的DDL，Node A上已经执行完了，Node B则没有开始执行，然后考虑此刻开始执行的两个DML：</p>
+<p>通过实现之前的目标进行了问题的分解，不需要处理多个 DDL 的进度不一致问题了。但仍然存在问题，考虑一个 add index 的 DDL，Node A 上已经执行完了，Node B 则没有开始执行，然后考虑此刻开始执行的两个 DML：</p>
 <ol>
-<li>通过Node A添加一个Row：会添加数据和索引</li>
-<li>通过Node B删除一个Row：只会删除数据，因为尚未得到索引的schema</li>
+<li>通过 Node A 添加一个 Row：会添加数据和索引</li>
+<li>通过 Node B 删除一个 Row：只会删除数据，因为尚未得到索引的 schema</li>
 </ol>
 <p>现在如果从Node A索引读，那么会读到一开始被写入的索引，但对应的数据却被删除了。于是这里产生了<strong>孤儿索引</strong>的问题，这破坏了数据库的完整性。这是因为不同Node之间同一DDL的进度不同产生的不一致，如何解决呢？</p>
 <p>目标3：将这一个DDL拆成多个Schema Change的步骤。由于Update可以看做是Delete+Insert，所以实际需要考虑Insert、Delete和Query三种操作。</p>
@@ -659,7 +661,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">223</span>
+                <span class="site-state-item-count">227</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -788,7 +790,7 @@
         <div class="copyright">
   
   &copy;  2015 - 
-  <span itemprop="copyrightYear">2024</span>
+  <span itemprop="copyrightYear">2025</span>
   <span class="with-love">
     <i class="fa fa-heart"></i>
   </span>
