@@ -102,7 +102,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/percolator3.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/percolator/f5.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/percolator/pert.png">
-<meta property="og:updated_time" content="2024-11-05T03:51:50.214Z">
+<meta property="og:updated_time" content="2025-01-18T17:04:49.760Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Percolator 论文阅读">
 <meta name="twitter:description" content="介绍Percolator论文。">
@@ -408,37 +408,37 @@
 <li>lock<br> 表示一个没提交的事务正在写这个cell。包含了primary lock的位置。</li>
 <li>write<br> 表示是已提交的数据。存放了BigTable的时间戳。</li>
 </ol>
-<h2 id="Demo"><a href="#Demo" class="headerlink" title="Demo"></a>Demo</h2><p>先来看一个Demo。Bob给Joe转账7块钱。一开始Joe有2块钱，Bob有10块钱。</p>
+<h2 id="Demo"><a href="#Demo" class="headerlink" title="Demo"></a>Demo</h2><p>先来看一个 Demo。一开始 Joe 有2块钱，Bob 有10块钱。现在 Bob 给 Joe 转账7块钱。</p>
 <ol>
-<li>写<code>bal:lock</code>加锁Bob的账户，并且这个锁是primary的。此外，写了<code>bal:data</code>为3，也就是扣了7块钱的Bob。</li>
-<li>下面加锁Joe的账户，在<code>bal:lock</code>里面写一个对Bob账户的primary锁的引用。这样在事务挂掉之后，能够知道primary lock在哪里，并且把它清理掉。</li>
-<li>下面进入提交阶段，首先操作primary lock所在的Bob的账户。需要将<code>bal:lock</code>清理掉，<code>bal:write</code>写上对应的ST。通过这个ST就能找到实际的数据<code>bal:data</code>。<br> 在这之后，Reader们就能看到Bob账户上只有3块钱了。</li>
-<li>下面对Secondary也进行写记录和删除锁的处理。</li>
+<li>写 <code>bal:lock</code> 加锁 Bob 的账户，这个锁是 primary 的。此外，写 <code>bal:data</code> 为3，也就是扣了7块钱的 Bob。</li>
+<li>加锁 Joe 的账户，在 <code>bal:lock</code> 里面写一个 secondary 锁，引用对 Bob 账户的 primary 锁。这样在事务挂掉之后，能够知道 primary lock 在哪里，并且把它清理掉。</li>
+<li>下面进入提交阶段，首先操作 primary lock 所在的 Bob 的账户。需要将 <code>bal:lock</code> 清理掉，<code>bal:write</code> 写上对应的 ST。通过这个 ST 就能找到实际的数据 <code>bal:data</code>。<br> 在这之后，其他的 Reader 就能看到 Bob 账户上只有3块钱了。</li>
+<li>下面对 Secondary 也进行写记录和删除锁的处理。</li>
 </ol>
 <p>【Q】看完Demo，有几个问题：</p>
 <ol>
-<li>为什么要引入primary lock？<br> 这个是为了方便进行失败回滚。当事务提交时，会清空primary lock。因此可以认为如果primary lock还在，则事务尚未提交。<br> 例如老事务挂了，留下了一片狼藉的现场。此时，一个新事务可能会访问到老事务残留的secondary lock，对应有两种情况：<ol>
-<li>指向的primary lock还在，认为这个事务还没有提交成功。</li>
-<li>指向的primary lock不在了，认为这个事务提交成功。那么必须先继续提交老事务。</li>
+<li>为什么要引入 primary lock？<br> 这个是为了方便进行失败回滚。当事务提交时，会清空 primary lock。因此可以认为如果 primary lock 还在，则事务尚未提交。<br> 例如老事务挂了，留下了一片狼藉的现场。此时，一个新事务可能会访问到老事务残留的 secondary lock，对应有两种情况：<ol>
+<li>指向的 primary lock 还在，认为这个事务还没有提交成功。</li>
+<li>指向的 primary lock 不在了，认为这个事务提交成功。那么必须先继续提交老事务。</li>
 </ol>
 </li>
-<li>如果说secondary lock被清了一半，怎么办呢？<br> 没问题，后面会讲。</li>
-<li>写write列和清空lock是要原子的么？<br> 从 L58 和 L61 可以看到，primary 是原子的，作为一个事务整体提交。但 secondary 不是原子的。</li>
-<li>在还没有修改Secondary时就可以访问新版本数据了，这个不破坏一致性么？<br> 同问题2</li>
+<li>如果说 secondary lock 被清了一半，怎么办呢？<br> 没问题，后面会讲。实际上有一个优化就是异步清理 secondary lock。</li>
+<li>写 write 列和清空 lock 是要原子的么？<br> 从 L58 和 L61 可以看到，primary 是原子的，作为一个事务整体提交。但 secondary 不是原子的。</li>
+<li>在还没有修改 Secondary 时就可以访问新版本数据了，这个不破坏一致性么？<br> 同问题2</li>
 </ol>
-<h2 id="实现"><a href="#实现" class="headerlink" title="实现"></a>实现</h2><p>Percolator 事务的模型也是 2PC，下面就分两步来看实现，其实就是对 Demo 的形式化。<br>整个实现是一个 Transaction 类，包含几个成员：</p>
+<h2 id="实现"><a href="#实现" class="headerlink" title="实现"></a>实现</h2><p>下面就分两步来看实现，其实就是对 Demo 的形式化。<br>整个实现是一个 Transaction 类，包含几个成员：</p>
 <ol>
-<li><p>writes_<br> 这个事务的所有写入。<code>writes_[0]</code>是primary。<br> 一个Percolator事务类似于</p>
+<li><p>writes_<br> 这个事务的所有写入。<code>writes_[0]</code> 是 primary。<br> 一个 Percolator 事务类似于</p>
  <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">BEGIN</span><br><span class="line">DML/DQL</span><br><span class="line">...</span><br><span class="line">DML/DQL</span><br><span class="line">Prewrite</span><br><span class="line">Commit</span><br></pre></td></tr></table></figure></li>
-<li><p>start_ts_<br> 整个事务的ST时间戳，在事务创建时初始化。</p>
+<li><p>start_ts_<br> 整个事务的 ST 时间戳，在事务创建时初始化。</p>
 </li>
-<li><p>Set<br> 往<code>writes_</code>里面加数据。</p>
+<li><p>Set<br> 往 <code>writes_</code> 里面加数据。</p>
 </li>
 <li><p>Get<br> 读</p>
 </li>
-<li><p>Commit<br> 提交，首先调用一阶段的Prewrite，如果全部成功，执行二阶段提交。</p>
+<li><p>Commit<br> 提交，首先调用一阶段的 Prewrite，如果全部成功，执行二阶段提交。</p>
 </li>
-<li><p>Prewrite<br> 一阶段，会被Commit调用。</p>
+<li><p>Prewrite<br> 一阶段，会被 Commit 调用。</p>
 </li>
 </ol>
 <h3 id="Commit-1"><a href="#Commit-1" class="headerlink" title="Commit 1"></a>Commit 1</h3><p>Commit 的前几行是封装了一阶段的 Prewrite，省得用户自己去调用了：</p>
@@ -469,7 +469,7 @@
 </ol>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">27 bool Prewrite(Write w, Write primary) &#123;</span><br><span class="line">28   Column c = w.col;</span><br><span class="line">29   bigtable::Txn T = bigtable::StartRowTransaction(w.row);</span><br><span class="line">30</span><br><span class="line">31   // Abort on writes after our start timestamp . . .</span><br><span class="line">32   if (T.Read(w.row, c+&quot;write&quot;, [start_ts_ , ∞])) return false;</span><br><span class="line">33   // . . . or locks at any timestamp.</span><br><span class="line">34   if (T.Read(w.row, c+&quot;lock&quot;, [0, ∞])) return false;</span><br><span class="line">35</span><br><span class="line">36   T.Write(w.row, c+&quot;data&quot;, start_ts_ , w.value);</span><br><span class="line">37   T.Write(w.row, c+&quot;lock&quot;, start_ts_ ,</span><br><span class="line">38      &#123;primary.row, primary.col&#125;); // The primary’s location.</span><br><span class="line">39   return T.Commit();</span><br><span class="line">40 &#125;</span><br></pre></td></tr></table></figure>
 
-<p>接下来，进入Commit 2阶段。</p>
+<p>接下来，进入 Commit 2 阶段。</p>
 <h3 id="Commit-2"><a href="#Commit-2" class="headerlink" title="Commit 2"></a>Commit 2</h3><p>后面就是提交的第二阶段：</p>
 <ol>
 <li>【Line48】向 TSO 请求时间戳，作为 CT</li>
@@ -502,7 +502,7 @@
 </ol>
 </li>
 </ol>
-<h3 id="Get"><a href="#Get" class="headerlink" title="Get"></a>Get</h3><p>首先检查[0, ST]区间内有没有锁。<br>如果有，说明另一个事务在写，这个读取事务就要等锁被释放(也就是事务完成)后才能继续执行。注意，不能在这里返回旧数据，<a href="https://pingcap.com/zh/blog/percolator-and-txn" target="_blank" rel="noopener">否则可能导致幻读</a>。这里文章中没解释，我这边的理解是加这个 lock 的事务可能卡着，或者稍后返回超时啥的。如果我现在就根据 write 返回了，那么实际上就不一致了。所以这里我们只能等超时，或者其他事务清理锁。<br>【Line19】 如果没有锁，就读取最后一次写的数据<code>latest_write</code>，并且返回对应的data【Line22】。如果没有读到数据，就返回no data。</p>
+<h3 id="Get"><a href="#Get" class="headerlink" title="Get"></a>Get</h3><p>首先检查[0, ST]区间内有没有锁。<br>如果有，说明另一个事务在写，这个读取事务就要等锁被释放(也就是事务完成)后才能继续执行。注意，不能在这里返回旧数据，<a href="https://pingcap.com/zh/blog/percolator-and-txn" target="_blank" rel="noopener">否则可能导致幻读</a>。这里文章中没解释，我这边的理解是加这个 lock 的事务可能卡着，或者稍后返回超时啥的。如果我现在就根据 write 返回了，那么实际上就不一致了。所以这里我们只能等超时，或者其他事务清理锁。<br>【Line19】 如果没有锁，就读取最后一次写的数据 <code>latest_write</code>，并且返回对应的 data【Line22】。如果没有读到数据，就返回 no data。</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line">8  bool Get(Row row, Column c, string* value) &#123;</span><br><span class="line">9    while (true) &#123;</span><br><span class="line">10     bigtable::Txn T = bigtable::StartRowTransaction(row);</span><br><span class="line">11     // Check for locks that signal concurrent writes.</span><br><span class="line">12     if (T.Read(row, c+&quot;lock&quot;, [0, start_ts_])) &#123;</span><br><span class="line">13     // There is a pending lock; try to clean it and wait</span><br><span class="line">14     BackoffAndMaybeCleanupLock(row, c);</span><br><span class="line">15     continue;</span><br><span class="line">16   &#125;</span><br><span class="line">17</span><br><span class="line">18   // Find the latest write below our start timestamp.</span><br><span class="line">19   latest_write = T.Read(row, c+&quot;write&quot;, [0, start_ts_]);</span><br><span class="line">20   if (!latest_write.found()) return false; // no data</span><br><span class="line">21   int data ts = latest_write.start_timestamp();</span><br><span class="line">22   *value = T.Read(row, c+&quot;data&quot;, [data_ts, data_ts]);</span><br><span class="line">23   return true;</span><br><span class="line">24 &#125;</span><br></pre></td></tr></table></figure>
 
 <h2 id="Failure"><a href="#Failure" class="headerlink" title="Failure"></a>Failure</h2><p>BigTable 能处理自身的问题，但还需要处理 Client 的 Failure。<br>如果在提交事务时 Client 挂了，Percolator 需要能够清除遗留的锁，否则可能导致后续的事务被 hang 住。这个清除的过程是 Lazy 的，如果事务 A 在执行时遇到了事务 B 的冲突锁，那么 A 会判定事务 B 是否宕掉，并清除锁。</p>
@@ -516,13 +516,13 @@
 <p>总之，整个判断的原则就是 lock 有没有被 write 取代。</p>
 <h3 id="Lazy-clean-和-Liveness"><a href="#Lazy-clean-和-Liveness" class="headerlink" title="Lazy clean 和 Liveness"></a>Lazy clean 和 Liveness</h3><p>因为 eager clean 会导致事务回滚，带来性能开销。所以只有在该事务的锁被认为是属于某个 dead worker 时，才会被清理。</p>
 <h3 id="gc-和清理-secondary-lock"><a href="#gc-和清理-secondary-lock" class="headerlink" title="gc 和清理 secondary lock"></a>gc 和清理 secondary lock</h3><p>在前面提到，如果发现一个 secondary lock，则需要查询 primary lock，根据 primary lock 是否存在而决定是否清理 secondary lock。<br>但考虑一个特殊的情况，在数据库实现中都会加入 gc 机制，用来清理过时的数据。如果允许 primary lock 被作为过时数据清理掉了，那么实际就无法分清 primary lock 不存在是因为被 gc 清理掉了，还是因为被提交而清理掉了，进而无法判断是否要清理 secondary lock。<br>所以，gc 逻辑不能直接清理 secondary lock。</p>
-<h2 id="Timestamps"><a href="#Timestamps" class="headerlink" title="Timestamps"></a>Timestamps</h2><p>TSO(Timestamp Oracle)服务会阶段性地分配一段区间，并将这段区间的最大值持久化，剩下的时候就可以直接从内存提供服务。当TSO服务重启时，timestamp就会来到持久化了的最大值上。</p>
-<p>为了减少TSO的压力，每个Percolator worker会batch自己的请求为一个RPC发送给TSO服务。当TSO的负载变大时，Percolator的batch大小也会变大。</p>
-<p>Percolator的事务性要求 Get() 操作会返回它的 ST 前所有已经被提交的写。考虑一个事务R在TR读，另一个事务W在TW提交了写，且TW &lt; TR，则R能看到W的写。因为TW &lt; TR，那么TW一定在TR的batch，或者TR之前的batch中。因此可以得到下面的顺序</p>
+<h2 id="Timestamps"><a href="#Timestamps" class="headerlink" title="Timestamps"></a>Timestamps</h2><p>TSO(Timestamp Oracle)服务会阶段性地分配一段区间，并将这段区间的最大值持久化，剩下的时候就可以直接从内存提供服务。当 TSO 服务重启时，timestamp 就会来到持久化了的最大值上。</p>
+<p>为了减少 TSO 的压力，每个 Percolator worker 会 batch 自己的请求为一个 RPC 发送给 TSO 服务。当 TSO 的负载变大时，Percolator的batch大小也会变大。</p>
+<p>Percolator的事务性要求 Get() 操作会返回它的 ST 前所有已经被提交的写。考虑一个事务 R 在 TR 读，另一个事务 W 在 TW 提交了写，且 TW &lt; TR，则 R 能看到 W 的写。因为 TW &lt; TR，那么 TW 一定在 TR 的 batch，或者 TR 之前的 batch 中。因此可以得到下面的顺序</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">W lock -&gt; W request TW -&gt; R get TR -&gt; R read</span><br></pre></td></tr></table></figure>
 
-<p>实际上，在R读取前，W至少已经写完所有的lock了。所以R要么读到锁，要么读到已经被写完的数据。</p>
-<p>从这里，也可以看出加锁的意义之一。考虑下面的执行顺序，如果不加锁，R就不能知道W在写。因为Commit(row1)的CT是小于Get(row)的ST的，根据SI，TR需要能读到Commit(row1)的结果。如果R不管不顾直接读了，而Commit(row1)又是在读取之后发生的，那么R实际上就读到了Commit(row1)之前的结果。</p>
+<p>实际上，在 R 读取前，W 至少已经写完所有的 lock 了。所以 R 要么读到锁，要么读到已经被写完的数据。</p>
+<p>从这里，也可以看出加锁的意义之一。考虑下面的执行顺序，如果不加锁，R 就不能知道 W 在写。因为 Commit(row1) 的 CT 是小于 Get(row) 的 ST 的，根据 SI，TR 需要能读到 Commit(row1) 的结果。如果 R 不管不顾直接读了，而 Commit(row1) 又是在读取之后发生的，那么 R 实际上就读到了 Commit(row1) 之前的结果。</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">Transaction W       Transaction TR</span><br><span class="line">Prewrite(row1)</span><br><span class="line">W request TW</span><br><span class="line">                    R get TR</span><br><span class="line">                    Get(row) with TR</span><br><span class="line">Commit(row1)</span><br></pre></td></tr></table></figure>
 
 <h1 id="分析"><a href="#分析" class="headerlink" title="分析"></a>分析</h1><h2 id="ACID-性质"><a href="#ACID-性质" class="headerlink" title="ACID 性质"></a>ACID 性质</h2><p>相比于 RR，SI 不会出现幻读问题，但会<a href="/2017/09/20/transaction/">出现 write skew 问题</a>。通过 select for update 可以解决 write skew 问题。</p>
@@ -748,7 +748,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">230</span>
+                <span class="site-state-item-count">233</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>

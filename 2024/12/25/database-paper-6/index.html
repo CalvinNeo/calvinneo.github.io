@@ -91,22 +91,26 @@
 
 
 
-<meta name="description" content="本部分开始为最新的学习笔记。包含 PolarDB Serverless。">
+<meta name="description" content="本部分开始为最新的学习笔记。包含 PolarDB Serverless、Monkey: Optimal Navigable Key-Value Store。">
 <meta name="keywords" content="数据库,论文阅读">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Database paper part 6">
 <meta property="og:url" content="http://www.calvinneo.com/2024/12/25/database-paper-6/index.html">
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
-<meta property="og:description" content="本部分开始为最新的学习笔记。包含 PolarDB Serverless。">
+<meta property="og:description" content="本部分开始为最新的学习笔记。包含 PolarDB Serverless、Monkey: Optimal Navigable Key-Value Store。">
 <meta property="og:locale" content="zh-Hans">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/polardb-serverless/f1.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/polardb-serverless/f2.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/polardb-serverless/f3.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/polardb-serverless/7.png">
-<meta property="og:updated_time" content="2024-12-29T15:02:41.313Z">
+<meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/monkey/f2.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/monkey/e1.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/monkey/f3.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/monkey/f4.png">
+<meta property="og:updated_time" content="2025-01-18T19:03:27.293Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Database paper part 6">
-<meta name="twitter:description" content="本部分开始为最新的学习笔记。包含 PolarDB Serverless。">
+<meta name="twitter:description" content="本部分开始为最新的学习笔记。包含 PolarDB Serverless、Monkey: Optimal Navigable Key-Value Store。">
 <meta name="twitter:image" content="http://www.calvinneo.com/img/dbpaper/polardb-serverless/f1.png">
 
 
@@ -382,7 +386,7 @@
       
 
       
-        <p>本部分开始为最新的学习笔记。包含 PolarDB Serverless。</p>
+        <p>本部分开始为最新的学习笔记。包含 PolarDB Serverless、Monkey: Optimal Navigable Key-Value Store<br>。</p>
 <a id="more"></a>
 
 <h1 id="PolarDB-Serverless-A-Cloud-Native-Database-for-Disaggregated-Data-Centers"><a href="#PolarDB-Serverless-A-Cloud-Native-Database-for-Disaggregated-Data-Centers" class="headerlink" title="PolarDB Serverless: A Cloud Native Database for Disaggregated Data Centers"></a>PolarDB Serverless: A Cloud Native Database for Disaggregated Data Centers</h1><p><a href="https://users.cs.utah.edu/~lifeifei/papers/polardbserverless-sigmod21.pdf" target="_blank" rel="noopener">https://users.cs.utah.edu/~lifeifei/papers/polardbserverless-sigmod21.pdf</a></p>
@@ -448,6 +452,66 @@
 <h3 id="Page-Materialization-Offloading"><a href="#Page-Materialization-Offloading" class="headerlink" title="Page Materialization Offloading"></a>Page Materialization Offloading</h3><p>Aurora 提出 log is database 的理论。将 redo log 看做是增量的 page 修改。Socrates 进一步地，将 log 从 storage 分离。Log 被存在 XLOG 服务中，然后被异步地发送到一系列 page server 中，每一个 page server 负责一个 database partition，独立地重放日志，生成 page 并处理 GetPage@LSN 请求。</p>
 <p>PolarDB 类似于 Socrates，将 PolarFS 设计为分别存放 log 和 page 到两个 chunck 中。redo log 首先被持久化到 log chunkc 中，然后被异步地发送到 page chunck 中。在 page chunck 中，logs 被 apply，从而更新 page。不同于 Socrates，为了重用 PolarFS，log 只会被发送到 page chunk 的 leader 节点，这个节点会物化 page，然后将 update 通过 ParallelRaft 通知给其他的 replica。This method adds additional latency to the ApplyLog operation due to the replication cost. However, it is not a critical issue because ApplyLog is an asynchronous operation not in the critical path. Moreover, since the replicated state machine guarantees data consistency between page chunks, there is no need for an extra gossip protocol among storage nodes like in Aurora.</p>
 <p><img src="/img/dbpaper/polardb-serverless/7.png"></p>
+<h1 id="Monkey-Optimal-Navigable-Key-Value-Store"><a href="#Monkey-Optimal-Navigable-Key-Value-Store" class="headerlink" title="Monkey: Optimal Navigable Key-Value Store"></a>Monkey: Optimal Navigable Key-Value Store</h1><p><a href="https://nivdayan.github.io/monkeykeyvaluestore.pdf" target="_blank" rel="noopener">https://nivdayan.github.io/monkeykeyvaluestore.pdf</a></p>
+<p>个人觉得一篇很好的文章，介绍了 LSM 的 design space。</p>
+<h2 id="Abstract"><a href="#Abstract" class="headerlink" title="Abstract"></a>Abstract</h2><p>Bloom filter 的 FP 率，和最坏情况下的查询开销成正比。</p>
+<blockquote>
+<p>The insight is that worst-case lookup cost is proportional to the sum of the false positive rates of the Bloom filters across all levels of the LSM-tree.</p>
+</blockquote>
+<p>对于不同的层，引入不同的 bloomfilter 的大小。</p>
+<blockquote>
+<p>Monkey allocates memory to filters across different levels so as to minimize this sum.</p>
+</blockquote>
+<p>设计了一个调优工具。感觉类似 《Fast Scans on Key-Value Stores》里面的思路。</p>
+<blockquote>
+<p>Furthermore, we map the LSM-tree design space onto a closed-form model that enables co-tuning the merge policy, the buffer size and the filters’ false positive rates to trade among lookup cost, update cost and/or main memory, depending on the workload (proportion oflookups and updates), the dataset (number and size of entries), and the underlying hardware (main memory available, disk vs. flash). We show how to use this model to answer what-if design questions about how changes in environmental parameters impact performance and how to adapt the various LSM-tree design elements accordingly.</p>
+</blockquote>
+<h2 id="INTRODUCTION-1"><a href="#INTRODUCTION-1" class="headerlink" title="INTRODUCTION"></a>INTRODUCTION</h2><blockquote>
+<p>The intuition is that any given amount of main memory allocated to Bloom filters of larger runs brings only a relatively minor benefit in terms of how much it can decrease their false positive rates (to save I/Os). On the contrary, the same amount of memory can have a higher impact in reducing the false positive rate for smaller runs. </p>
+</blockquote>
+<p>调研 Pareto curve 基于内存容量和工作负载，去寻找到查询和更新开销的平衡点。</p>
+<blockquote>
+<p>The second key point in Monkey is navigating the Pareto curve to find the optimal balance between lookup cost and update cost under a given main memory budget and application workload (lookup over update ratio). </p>
+</blockquote>
+<h2 id="BACKGROUND-1"><a href="#BACKGROUND-1" class="headerlink" title="BACKGROUND"></a>BACKGROUND</h2><h3 id="Buffering-Updates"><a href="#Buffering-Updates" class="headerlink" title="Buffering Updates"></a>Buffering Updates</h3><p>首先是下面这张图。</p>
+<p>$M_{buffer}$ 等于 $ P \times B \ times E$。E 是 entry 的大小，B 是一个 disk page 中有多少个 entry，P 是内存中有多少个 disk page 用于 buffer。</p>
+<p>$ N \times \frac{T-1}{T} $ 是怎么来的呢？其实是个等比数列求和</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">1 + T + T^2 + ... + T^(L-1) + T^L = N</span><br></pre></td></tr></table></figure>
+
+<p>套一下公式，然后取 <code>T^L-1</code> 直接约等于 <code>T^L</code>，即可得到结果。</p>
+<p><img src="/img/dbpaper/monkey/f2.png"></p>
+<p>然后，得到另一个 L 关于 T 的公式。</p>
+<p><img src="/img/dbpaper/monkey/e1.png"></p>
+<p>其中，T 是有一个上限的取值，即 $ \frac{N \times E}{M_{buffer}} $。取这个上限时，L 会退化到 1。因为整个数据库才 $ N \times E $ 这么大，挨个按照 tiered 逻辑 dump 下来就是公式这么多个，然后 T 等于它，那么这一层永远将将好填满。</p>
+<h3 id="Merge-Operations"><a href="#Merge-Operations" class="headerlink" title="Merge Operations"></a>Merge Operations</h3><blockquote>
+<p>The essential difference is that a leveled LSM-tree merges runs more greedily and therefore gives a tighter bound on the overall number of runs that a lookup has to probe, but this comes at the expense of a higher amortized update cost. </p>
+</blockquote>
+<p><img src="/img/dbpaper/monkey/f3.png"></p>
+<h3 id="Lookups"><a href="#Lookups" class="headerlink" title="Lookups"></a>Lookups</h3><p>查询从 buffer 开始，从低层往高层走。一旦找到第一个满足要求的就可以立即返回，因为层数越往下，数据是越旧的。</p>
+<blockquote>
+<p>A point lookup starts from the buffer and traverses the levels from lowest to highest (and the runs within those levels from youngest to oldest in the case of tiering). When it finds the first matching entry it terminates. There is no need to look further because entries with the same key at older runs are superseded.</p>
+</blockquote>
+<ul>
+<li>查找一个不存在的值代价可能很高，因为会检查所有 level 中的所有 run</li>
+<li>范围查询需要 sort merge 一系列 run，然后丢掉被 override 掉的数据</li>
+</ul>
+<h3 id="Probing-a-Run"><a href="#Probing-a-Run" class="headerlink" title="Probing a Run"></a>Probing a Run</h3><p>在 1996 年最老的 LSM 设计中，每个 run 是被存储为压缩的 B 树的。</p>
+<blockquote>
+<p>Over the past two decades, however, main memory has become cheaper, so modern designs simply store an array of fence pointers in main memory with min/max information for every disk page of every run.<br>Maintaining a flat array structure is much simpler and leads to good search performance in memory (binary search as each run is sorted).</p>
+</blockquote>
+<p>查询的时候，</p>
+<ul>
+<li>如果是点查，那么就先二分 fencing pointers，然后找到对应的 page</li>
+<li>如果是扫表，也还是二分到对应的 page，然后从这个 page 往后读取</li>
+</ul>
+<p>所以，如果只需要 <code>O(1)</code> 的 disk IO，那么 pointers 的内存大概是 <code>O(N / B)</code>。</p>
+<blockquote>
+<p>For example, with 16 KB disk pages and 4 byte pointers, the fence pointers are smaller by ≈ 4 orders of magnitude than the raw data size. Stated formally, we denote the amount of main memory occupied by the fence pointers as $M_{pointers}$, and we assume throughout this work that $M_{pointers}$ is <code>O(N / B)</code> thereby guaranteeing that probing a run takes <code>O(1)</code> disk I/O for point lookups.</p>
+</blockquote>
+<h3 id="Bloom-Filters"><a href="#Bloom-Filters" class="headerlink" title="Bloom Filters"></a>Bloom Filters</h3><h3 id="Cost-Analysis"><a href="#Cost-Analysis" class="headerlink" title="Cost Analysis"></a>Cost Analysis</h3><h2 id="LSM-TREE-DESIGN-SPACE"><a href="#LSM-TREE-DESIGN-SPACE" class="headerlink" title="LSM-TREE DESIGN SPACE"></a>LSM-TREE DESIGN SPACE</h2><blockquote>
+<p>The design space of LSM trees spans everything between a write-optimized log to a read-optimized sorted array.</p>
+</blockquote>
+<p><img src="/img/dbpaper/monkey/f4.png"></p>
 
       
     </div>
@@ -604,7 +668,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">230</span>
+                <span class="site-state-item-count">233</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -710,7 +774,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#PolarDB-Serverless-A-Cloud-Native-Database-for-Disaggregated-Data-Centers"><span class="nav-number">1.</span> <span class="nav-text">PolarDB Serverless: A Cloud Native Database for Disaggregated Data Centers</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#INTRODUCTION"><span class="nav-number">1.1.</span> <span class="nav-text">INTRODUCTION</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#BACKGROUND"><span class="nav-number">1.2.</span> <span class="nav-text">BACKGROUND</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#PolarDB"><span class="nav-number">1.2.1.</span> <span class="nav-text">PolarDB</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Disaggregated-Data-Centers"><span class="nav-number">1.2.2.</span> <span class="nav-text">Disaggregated Data Centers</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Serverless-Databases"><span class="nav-number">1.2.3.</span> <span class="nav-text">Serverless Databases</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#DESIGN"><span class="nav-number">1.3.</span> <span class="nav-text">DESIGN</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Disaggregated-Memory"><span class="nav-number">1.3.1.</span> <span class="nav-text">Disaggregated Memory</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#Remote-Memory-Access-Interface"><span class="nav-number">1.3.1.1.</span> <span class="nav-text">Remote Memory Access Interface</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Remote-Memory-Management"><span class="nav-number">1.3.1.2.</span> <span class="nav-text">Remote Memory Management</span></a><ol class="nav-child"><li class="nav-item nav-level-5"><a class="nav-link" href="#Page-Array-PA"><span class="nav-number">1.3.1.2.1.</span> <span class="nav-text">Page Array(PA)</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#Page-Address-Table-PAT"><span class="nav-number">1.3.1.2.2.</span> <span class="nav-text">Page Address Table (PAT)</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#Page-Invalidation-Bitmap-PIB"><span class="nav-number">1.3.1.2.3.</span> <span class="nav-text">Page Invalidation Bitmap (PIB)</span></a></li></ol></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Page-Materialization-Offloading"><span class="nav-number">1.3.2.</span> <span class="nav-text">Page Materialization Offloading</span></a></li></ol></li></ol></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#PolarDB-Serverless-A-Cloud-Native-Database-for-Disaggregated-Data-Centers"><span class="nav-number">1.</span> <span class="nav-text">PolarDB Serverless: A Cloud Native Database for Disaggregated Data Centers</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#INTRODUCTION"><span class="nav-number">1.1.</span> <span class="nav-text">INTRODUCTION</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#BACKGROUND"><span class="nav-number">1.2.</span> <span class="nav-text">BACKGROUND</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#PolarDB"><span class="nav-number">1.2.1.</span> <span class="nav-text">PolarDB</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Disaggregated-Data-Centers"><span class="nav-number">1.2.2.</span> <span class="nav-text">Disaggregated Data Centers</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Serverless-Databases"><span class="nav-number">1.2.3.</span> <span class="nav-text">Serverless Databases</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#DESIGN"><span class="nav-number">1.3.</span> <span class="nav-text">DESIGN</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Disaggregated-Memory"><span class="nav-number">1.3.1.</span> <span class="nav-text">Disaggregated Memory</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#Remote-Memory-Access-Interface"><span class="nav-number">1.3.1.1.</span> <span class="nav-text">Remote Memory Access Interface</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Remote-Memory-Management"><span class="nav-number">1.3.1.2.</span> <span class="nav-text">Remote Memory Management</span></a><ol class="nav-child"><li class="nav-item nav-level-5"><a class="nav-link" href="#Page-Array-PA"><span class="nav-number">1.3.1.2.1.</span> <span class="nav-text">Page Array(PA)</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#Page-Address-Table-PAT"><span class="nav-number">1.3.1.2.2.</span> <span class="nav-text">Page Address Table (PAT)</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#Page-Invalidation-Bitmap-PIB"><span class="nav-number">1.3.1.2.3.</span> <span class="nav-text">Page Invalidation Bitmap (PIB)</span></a></li></ol></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Page-Materialization-Offloading"><span class="nav-number">1.3.2.</span> <span class="nav-text">Page Materialization Offloading</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Monkey-Optimal-Navigable-Key-Value-Store"><span class="nav-number">2.</span> <span class="nav-text">Monkey: Optimal Navigable Key-Value Store</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Abstract"><span class="nav-number">2.1.</span> <span class="nav-text">Abstract</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#INTRODUCTION-1"><span class="nav-number">2.2.</span> <span class="nav-text">INTRODUCTION</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#BACKGROUND-1"><span class="nav-number">2.3.</span> <span class="nav-text">BACKGROUND</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Buffering-Updates"><span class="nav-number">2.3.1.</span> <span class="nav-text">Buffering Updates</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Merge-Operations"><span class="nav-number">2.3.2.</span> <span class="nav-text">Merge Operations</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Lookups"><span class="nav-number">2.3.3.</span> <span class="nav-text">Lookups</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Probing-a-Run"><span class="nav-number">2.3.4.</span> <span class="nav-text">Probing a Run</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Bloom-Filters"><span class="nav-number">2.3.5.</span> <span class="nav-text">Bloom Filters</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Cost-Analysis"><span class="nav-number">2.3.6.</span> <span class="nav-text">Cost Analysis</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#LSM-TREE-DESIGN-SPACE"><span class="nav-number">2.4.</span> <span class="nav-text">LSM-TREE DESIGN SPACE</span></a></li></ol></li></ol></div>
             
 
           </div>

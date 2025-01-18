@@ -73,7 +73,7 @@
 <link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="C++,智能指针,内存管理," />
+  <meta name="keywords" content="C++,内存管理,智能指针," />
 
 
 
@@ -91,19 +91,19 @@
 
 
 
-<meta name="description" content="对Effective C++在资源管理部分的内容进行总结。">
-<meta name="keywords" content="C++,智能指针,内存管理">
+<meta name="description" content="对 Effective C++ 在资源管理部分的内容进行总结。这一部分其实已经比较基础了，等待重构。">
+<meta name="keywords" content="C++,内存管理,智能指针">
 <meta property="og:type" content="article">
-<meta property="og:title" content="C++资源管理">
+<meta property="og:title" content="C++ 资源管理">
 <meta property="og:url" content="http://www.calvinneo.com/2016/08/05/C++-Resource-Manage/index.html">
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
-<meta property="og:description" content="对Effective C++在资源管理部分的内容进行总结。">
+<meta property="og:description" content="对 Effective C++ 在资源管理部分的内容进行总结。这一部分其实已经比较基础了，等待重构。">
 <meta property="og:locale" content="zh-Hans">
 <meta property="og:image" content="http://www.calvinneo.com/img/cpp_res/linux_image.jpg">
-<meta property="og:updated_time" content="2023-05-21T04:51:54.914Z">
+<meta property="og:updated_time" content="2025-01-18T13:18:21.686Z">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="C++资源管理">
-<meta name="twitter:description" content="对Effective C++在资源管理部分的内容进行总结。">
+<meta name="twitter:title" content="C++ 资源管理">
+<meta name="twitter:description" content="对 Effective C++ 在资源管理部分的内容进行总结。这一部分其实已经比较基础了，等待重构。">
 <meta name="twitter:image" content="http://www.calvinneo.com/img/cpp_res/linux_image.jpg">
 
 
@@ -140,7 +140,7 @@
 
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5487541356791902"
      crossorigin="anonymous"></script>
-  <title>C++资源管理 | Calvin's Marbles</title>
+  <title>C++ 资源管理 | Calvin's Marbles</title>
 </head>
 
 <body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
@@ -324,7 +324,7 @@
             
             
               
-                C++资源管理
+                C++ 资源管理
               
             
           </h1>
@@ -379,25 +379,61 @@
       
 
       
-        <p>对Effective C++在资源管理部分的内容进行总结。</p>
+        <p>对 Effective C++ 在资源管理部分的内容进行总结。这一部分其实已经比较基础了，等待重构。</p>
 <a id="more"></a>
-<h1 id="C-运行时内存"><a href="#C-运行时内存" class="headerlink" title="C++运行时内存"></a>C++运行时内存</h1><p>C++运行时内存主要分为data、bss(Block Started by Symbol)、stack、heap和常量区（包含init、text和rodata段）。其中bss段存储程序中<strong>未</strong>被初始化的变量（全局变量和static local），它们在程序运行开始前会被初始化为0，对应到C++中就是做了zero initialization，详见<a href="/2016/12/30/C++%E5%88%9D%E5%A7%8B%E5%8C%96%E6%96%B9%E5%BC%8F/">我的博文</a>。这么做的目的是为了优化可执行文件的大小，考虑到我们未给这些变量赋值，所以他们在可执行文件并不存在实体，所谓的bss段在可执行文件中只是一个placeholder。data段则相反，存储程序中已经被初始化的变量。stack中的变量由编译器自动分配和清除，所以称作自动变量。heap区由<code>new</code>调用构造函数初始化，由<code>delete</code>调用析构函数回收。在部分文章中还将heap进一步细化出一个自由存储区，指由C系函数<code>malloc</code>等分配并由<code>free</code>等释放的内存。</p>
-<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">int</span> very_big[<span class="number">100000</span>] = &#123;<span class="number">1</span>, <span class="number">2</span>&#125;; <span class="comment">// 在.data段会产生很大的编译结果</span></span><br><span class="line"><span class="keyword">int</span> empty[<span class="number">100000</span>]; <span class="comment">// 在.bss段</span></span><br><span class="line"><span class="comment">// Demo in https://stackoverflow.com/questions/30838144/what-all-local-variables-goto-data-bss-segment</span></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">foo</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">static</span> <span class="keyword">char</span> array1[<span class="number">256</span>] = <span class="string">""</span>;            <span class="comment">// Goes in BSS, probably</span></span><br><span class="line">    <span class="keyword">static</span> <span class="keyword">char</span> array2[<span class="number">256</span>] = <span class="string">"ABCDEFXYZ"</span>;  <span class="comment">// Goes in Data</span></span><br><span class="line">    <span class="keyword">static</span> <span class="keyword">const</span> <span class="keyword">char</span> <span class="built_in">string</span>[] = <span class="string">"Kleptomanic Hypochondriac"</span>; <span class="comment">// Goes in Text, probably</span></span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h1 id="内存管理"><a href="#内存管理" class="headerlink" title="内存管理"></a>内存管理</h1><h2 id="内存分段"><a href="#内存分段" class="headerlink" title="内存分段"></a>内存分段</h2><p>主要分为：</p>
+<ul>
+<li>bss(Block Started by Symbol)<br>  存储程序中<strong>未</strong>被初始化的变量，比如全局变量和 static local。在程序运行开始前会被初始化为 0。这么做目的是为了优化可执行文件的大小，考虑到未给这些变量赋值，所以它们在可执行文件中并不需要实际占有空间，所谓的 bss 段在可执行文件中只是一个 placeholder。<br>  对应到 C++ 中就是做了 zero initialization，详见<a href="/2016/12/30/C++%E5%88%9D%E5%A7%8B%E5%8C%96%E6%96%B9%E5%BC%8F/">C++初始化方式</a>。</li>
+<li>data<br>  data 段存储程序中已经被初始化的变量。</li>
+<li>stack<br>  stack 中的变量由编译器自动分配和清除，所以称作自动变量。</li>
+<li>heap<br>  heap 区由 <code>new</code> 调用构造函数初始化，由 <code>delete</code> 调用析构函数回收。<br>  另外一些提法中，将 heap 进一步细化出一个自由存储区，指由 <code>malloc</code> 等分配并由 <code>free</code> 等释放的内存。<br>  我也习惯将它们成为“动态分配的内存”。</li>
+<li>常量区<br>  包含init、text 和 rodata 段</li>
+</ul>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">int</span> very_big[<span class="number">100000</span>] = &#123;<span class="number">1</span>, <span class="number">2</span>&#125;; <span class="comment">// 在.data段会产生很大的编译结果</span></span><br><span class="line"><span class="keyword">int</span> empty[<span class="number">100000</span>]; <span class="comment">// 在.bss段</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// Demo in https://stackoverflow.com/questions/30838144/what-all-local-variables-goto-data-bss-segment</span></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">foo</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">static</span> <span class="keyword">char</span> array1[<span class="number">256</span>] = <span class="string">""</span>;            <span class="comment">// Goes in BSS, probably</span></span><br><span class="line">    <span class="keyword">static</span> <span class="keyword">char</span> array2[<span class="number">256</span>] = <span class="string">"ABCDEFXYZ"</span>;  <span class="comment">// Goes in Data</span></span><br><span class="line">    <span class="keyword">static</span> <span class="keyword">const</span> <span class="keyword">char</span> <span class="built_in">string</span>[] = <span class="string">"Kleptomanic Hypochondriac"</span>; <span class="comment">// Goes in Text, probably</span></span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
 <p><img src="/img/cpp_res/linux_image.jpg"></p>
-<h1 id="RAII"><a href="#RAII" class="headerlink" title="RAII"></a>RAII</h1><p>可以看出对于动态分配的内存（堆和自由存储）必须能够在适当时机调用<code>delete</code>/<code>free</code>进行释放，否则会造成泄露，也有可能某处代码在先前已经<code>delete</code>/<code>free</code>了，造成悬空指针undefined behaviour。当然可以建立一张表（称为对象池）登记这些指针，当满足一些条件的时候进行删除的手动管理。一个Best Practice是通过RAII借助栈来管理对象。</p>
-<h1 id="复制"><a href="#复制" class="headerlink" title="复制"></a>复制</h1><p>一般对象之间的复制行为分为4种：</p>
+<h2 id="RAII"><a href="#RAII" class="headerlink" title="RAII"></a>RAII</h2><p>管理堆内存的注意点：</p>
+<ul>
+<li>没有调用 <code>delete</code>/<code>free</code> 进行释放会造成泄露</li>
+<li>重复调用 <code>delete</code>/<code>free</code>，造成悬空指针。访问悬空指针式 undefined behaviour</li>
+</ul>
+<p>一些管理方式：</p>
+<ul>
+<li>建立一张表（称为对象池）登记这些指针，当满足一些条件的时候进行删除的手动管理。</li>
+<li>RAII</li>
+</ul>
+<h2 id="复制"><a href="#复制" class="headerlink" title="复制"></a>复制</h2><p>一般对象之间的复制行为分为4种：</p>
 <ol>
-<li>浅复制：浅复制也是默认复制构造函数的实现，将源对象中的成员复制到新的对象中。因此如果源对象中存在指针，那么实际上源对象和新对象是共享指针指向的对象的，这并不是一个错误的逻辑，但是问题在于新老对象都没有意识到自己和别的对象共享着资源，如果存在析构函数（除非使用手动管理，否则必然要有析构函数用来释放指针指向对象），那么必然会造成悬空指针。</li>
-<li>深复制：需要自定义复制构造函数，在复制行为发生时递归地建立对象成员以及指针指向对象的副本。</li>
-<li>资源控制权转移：资源占用具有排他性，这种有点类似于Rust的语义，其实应当作为移动语义来看。常见的有<code>std::unique_ptr</code>来维护这种语义。</li>
-<li>资源控制权共享：对应起来看就是<code>std::shared_ptr</code>，但这种方案解决了资源释放的问题，对于需要共享的资源设置引用计数，当引用计数变为0时销毁对象，而不再通过构造函数。</li>
+<li>浅复制<br> 浅复制也是默认复制构造函数的实现，将源对象中的成员复制到新的对象中。因此如果源对象中存在指针，那么实际上源对象和新对象是共享指针指向的对象的，这并不是一个错误的逻辑，但是问题在于新老对象都没有意识到自己和别的对象共享着资源，如果存在析构函数（除非使用手动管理，否则必然要有析构函数用来释放指针指向对象），那么必然会造成悬空指针。</li>
+<li>深复制<br> 需要自定义复制构造函数，在复制行为发生时递归地建立对象成员以及指针指向对象的副本。</li>
+<li>资源控制权转移<br> 资源占用具有排他性，这种有点类似于 Rust 的移动语义，或者 <code>std::unique_ptr</code>。</li>
+<li>资源控制权共享<br> 类似 <code>std::shared_ptr</code> 这类 RC。</li>
 </ol>
-<h2 id="深复制"><a href="#深复制" class="headerlink" title="深复制"></a>深复制</h2><p>在深复制中可能存在一个问题，假设有若干个派生类继承基类<code>Derived_i : public Base</code>，现在有一个<code>Base * d</code>，但是不知道具体类型，现在希望对这个基类进行深复制。直接调用基类的复制构造函数<code>Base p = new Base(d)</code>显然是行不通的，这是因为C++标准规定了复制构造函数，包括构造函数都不能是虚的。<a href="https://stackoverflow.com/questions/9889488/can-we-make-a-class-copy-constructor-virtual-in-c" target="_blank" rel="noopener">StackOverflow上详细地说明了原因</a>，这是因为C++是静态类型的，所以多态地创建对象没有意义的。常用的办法是自己定义一个clone函数。同样地，对于其他的构造函数，也是不存在多态的，因此如果需要对于不同的参数返回不同的派生类的指针，可以通过定义一个工厂函数来解决。当然对于非继承的类型，当然可以定义三个函数（复制、赋值、析构）进行深复制，假设复制对象obj，可以认为复制了一棵树，树中任何节点（成员）的析构都会导致该节点为树根的子树被删除，所以对于这棵树只能修改树根或叶子，否则会造成内存泄露。</p>
-<h2 id="复制构造函数和赋值构造函数"><a href="#复制构造函数和赋值构造函数" class="headerlink" title="复制构造函数和赋值构造函数"></a>复制构造函数和赋值构造函数</h2><p>复制构造函数指的形如<code>T(const T &amp;)</code>的构造函数，涉及到C++的复制初始化。其中复制构造函数常被定义为<code>explicit</code>的，此时必须显式地使用该构造函数。在C++11标准之后扩大了范围，将非explicit构造函数都称为转换构造函数。这里要区分转换构造函数<code>T::T(const U &amp;)</code>和类型转换运算符<code>operator T::U()</code>，前者是从<code>U</code>构造<code>T</code>，后者是从自己<code>T</code>构造<code>U</code>。类型转换运算符有很多的作用，常见的是实现将函数返回值加入重载决议。<br>赋值运算符指的形如<code>T &amp; operator=(const T &amp;)</code>的运算符，指的是赋值而不是初始化操作。</p>
-<h1 id="构造"><a href="#构造" class="headerlink" title="构造"></a>构造</h1><h2 id="创建只能在栈上构造的类"><a href="#创建只能在栈上构造的类" class="headerlink" title="创建只能在栈上构造的类"></a>创建只能在栈上构造的类</h2><p>这个简单，将new和delete变成私有就行</p>
-<h2 id="创建只能在堆上构造的类"><a href="#创建只能在堆上构造的类" class="headerlink" title="创建只能在堆上构造的类"></a>创建只能在堆上构造的类</h2><p>私有构造函数是可以的。这个时候要在类里面写一个static工厂方法，用来产生一个对象。<br>或者也可以私有析构函数。</p>
-<h1 id="析构"><a href="#析构" class="headerlink" title="析构"></a>析构</h1><h2 id="delete-this"><a href="#delete-this" class="headerlink" title="delete this"></a>delete this</h2><p>在MFC里面经常看到delete this。C++是允许这么用的，但需要注意，delete this是这个类的最后一个调用，并且这个对象是用new来分配的。</p>
+<h3 id="深复制"><a href="#深复制" class="headerlink" title="深复制"></a>深复制</h3><p>在深复制中可能存在一个问题，假设有若干个派生类继承基类<code>Derived_i : public Base</code>，现在有一个<code>Base * d</code>，但是不知道具体类型，现在希望对这个基类进行深复制。</p>
+<p>直接调用基类的复制构造函数 <code>Base p = new Base(d)</code> 行不通，这是因为 C++ 标准规定了复制构造函数，包括构造函数都不能是虚的。<a href="https://stackoverflow.com/questions/9889488/can-we-make-a-class-copy-constructor-virtual-in-c" target="_blank" rel="noopener">StackOverflow 上详细地说明了原因</a>，简单来说，因为 C++ 是静态类型的，所以多态地创建对象没有意义。</p>
+<p>因此，这里常用的办法是自己定义一个 clone 函数。</p>
+<p>同样地，对于其他构造函数，也不存在多态。因此如果需要对于不同的参数返回不同的派生类的指针，可以通过使用工厂函数这样的设计模式来解决。</p>
+<p>当然对于非继承的类型，当然可以定义复制、赋值、析构这三个函数都进行深复制。假设复制对象 obj，可以认为复制了一棵树。树中任何节点对应（成员）的析构都会导致该节点为树根的子树被删除，所以对于这棵树只能修改树根或叶子，否则会造成内存泄露。</p>
+<h3 id="复制构造函数和赋值构造函数"><a href="#复制构造函数和赋值构造函数" class="headerlink" title="复制构造函数和赋值构造函数"></a>复制构造函数和赋值构造函数</h3><p>复制构造函数指的形如 <code>T(const T &amp;)</code> 的构造函数，它的行为由 C++ 的复制初始化来规定，可以参考<a href="/2016/12/30/C++%E5%88%9D%E5%A7%8B%E5%8C%96%E6%96%B9%E5%BC%8F/">C++初始化方式</a>。</p>
+<p>复制构造函数常被定义为 <code>explicit</code> 的，此时必须显式地使用该构造函数。</p>
+<p>在 C++11 标准之后，将非 explicit 构造函数称为<strong>转换构造函数</strong>。</p>
+<p>区分:</p>
+<ul>
+<li>转换构造函数 <code>T::T(const U &amp;)</code><br>  从 <code>U</code> 构造 <code>T</code></li>
+<li>类型转换运算符 <code>operator T::U()</code><br>  从自己也就是 <code>T</code> 构造 <code>U</code>。<br>  类型转换运算符有很多的作用，常见的是实现将函数返回值加入重载决议。</li>
+</ul>
+<p>赋值运算符指的形如 <code>T &amp; operator=(const T &amp;)</code> 的运算符，指的是<strong>赋值</strong>而不是<strong>初始化</strong>操作。</p>
+<h2 id="构造"><a href="#构造" class="headerlink" title="构造"></a>构造</h2><h3 id="创建只能在栈上构造的类"><a href="#创建只能在栈上构造的类" class="headerlink" title="创建只能在栈上构造的类"></a>创建只能在栈上构造的类</h3><p>将 new 和 delete 变成私有</p>
+<h3 id="创建只能在堆上构造的类"><a href="#创建只能在堆上构造的类" class="headerlink" title="创建只能在堆上构造的类"></a>创建只能在堆上构造的类</h3><ul>
+<li>私有构造函数<br>  要在类里面写一个 static 工厂方法，用来产生一个对象。</li>
+<li>也可以私有析构函数</li>
+</ul>
+<h2 id="析构"><a href="#析构" class="headerlink" title="析构"></a>析构</h2><h3 id="delete-this"><a href="#delete-this" class="headerlink" title="delete this"></a>delete this</h3><p>在 MFC 里面经常看到 delete this。C++ 是允许这么用的，但需要注意确保：</p>
+<ul>
+<li>delete this 是这个类的最后一个调用</li>
+<li>这个对象是用 new 来分配的</li>
+</ul>
 
       
     </div>
@@ -450,9 +486,9 @@
           
             <a href="/tags/C/" rel="tag"># C++</a>
           
-            <a href="/tags/智能指针/" rel="tag"># 智能指针</a>
-          
             <a href="/tags/内存管理/" rel="tag"># 内存管理</a>
+          
+            <a href="/tags/智能指针/" rel="tag"># 智能指针</a>
           
         </div>
       
@@ -556,7 +592,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">230</span>
+                <span class="site-state-item-count">233</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -662,7 +698,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#C-运行时内存"><span class="nav-number">1.</span> <span class="nav-text">C++运行时内存</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#RAII"><span class="nav-number">2.</span> <span class="nav-text">RAII</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#复制"><span class="nav-number">3.</span> <span class="nav-text">复制</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#深复制"><span class="nav-number">3.1.</span> <span class="nav-text">深复制</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#复制构造函数和赋值构造函数"><span class="nav-number">3.2.</span> <span class="nav-text">复制构造函数和赋值构造函数</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#构造"><span class="nav-number">4.</span> <span class="nav-text">构造</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#创建只能在栈上构造的类"><span class="nav-number">4.1.</span> <span class="nav-text">创建只能在栈上构造的类</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#创建只能在堆上构造的类"><span class="nav-number">4.2.</span> <span class="nav-text">创建只能在堆上构造的类</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#析构"><span class="nav-number">5.</span> <span class="nav-text">析构</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#delete-this"><span class="nav-number">5.1.</span> <span class="nav-text">delete this</span></a></li></ol></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#内存管理"><span class="nav-number">1.</span> <span class="nav-text">内存管理</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#内存分段"><span class="nav-number">1.1.</span> <span class="nav-text">内存分段</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#RAII"><span class="nav-number">1.2.</span> <span class="nav-text">RAII</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#复制"><span class="nav-number">1.3.</span> <span class="nav-text">复制</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#深复制"><span class="nav-number">1.3.1.</span> <span class="nav-text">深复制</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#复制构造函数和赋值构造函数"><span class="nav-number">1.3.2.</span> <span class="nav-text">复制构造函数和赋值构造函数</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#构造"><span class="nav-number">1.4.</span> <span class="nav-text">构造</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#创建只能在栈上构造的类"><span class="nav-number">1.4.1.</span> <span class="nav-text">创建只能在栈上构造的类</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#创建只能在堆上构造的类"><span class="nav-number">1.4.2.</span> <span class="nav-text">创建只能在堆上构造的类</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#析构"><span class="nav-number">1.5.</span> <span class="nav-text">析构</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#delete-this"><span class="nav-number">1.5.1.</span> <span class="nav-text">delete this</span></a></li></ol></li></ol></li></ol></div>
             
 
           </div>
@@ -828,7 +864,7 @@
         var disqus_config = function () {
           this.page.url = 'http://www.calvinneo.com/2016/08/05/C++-Resource-Manage/';
           this.page.identifier = '2016/08/05/C++-Resource-Manage/';
-          this.page.title = 'C++资源管理';
+          this.page.title = 'C++ 资源管理';
         };
         var d = document, s = d.createElement('script');
         s.src = 'https://calvinneo.disqus.com/embed.js';
