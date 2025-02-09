@@ -99,7 +99,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="一些常见问题的思考，只代表个人见解。对于一些已经沉淀下来的知识，会被挪到专门的文章中讨论。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2025-01-19T09:52:03.851Z">
+<meta property="og:updated_time" content="2025-01-20T17:47:58.705Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="关于 TiKV、TiDB、TiFlash 的一些思考">
 <meta name="twitter:description" content="一些常见问题的思考，只代表个人见解。对于一些已经沉淀下来的知识，会被挪到专门的文章中讨论。">
@@ -385,7 +385,7 @@
 <p>注意，如果负载是频繁对某个特定的 key 更新，则 TS 一定也被用来计算哈希，不然热点 key 一定是在同一个 Region 内。这样一个 key 的不同版本就分布在不同的 Region 中，就不利于扫表了。因为下推到 TiKV 的请求可以理解为从 [l, r] 去扫出来所有 <a href="https://blog.csdn.net/TiDB_PingCAP/article/details/100535768" target="_blank" rel="noopener">commit_ts &lt;= scan_ts</a> 的数据，这样的扫表一定是会涉及到所有的机器，性能会很差。对于点查也一样，我们始终要找一个大于 user_key + ts 的 TiKV Key，哈希分片不好 seek。特别地，如果是 SI，那还得扫 [0, scan_ts] 中有没有 Lock，这个过程也要访问多个机器。</p>
 <p>如果在构造 key 的时候就进行分片，比如在最左边加一个 shard_id，这样 rehash 会很困难。shard_id 可以比如是通过某个特定字段哈希得到。</p>
 <p>在 Spanner 中存在 Tablet，也就是将多个同时访问比较频繁的 Region co-locate，这些 Region 彼此之间未必是有序的，甚至可能属于不同的表。</p>
-<h3 id="关于-Region-大小的讨论"><a href="#关于-Region-大小的讨论" class="headerlink" title="关于 Region 大小的讨论"></a>关于 Region 大小的讨论</h3><p>见 <a href="/2023/07/23/on-partition-raft-kv/">TiKV 的 partitioned raft kv 特性</a></p>
+<h3 id="关于-Region-大小的讨论"><a href="#关于-Region-大小的讨论" class="headerlink" title="关于 Region 大小的讨论"></a>关于 Region 大小的讨论</h3><p>见 <a href="/2023/07/23/on-partition-raft-kv/">TiKV 的 partitioned raft kv 特性</a>。</p>
 <h3 id="日志和数据分离存储"><a href="#日志和数据分离存储" class="headerlink" title="日志和数据分离存储"></a>日志和数据分离存储</h3><p>在早期版本中，Raft 数据和实际的 payload 是在一起存储的。但是从 <a href="https://github.com/tikv/tikv/pull/2054" target="_blank" rel="noopener">PR</a> 开始，进行了分离。好处显而易见：</p>
 <ul>
 <li>Raft log 和实际 payload 的写入模式不一致<ul>
@@ -402,7 +402,8 @@
 </ol>
 <p>因此引入了类似 bitcask 架构的 RaftEngine 来解决这个问题。RaftEngine 中每个 Region 对应一个 Memtable，数据先通过 Group Write 写入到文件中，然后再注册到 Memtable 中。在读取时从 Memtable 获取位置，再从文件中读取。因此随着 Region 日志 Apply 进度的不同，RaftEngine 在文件中会存在空洞，因此需要 rewrite。这使得存在一部分 CPU 和 IO 花费在 rewrite 逻辑上，而不能像 PolarDB 一样按照水位线直接删除。RaftEngine 这么做可以减少 fsync 的调用频率，并且充分利用文件系统 buffer 来做聚合。</p>
 <p>此外，Raftstore 还使用 async_io 来异步落盘 Raft 日志和 Raft 状态。这样，Raftstore 线程不被 io 阻塞，能够处理更多的 Raft 相关请求和日志。需要注意，这反过来可能会加重 PeerFsm、ApplyFsm 和网络的负担，对 CPU 的要求更高。</p>
-<h3 id="Why-RockDB？"><a href="#Why-RockDB？" class="headerlink" title="Why RockDB？"></a>Why RockDB？</h3><h3 id="KVEngine-上的-WAL"><a href="#KVEngine-上的-WAL" class="headerlink" title="KVEngine 上的 WAL"></a>KVEngine 上的 WAL</h3><p>目前，TiKV 上还是需要开启 KVEngine 对应的 Rocksdb 的 WAL。</p>
+<h3 id="Why-RockDB？"><a href="#Why-RockDB？" class="headerlink" title="Why RockDB？"></a>Why RockDB？</h3><p><a href="https://cn.pingcap.com/article/post/3946.html" target="_blank" rel="noopener">https://cn.pingcap.com/article/post/3946.html</a> 中介绍得很好。</p>
+<h3 id="KVEngine-上的-WAL"><a href="#KVEngine-上的-WAL" class="headerlink" title="KVEngine 上的 WAL"></a>KVEngine 上的 WAL</h3><p>目前，TiKV 上还是需要开启 KVEngine 对应的 Rocksdb 的 WAL。</p>
 <h3 id="Titan"><a href="#Titan" class="headerlink" title="Titan"></a>Titan</h3><p>Titan 是类似 WiscKey 的一个实现。</p>
 <p>见 <a href="/2024/11/01/database-paper-2/">database paper 2</a></p>
 <h3 id="SST-的格式"><a href="#SST-的格式" class="headerlink" title="SST 的格式"></a>SST 的格式</h3><p>key 一般是按照 <code>(user_key, version)</code> 的顺序来排布的，如果按照 <code>(version, user_key)</code> 的顺序来排布，则可能能快速读到最新版本。比如如下排布</p>
@@ -896,7 +897,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">235</span>
+                <span class="site-state-item-count">236</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
