@@ -94,15 +94,15 @@
 <meta name="description" content="本文介绍 LevelDB的 SSTable 相关功能。SSTable 是 LevelDB 的内存数据结构。当一个 Memtable 满之后，会被变成 Immutable Memtable，并写入 SSTable Level0。Level0 的 SSTable 是没有经过归并的，各个 Key 可能互相重叠。经过 Compaction 达到 Level1 之后，就是有序的了。">
 <meta name="keywords" content="数据库,leveldb">
 <meta property="og:type" content="article">
-<meta property="og:title" content="LevelDB之SSTable实现">
+<meta property="og:title" content="LevelDB 之 SSTable 实现">
 <meta property="og:url" content="http://www.calvinneo.com/2021/04/12/leveldb-sstable/index.html">
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="本文介绍 LevelDB的 SSTable 相关功能。SSTable 是 LevelDB 的内存数据结构。当一个 Memtable 满之后，会被变成 Immutable Memtable，并写入 SSTable Level0。Level0 的 SSTable 是没有经过归并的，各个 Key 可能互相重叠。经过 Compaction 达到 Level1 之后，就是有序的了。">
 <meta property="og:locale" content="zh-Hans">
 <meta property="og:image" content="http://www.calvinneo.com/img/leveldb/sstable/suf.png">
-<meta property="og:updated_time" content="2023-08-12T13:53:44.465Z">
+<meta property="og:updated_time" content="2025-02-09T11:31:31.120Z">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="LevelDB之SSTable实现">
+<meta name="twitter:title" content="LevelDB 之 SSTable 实现">
 <meta name="twitter:description" content="本文介绍 LevelDB的 SSTable 相关功能。SSTable 是 LevelDB 的内存数据结构。当一个 Memtable 满之后，会被变成 Immutable Memtable，并写入 SSTable Level0。Level0 的 SSTable 是没有经过归并的，各个 Key 可能互相重叠。经过 Compaction 达到 Level1 之后，就是有序的了。">
 <meta name="twitter:image" content="http://www.calvinneo.com/img/leveldb/sstable/suf.png">
 
@@ -140,7 +140,7 @@
 
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5487541356791902"
      crossorigin="anonymous"></script>
-  <title>LevelDB之SSTable实现 | Calvin's Marbles</title>
+  <title>LevelDB 之 SSTable 实现 | Calvin's Marbles</title>
 </head>
 
 <body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
@@ -324,7 +324,7 @@
             
             
               
-                LevelDB之SSTable实现
+                LevelDB 之 SSTable 实现
               
             
           </h1>
@@ -384,11 +384,12 @@
 
 <p>目录：</p>
 <ol>
-<li><a href="/2021/04/09/leveldb-memtable/">LevelDB之Memtable实现</a></li>
-<li><a href="/2021/04/12/leveldb-sstable/">LevelDB之SSTable实现</a></li>
-<li><a href="/2021/04/17/leveldb-version/">LevelDB之Version</a></li>
-<li><a href="/2021/04/18/leveldb-compaction/">LevelDB之Compaction</a></li>
-<li><a href="/2021/04/24/leveldb-proc/">LevelDB之流程概览</a></li>
+<li><a href="/2021/04/09/leveldb-memtable/">LevelDB 之 Memtable 实现</a></li>
+<li><a href="/2021/04/12/leveldb-sstable/">LevelDB 之 SSTable 实现</a></li>
+<li><a href="/2021/04/17/leveldb-version/">LevelDB 之 Version</a></li>
+<li><a href="/2021/04/18/leveldb-compaction/">LevelDB 之 Compaction</a></li>
+<li><a href="/2021/04/23/leveldb-wal/">LevelDB 之 WAL</a></li>
+<li><a href="/2021/04/24/leveldb-proc/">LevelDB 之流程概览</a></li>
 </ol>
 <h1 id="SSTable格式"><a href="#SSTable格式" class="headerlink" title="SSTable格式"></a>SSTable格式</h1><p>SSTable 是后缀为 .sst 或 .ldb 的文件。<br>在<a href="https://github.com/google/leveldb/blob/master/doc/table_format.md" target="_blank" rel="noopener">官方文档</a>中，对 SSTable 的格式已经有了介绍。</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">&lt;beginning_of_file&gt;</span><br><span class="line">[data block 1]</span><br><span class="line">[data block 2]</span><br><span class="line">...</span><br><span class="line">[data block N]</span><br><span class="line">[meta block 1]</span><br><span class="line">...</span><br><span class="line">[meta block K]</span><br><span class="line">[metaindex block]</span><br><span class="line">[index block]</span><br><span class="line">[Footer]        (fixed size; starts at file_size - sizeof(Footer))</span><br><span class="line">&lt;end_of_file&gt;</span><br></pre></td></tr></table></figure>
@@ -756,8 +757,8 @@
         <div class="post-nav">
           <div class="post-nav-next post-nav-item">
             
-              <a href="/2021/04/09/leveldb-memtable/" rel="next" title="LevelDB之Memtable实现">
-                <i class="fa fa-chevron-left"></i> LevelDB之Memtable实现
+              <a href="/2021/04/09/leveldb-memtable/" rel="next" title="LevelDB 之 Memtable实现">
+                <i class="fa fa-chevron-left"></i> LevelDB 之 Memtable实现
               </a>
             
           </div>
@@ -766,8 +767,8 @@
 
           <div class="post-nav-prev post-nav-item">
             
-              <a href="/2021/04/17/leveldb-version/" rel="prev" title="LevelDB之Version">
-                LevelDB之Version <i class="fa fa-chevron-right"></i>
+              <a href="/2021/04/17/leveldb-version/" rel="prev" title="LevelDB 之 Version">
+                LevelDB 之 Version <i class="fa fa-chevron-right"></i>
               </a>
             
           </div>
@@ -847,7 +848,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">236</span>
+                <span class="site-state-item-count">239</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -860,7 +861,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">152</span>
+                <span class="site-state-item-count">151</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -1119,7 +1120,7 @@
         var disqus_config = function () {
           this.page.url = 'http://www.calvinneo.com/2021/04/12/leveldb-sstable/';
           this.page.identifier = '2021/04/12/leveldb-sstable/';
-          this.page.title = 'LevelDB之SSTable实现';
+          this.page.title = 'LevelDB 之 SSTable 实现';
         };
         var d = document, s = d.createElement('script');
         s.src = 'https://calvinneo.disqus.com/embed.js';

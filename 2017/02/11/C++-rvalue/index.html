@@ -99,7 +99,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="C++11标准引入的是右值引用的概念来方便我们操作右值，但右值的概念是在之前的版本中就有的。在引入右值引用概念后，左右值也被分为左值(lvalue)、将亡值(xvalue)、纯右值(prvalue)。其中将亡值和左值合称为泛左值，将亡值和纯右值合称为右值。  左值可以形象理解为可以取到地址的值 比如字符串字面量能取到地址，是左值。 纯右值例如整型字面量或者求值结果相当于是字面值或者不具名的临时对象">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2024-02-07T17:40:15.347Z">
+<meta property="og:updated_time" content="2025-02-09T15:15:44.902Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="C++右值">
 <meta name="twitter:description" content="C++11标准引入的是右值引用的概念来方便我们操作右值，但右值的概念是在之前的版本中就有的。在引入右值引用概念后，左右值也被分为左值(lvalue)、将亡值(xvalue)、纯右值(prvalue)。其中将亡值和左值合称为泛左值，将亡值和纯右值合称为右值。  左值可以形象理解为可以取到地址的值 比如字符串字面量能取到地址，是左值。 纯右值例如整型字面量或者求值结果相当于是字面值或者不具名的临时对象">
@@ -396,12 +396,13 @@
 
 <h1 id="Value-categories"><a href="#Value-categories" class="headerlink" title="Value categories"></a>Value categories</h1><p>这一部分较为深入，移动到<a href="/2022/10/25/C++-type-cast/">C++中类型和类型转换</a></p>
 <h1 id="右值与右值引用"><a href="#右值与右值引用" class="headerlink" title="右值与右值引用"></a>右值与右值引用</h1><p>左值是不能绑定到右值引用的，如下面的代码是错误的</p>
-<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// code 1</span></span><br><span class="line"><span class="keyword">int</span> i = <span class="number">42</span>;</span><br><span class="line"><span class="keyword">int</span> &amp;&amp; ir = i; <span class="comment">// error</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// code 2</span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">test</span><span class="params">(<span class="keyword">int</span> &amp;&amp; ir)</span> </span>&#123;</span><br><span class="line">    <span class="comment">// ...</span></span><br><span class="line">&#125;</span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="keyword">int</span> i = <span class="number">42</span>;</span><br><span class="line">    test(i); <span class="comment">// error</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// code 1</span></span><br><span class="line"><span class="keyword">int</span> i = <span class="number">42</span>;</span><br><span class="line"><span class="keyword">int</span> &amp;&amp; ir = i; <span class="comment">// error</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// code 2</span></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">test</span><span class="params">(<span class="keyword">int</span> &amp;&amp; arg)</span> </span>&#123;</span><br><span class="line">    <span class="comment">// ...</span></span><br><span class="line">&#125;</span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="keyword">int</span> i = <span class="number">42</span>;</span><br><span class="line">    test(i); <span class="comment">// error</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
 <p>正确的做法是使用 <code>std::move()</code> 函数将它转换成一个右值，而这个函数实际上就是调用了 <code>static_cast</code> 进行一次强转，得到的是一个 xvalue。xvalue 表示在逻辑上当做右值来用的左值。<br>查看下面的代码，发现编译错误，为什么？</p>
 <figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="keyword">int</span> &amp;&amp; i = <span class="number">42</span>;</span><br><span class="line">    test(i); <span class="comment">// error</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
-<p>42是右值，但 <code>i</code> 是个右值引用，<strong>右值引用并不等于右值</strong>，它和引用类型、指针类型一样，属于一个新的类型，<a href="https://stackoverflow.com/questions/32620750/why-are-rvalues-references-variables-not-rvalue" target="_blank" rel="noopener">通常被认为是左值</a>。一个右值引用能够接受一个右值，而一个左值引用不能绑定到一个右值，这是区别。在绑定之后，<code>i</code> 是个具名对象，是个左值。</p>
+<p><code>42</code> 是右值，但 <code>i</code> 是个右值引用，<strong>右值引用并不等于右值</strong>，它和引用类型、指针类型一样，属于一个新的类型，<a href="https://stackoverflow.com/questions/32620750/why-are-rvalues-references-variables-not-rvalue" target="_blank" rel="noopener">通常被认为是左值</a>。一个右值引用能够接受一个右值，而一个左值引用不能绑定到一个右值，这是区别。在绑定之后，<code>i</code> 是个具名对象，是个左值。</p>
+<p>同理，函数的形参，例如上面 test 函数的参数 arg，在函数内部被当做左值处理。但是它是一个右值引用，会绑定一个右值。</p>
 <h1 id="函数返回右值与-N-RVO"><a href="#函数返回右值与-N-RVO" class="headerlink" title="函数返回右值与 (N)RVO"></a>函数返回右值与 (N)RVO</h1><h2 id="N-RVO-优化"><a href="#N-RVO-优化" class="headerlink" title="(N)RVO 优化"></a>(N)RVO 优化</h2><h3 id="什么是-RVO"><a href="#什么是-RVO" class="headerlink" title="什么是 RVO"></a>什么是 RVO</h3><p>根据 <a href="https://en.cppreference.com/w/cpp/language/copy_elision" target="_blank" rel="noopener">copy elision</a>，<strong>C++ 从 17 开始 RVO 并不是一个编译器的优化，而是一个标准的要求了</strong>。后面有更详细的讨论。</p>
 <p>RVO 的目的是 <code>fun()</code> 的返回值在 <code>main</code> 中不会产生一个临时对象。RVO 不能解决 callee 内部的临时对象的问题，考虑下面的代码。<code>fun</code> 中创建了一个 <code>x1</code>，然后返回了 <code>x1</code>，这里 <code>x1</code> 就不是 RVO 的场景。但在 <code>bar</code> 中，直接用 <code>fun()</code> 返回的 prvalue 初始化自己，这就是 RVO。</p>
 <figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">X <span class="title">fun</span><span class="params">()</span></span>&#123;</span><br><span class="line">    X x1;</span><br><span class="line">    <span class="comment">// ...</span></span><br><span class="line">    <span class="keyword">return</span> x1; <span class="comment">// Not RVO</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">bar</span><span class="params">()</span></span>&#123;</span><br><span class="line">    X x2 = fun(); <span class="comment">// RVO</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
@@ -696,7 +697,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">236</span>
+                <span class="site-state-item-count">239</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -709,7 +710,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">152</span>
+                <span class="site-state-item-count">151</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

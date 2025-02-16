@@ -94,15 +94,15 @@
 <meta name="description" content="作为LevelDB源码分析系列的第一篇文章，介绍Memtable的实现，以及其中涉及到的数据结构和辅助函数。 Memtable是LevelDB的内存数据结构。当一个Memtable满之后，会被变成Immutable Memtable，并写入SSTable Level0。">
 <meta name="keywords" content="数据库,leveldb">
 <meta property="og:type" content="article">
-<meta property="og:title" content="LevelDB之Memtable实现">
+<meta property="og:title" content="LevelDB 之 Memtable实现">
 <meta property="og:url" content="http://www.calvinneo.com/2021/04/09/leveldb-memtable/index.html">
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="作为LevelDB源码分析系列的第一篇文章，介绍Memtable的实现，以及其中涉及到的数据结构和辅助函数。 Memtable是LevelDB的内存数据结构。当一个Memtable满之后，会被变成Immutable Memtable，并写入SSTable Level0。">
 <meta property="og:locale" content="zh-Hans">
 <meta property="og:image" content="http://www.calvinneo.com/img/leveldb/memtable/memtable.png">
-<meta property="og:updated_time" content="2023-05-19T16:46:43.924Z">
+<meta property="og:updated_time" content="2025-02-09T11:31:01.553Z">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="LevelDB之Memtable实现">
+<meta name="twitter:title" content="LevelDB 之 Memtable实现">
 <meta name="twitter:description" content="作为LevelDB源码分析系列的第一篇文章，介绍Memtable的实现，以及其中涉及到的数据结构和辅助函数。 Memtable是LevelDB的内存数据结构。当一个Memtable满之后，会被变成Immutable Memtable，并写入SSTable Level0。">
 <meta name="twitter:image" content="http://www.calvinneo.com/img/leveldb/memtable/memtable.png">
 
@@ -140,7 +140,7 @@
 
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5487541356791902"
      crossorigin="anonymous"></script>
-  <title>LevelDB之Memtable实现 | Calvin's Marbles</title>
+  <title>LevelDB 之 Memtable实现 | Calvin's Marbles</title>
 </head>
 
 <body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
@@ -324,7 +324,7 @@
             
             
               
-                LevelDB之Memtable实现
+                LevelDB 之 Memtable实现
               
             
           </h1>
@@ -385,11 +385,12 @@
 
 <p>目录：</p>
 <ol>
-<li><a href="/2021/04/09/leveldb-memtable/">LevelDB之Memtable实现</a></li>
-<li><a href="/2021/04/12/leveldb-sstable/">LevelDB之SSTable实现</a></li>
-<li><a href="/2021/04/17/leveldb-version/">LevelDB之Version</a></li>
-<li><a href="/2021/04/18/leveldb-compaction/">LevelDB之Compaction</a></li>
-<li><a href="/2021/04/24/leveldb-proc/">LevelDB之流程概览</a></li>
+<li><a href="/2021/04/09/leveldb-memtable/">LevelDB 之 Memtable实现</a></li>
+<li><a href="/2021/04/12/leveldb-sstable/">LevelDB 之 SSTable实现</a></li>
+<li><a href="/2021/04/17/leveldb-version/">LevelDB 之 Version</a></li>
+<li><a href="/2021/04/18/leveldb-compaction/">LevelDB 之 Compaction</a></li>
+<li><a href="/2021/04/23/leveldb-wal/">LevelDB 之 WAL</a></li>
+<li><a href="/2021/04/24/leveldb-proc/">LevelDB 之流程概览</a></li>
 </ol>
 <h1 id="基本概念"><a href="#基本概念" class="headerlink" title="基本概念"></a>基本概念</h1><h2 id="VarInt"><a href="#VarInt" class="headerlink" title="VarInt"></a>VarInt</h2><p>LevelDB 的 VarInt 机制，用一个 char 数组存放整数，主要目的不是支持大整数，而是压缩小整数的存储空间。例如小于128的 unsigned int，只要一个字节就行，但如果数比较大，。<br>具体实现就是读 char 数组，如果最高位是1，那么就说明这个 VarInt 还没有结束，于是就接着读下一位。<br><code>GetVarint32Ptr</code> 的函数签名，传入的 limit 表示这个 VarInt 数组有多长。因为 VarInt 最多占用5个字节，所以一般传入都是 <code>p + 5</code>。需要注意，合法的 <code>limit</code> 应当始终大于 <code>p</code>。<br>一开始是一个优化分支，如果这个数组长度是1，那么最高位就是0，所以可以直接返回。否则调用 <code>GetVarint32PtrFallback</code>，那就是很直白的边移位边加上去。<br>这个函数会把要读的结果写到传入的 value 中，返回的前进后的 <code>p</code>。</p>
 <figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">inline</span> <span class="keyword">const</span> <span class="keyword">char</span>* <span class="title">GetVarint32Ptr</span><span class="params">(<span class="keyword">const</span> <span class="keyword">char</span>* p, <span class="keyword">const</span> <span class="keyword">char</span>* limit,</span></span></span><br><span class="line"><span class="function"><span class="params">                                  <span class="keyword">uint32_t</span>* value)</span> </span>&#123;</span><br><span class="line">  <span class="keyword">if</span> (p &lt; limit) &#123;</span><br><span class="line">    <span class="keyword">uint32_t</span> result = *(<span class="keyword">reinterpret_cast</span>&lt;<span class="keyword">const</span> <span class="keyword">uint8_t</span>*&gt;(p));</span><br><span class="line">    <span class="keyword">if</span> ((result &amp; <span class="number">128</span>) == <span class="number">0</span>) &#123;</span><br><span class="line">      *value = result;</span><br><span class="line">      <span class="keyword">return</span> p + <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">return</span> GetVarint32PtrFallback(p, limit, value);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">const</span> <span class="keyword">char</span>* <span class="title">GetVarint32PtrFallback</span><span class="params">(<span class="keyword">const</span> <span class="keyword">char</span>* p, <span class="keyword">const</span> <span class="keyword">char</span>* limit,</span></span></span><br><span class="line"><span class="function"><span class="params">                                   <span class="keyword">uint32_t</span>* value)</span> </span>&#123;</span><br><span class="line">  <span class="keyword">uint32_t</span> result = <span class="number">0</span>;</span><br><span class="line">  <span class="keyword">for</span> (<span class="keyword">uint32_t</span> shift = <span class="number">0</span>; shift &lt;= <span class="number">28</span> &amp;&amp; p &lt; limit; shift += <span class="number">7</span>) &#123;</span><br><span class="line">    <span class="keyword">uint32_t</span> byte = *(<span class="keyword">reinterpret_cast</span>&lt;<span class="keyword">const</span> <span class="keyword">uint8_t</span>*&gt;(p));</span><br><span class="line">    p++;</span><br><span class="line">    <span class="keyword">if</span> (byte &amp; <span class="number">128</span>) &#123;</span><br><span class="line">      <span class="comment">// More bytes are present</span></span><br><span class="line">      result |= ((byte &amp; <span class="number">127</span>) &lt;&lt; shift);</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">      result |= (byte &lt;&lt; shift);</span><br><span class="line">      *value = result;</span><br><span class="line">      <span class="keyword">return</span> <span class="keyword">reinterpret_cast</span>&lt;<span class="keyword">const</span> <span class="keyword">char</span>*&gt;(p);</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">return</span> <span class="literal">nullptr</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
@@ -580,8 +581,8 @@
 
           <div class="post-nav-prev post-nav-item">
             
-              <a href="/2021/04/12/leveldb-sstable/" rel="prev" title="LevelDB之SSTable实现">
-                LevelDB之SSTable实现 <i class="fa fa-chevron-right"></i>
+              <a href="/2021/04/12/leveldb-sstable/" rel="prev" title="LevelDB 之 SSTable 实现">
+                LevelDB 之 SSTable 实现 <i class="fa fa-chevron-right"></i>
               </a>
             
           </div>
@@ -661,7 +662,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">236</span>
+                <span class="site-state-item-count">239</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -674,7 +675,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">152</span>
+                <span class="site-state-item-count">151</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -933,7 +934,7 @@
         var disqus_config = function () {
           this.page.url = 'http://www.calvinneo.com/2021/04/09/leveldb-memtable/';
           this.page.identifier = '2021/04/09/leveldb-memtable/';
-          this.page.title = 'LevelDB之Memtable实现';
+          this.page.title = 'LevelDB 之 Memtable实现';
         };
         var d = document, s = d.createElement('script');
         s.src = 'https://calvinneo.disqus.com/embed.js';
