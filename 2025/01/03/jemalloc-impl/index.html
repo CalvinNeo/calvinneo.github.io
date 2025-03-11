@@ -99,7 +99,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="介绍下 jemalloc 的实现。目前的实现和 4.5 及之前的实现还是有比较大的差别的。因此代码主要是看的 4.5，并介绍了下 5.2.1 的几个重要的变化。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2025-01-21T13:38:34.523Z">
+<meta property="og:updated_time" content="2025-02-22T09:32:55.825Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="jemalloc 的实现">
 <meta name="twitter:description" content="介绍下 jemalloc 的实现。目前的实现和 4.5 及之前的实现还是有比较大的差别的。因此代码主要是看的 4.5，并介绍了下 5.2.1 的几个重要的变化。">
@@ -658,7 +658,11 @@
 <h2 id="base"><a href="#base" class="headerlink" title="base"></a>base</h2><p>这是 base allocator，是 jemalloc 初始化时候使用的一个低级分配方式。</p>
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">void</span> *</span><br><span class="line">base_alloc(<span class="keyword">tsdn_t</span> *tsdn, <span class="keyword">size_t</span> size)</span><br><span class="line">&#123;</span><br><span class="line">...</span><br><span class="line">    usize = s2u(csize);</span><br><span class="line">    extent_node_init(&amp;key, <span class="literal">NULL</span>, <span class="literal">NULL</span>, usize, <span class="literal">false</span>, <span class="literal">false</span>);</span><br><span class="line">    malloc_mutex_lock(tsdn, &amp;base_mtx);</span><br><span class="line">    node = extent_tree_szad_nsearch(&amp;base_avail_szad, &amp;key);</span><br><span class="line">    <span class="keyword">if</span> (node != <span class="literal">NULL</span>) &#123;</span><br><span class="line">        <span class="comment">/* Use existing space. */</span></span><br><span class="line">        extent_tree_szad_remove(&amp;base_avail_szad, node);</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        <span class="comment">/* Try to allocate more space. */</span></span><br><span class="line">        node = base_chunk_alloc(tsdn, csize);</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
 
-<h1 id="一些知识"><a href="#一些知识" class="headerlink" title="一些知识"></a>一些知识</h1><h2 id="Linux-的-overcommit-机制"><a href="#Linux-的-overcommit-机制" class="headerlink" title="Linux 的 overcommit 机制"></a>Linux 的 overcommit 机制</h2><h2 id="madvise"><a href="#madvise" class="headerlink" title="madvise"></a>madvise</h2><ul>
+<h1 id="一些知识"><a href="#一些知识" class="headerlink" title="一些知识"></a>一些知识</h1><h2 id="Linux-的-overcommit-机制"><a href="#Linux-的-overcommit-机制" class="headerlink" title="Linux 的 overcommit 机制"></a>Linux 的 overcommit 机制</h2><ul>
+<li>如果关闭 overcommit 机制，那么大部分的 OOM 现象将会消失，因为系统分配内存会更加保守</li>
+<li>如果开启 overcommit 机制，会根据物理内存、swap 和 overcommit_ratio 判断是否能够分配出内存，依然可能会分配失败  <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">CommitLimit = [swap size] + [RAM size] * vm.overcommit_ratio / 100</span><br></pre></td></tr></table></figure></li>
+</ul>
+<h2 id="madvise"><a href="#madvise" class="headerlink" title="madvise"></a>madvise</h2><ul>
 <li>MADV_NORMAL<br>  默认行为，内核根据普通访问模式处理页面。</li>
 <li>MADV_RANDOM<br>  随机访问，可能减少 prefetch 操作。</li>
 <li>MADV_SEQUENTIAL<br>  顺序访问，可以增加 prefetch。</li>
@@ -849,7 +853,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">239</span>
+                <span class="site-state-item-count">240</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
