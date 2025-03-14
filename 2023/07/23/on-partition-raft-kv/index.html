@@ -91,18 +91,18 @@
 
 
 
-<meta name="description" content="当前版本的 TiKV 中使用了单个 RocksDB 实例去储存全部的数据，甚至在更早期，Raft Log 和 payload 也存放在一起。">
+<meta name="description" content="这个特性为了解决 TiKV 到目前的一些积弊：  Mono RocksDB 难以支持更大的数据量 RaftLog -&amp;gt; RockDB WAL -&amp;gt; RocksDB 的写放大 部分 Raft Admin 无法被 Replay，从而导致很多落盘">
 <meta name="keywords" content="raft,数据库">
 <meta property="og:type" content="article">
 <meta property="og:title" content="TiKV 的 partitioned raft kv 特性">
 <meta property="og:url" content="http://www.calvinneo.com/2023/07/23/on-partition-raft-kv/index.html">
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
-<meta property="og:description" content="当前版本的 TiKV 中使用了单个 RocksDB 实例去储存全部的数据，甚至在更早期，Raft Log 和 payload 也存放在一起。">
+<meta property="og:description" content="这个特性为了解决 TiKV 到目前的一些积弊：  Mono RocksDB 难以支持更大的数据量 RaftLog -&amp;gt; RockDB WAL -&amp;gt; RocksDB 的写放大 部分 Raft Admin 无法被 Replay，从而导致很多落盘">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2025-01-19T09:28:21.765Z">
+<meta property="og:updated_time" content="2025-03-14T05:33:14.345Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="TiKV 的 partitioned raft kv 特性">
-<meta name="twitter:description" content="当前版本的 TiKV 中使用了单个 RocksDB 实例去储存全部的数据，甚至在更早期，Raft Log 和 payload 也存放在一起。">
+<meta name="twitter:description" content="这个特性为了解决 TiKV 到目前的一些积弊：  Mono RocksDB 难以支持更大的数据量 RaftLog -&amp;gt; RockDB WAL -&amp;gt; RocksDB 的写放大 部分 Raft Admin 无法被 Replay，从而导致很多落盘">
 
 
 
@@ -377,21 +377,72 @@
       
 
       
-        <p>当前版本的 TiKV 中使用了单个 RocksDB 实例去储存全部的数据，甚至在更早期，Raft Log 和 payload 也存放在一起。</p>
+        <p>这个特性为了解决 TiKV 到目前的一些积弊：</p>
+<ul>
+<li>Mono RocksDB 难以支持更大的数据量</li>
+<li>RaftLog -&gt; RockDB WAL -&gt; RocksDB 的写放大</li>
+<li>部分 Raft Admin 无法被 Replay，从而导致很多落盘</li>
+</ul>
 <a id="more"></a>
 
-<h1 id="一些设计上的讨论"><a href="#一些设计上的讨论" class="headerlink" title="一些设计上的讨论"></a>一些设计上的讨论</h1><h2 id="关于-Region-大小的讨论"><a href="#关于-Region-大小的讨论" class="headerlink" title="关于 Region 大小的讨论"></a>关于 Region 大小的讨论</h2><p>较小的 Region 的好处：</p>
+<p>当前版本的 TiKV 中使用了单个 RocksDB 实例去储存全部的数据，甚至在更早期，Raft Log 和 payload 也存放在一起。</p>
+<h1 id="一些设计上的讨论"><a href="#一些设计上的讨论" class="headerlink" title="一些设计上的讨论"></a>一些设计上的讨论</h1><h2 id="日志和数据分离存储"><a href="#日志和数据分离存储" class="headerlink" title="日志和数据分离存储"></a>日志和数据分离存储</h2><p>在早期版本中，Raft 数据和实际的 payload 是在一起存储的。但是从 <a href="https://github.com/tikv/tikv/pull/2054" target="_blank" rel="noopener">PR</a> 开始，进行了分离。好处显而易见：</p>
+<ul>
+<li>Raft log 和实际 payload 的写入模式不一致<ul>
+<li>Raft log 基本上完全是顺序 append 写</li>
+<li>Raft log 理论上可以按照水位线整体删除</li>
+</ul>
+</li>
+<li>Raft log 和 payload 写入的一致性要求不一致<br>  payload 写入如果丢失，是可以从 Raft log 回放的，因此 payload 的引擎可以容忍一定程度的不一致。</li>
+</ul>
+<p>在 TiFlash 的 PageStorage 的实现中，我们也经历了这么一个过程。在 PageStorage 中，WAL 和 Page 数据都被写到 PageFile 中。</p>
+<h2 id="关于-Region-大小的讨论"><a href="#关于-Region-大小的讨论" class="headerlink" title="关于 Region 大小的讨论"></a>关于 Region 大小的讨论</h2><h3 id="KV-热点问题"><a href="#KV-热点问题" class="headerlink" title="KV 热点问题"></a>KV 热点问题</h3><p>如果出现热点 Key，机器会吃不消么？写热点是难以避免的。TiKV 选择按 Range 切割，但是 User Key 不跨 Region。一段区间内的写热点，会导致容量超过上限而分裂，新分裂出来的 Region 可以被调度到其他 Node 上，从而实现负载均衡。在<a href="https://zhuanlan.zhihu.com/p/81316899" target="_blank" rel="noopener">文章</a>中提到，可以通过预分区的方式来划分 Region。可是对于单调递增的主键，或者索引，它会永远写在最后一个 Region 上。但我认为热点 Region 未必意味着热点机器，可以先进行 Split，然后通过 Leader Transfer 给其他的 Peer，或者通过 Conf Change 直接干掉自己。我猜测这个主要取决于数据迁移的效率和中心化服务的质量，如果在 Raft Log 阶段就能检测到流量问题并分裂，那么负载有可能被分流到多个相邻的 Region 中。</p>
+<p>TiKV 提供了 <code>SHARD_ROW_ID_BITS</code> 来进行打散，这类似于 Spanner 架构中提到的利用哈希解决 Append 写的思路。TiBD 提供了 <code>AUTO_RANDOM</code> 替代 <code>AUTO_INCREMENT</code>。</p>
+<p>注意，如果负载是频繁对某个特定的 key 更新，则 TS 一定也被用来计算哈希，不然热点 key 一定是在同一个 Region 内。这样一个 key 的不同版本就分布在不同的 Region 中，就不利于扫表了。因为下推到 TiKV 的请求可以理解为从 [l, r] 去扫出来所有 <a href="https://blog.csdn.net/TiDB_PingCAP/article/details/100535768" target="_blank" rel="noopener">commit_ts &lt;= scan_ts</a> 的数据，这样的扫表一定是会涉及到所有的机器，性能会很差。对于点查也一样，我们始终要找一个大于 user_key + ts 的 TiKV Key，哈希分片不好 seek。特别地，如果是 SI，那还得扫 [0, scan_ts] 中有没有 Lock，这个过程也要访问多个机器。</p>
+<p>如果在构造 key 的时候就进行分片，比如在最左边加一个 shard_id，这样 rehash 会很困难。shard_id 可以比如是通过某个特定字段哈希得到。</p>
+<p>在 Spanner 中存在 Tablet，也就是将多个同时访问比较频繁的 Region co-locate，这些 Region 彼此之间未必是有序的，甚至可能属于不同的表。</p>
+<h3 id="较小的-Region-vs-较大的-Region？"><a href="#较小的-Region-vs-较大的-Region？" class="headerlink" title="较小的 Region vs 较大的 Region？"></a>较小的 Region vs 较大的 Region？</h3><p>较小的 Region 的好处：</p>
 <ol>
 <li>每个 Region 中较低的并发</li>
-<li>更加快速的调度</li>
+<li>更加快速的调度<br> 因为目前 pd 的实现原因，如果要给一个 Region 做两次 conf change，那么就需要全量扫两次所有 Region。如果 Region 数量比较多，那么 pd 扫一轮的时间可能高达几十秒。因此 TiFlash 如果要执行 0 -&gt; 1 -&gt; 2 这样的变更，则调度上就可能要等待两个几十秒。</li>
+<li>更低的 Snapshot 的成本</li>
 </ol>
 <p>较大的 Region 的好处：</p>
 <ol>
-<li>Placement Driver 的压力变小</li>
+<li>Placement Driver 调度节点的压力变小</li>
 <li>CompactLog、Heartbeat 等网络开销变小</li>
 <li>1PC 的事务更多</li>
 </ol>
-<h2 id="Raft-Group-和-Data-Range-的对应关系"><a href="#Raft-Group-和-Data-Range-的对应关系" class="headerlink" title="Raft Group 和 Data Range 的对应关系"></a>Raft Group 和 Data Range 的对应关系</h2><p>TiKV 中，Raft Group 和 Region 严格一一对应。TiKV 中 Region 管理一段范围内的数据，在其他一些实现中，这段范围可能被称作 Shard、Partition 等。讨论下这个设计：</p>
+<h3 id="采用更大的-Region-的性能影响"><a href="#采用更大的-Region-的性能影响" class="headerlink" title="采用更大的 Region 的性能影响"></a>采用更大的 Region 的性能影响</h3><p>关于调大 Region 大小，很多人会担心 hot region 的写入问题。以 append 写为例，如果打散（例如使用 shared bits 特性），那么 scan 的时候需要 merge 多个 region，如果不打散，那么写入的时候负担又会变重。</p>
+<ol>
+<li>可以采用 Parallel Raft 的方式实现并行 Apply。</li>
+<li>单个 Region 的 Apply 压力会增大，但是可以使用 Multi LSMs 的优化，使得下层 RocksDB 的负担减轻<br> 相比于单个实例的 RocksDB，Multi LSMs 中每一棵 LSM 的层数更少，并且并发写入也更少。<br> 后续还可以尝试支持多盘部署，进一步提高 IOPS。</li>
+<li>另一个思路是将该节点上非写热点的 Region 进行搬迁，让这个节点只服务于热点<br> 例如 hot append write 的 flow 大概是几百 MB/s，那么这个 hot region 的分裂是非常迅速的。</li>
+</ol>
+<p>另一个考量点是如果集群中出现很多小表，那么大 Region 的效果不能完全展示：</p>
+<ol>
+<li>因为编码的问题，table 编码不相邻的表不能被合并到同一个 Region 中。</li>
+<li>【TiFlash】相邻的 table 合并会给 TiFlash 带来不少问题。例如如果给一些小表添加 TiFlash 副本，并且这个小表被合并到一个大 Region 中，那么发来的 Snapshot 可能非常大，并且包含了大量 TiFlash 不需要的数据。此外，TiFlash 本身的存储引擎也需要做出调整。</li>
+</ol>
+<h2 id="Mono-LSMs-和-Multi-LSMs"><a href="#Mono-LSMs-和-Multi-LSMs" class="headerlink" title="Mono LSMs 和 Multi LSMs"></a>Mono LSMs 和 Multi LSMs</h2><h3 id="Region-Management-角度"><a href="#Region-Management-角度" class="headerlink" title="Region Management 角度"></a>Region Management 角度</h3><ul>
+<li>如果下层使用 Mono LSM，即 TiKV raftstore v1 的方案<ul>
+<li>Split 非常简单，只需要考虑元数据分裂即可。</li>
+<li>需要额外处理 Region Overlap 的问题。</li>
+</ul>
+</li>
+<li>如果下层使用 Multi LSMs，即 TiKV raftstore v2 以及 Cloud Storage Engine 云上架构的方案<ul>
+<li>Split 较为困难，因为物理层也需要分裂。</li>
+<li>不需要处理 Region Overlap 的问题。</li>
+</ul>
+</li>
+</ul>
+<h3 id="存储角度"><a href="#存储角度" class="headerlink" title="存储角度"></a>存储角度</h3><ul>
+<li>Multi LSMs 情况下，每个 LSM 会更低，写放大会更小</li>
+<li>进而，Compaction 的 CPU 开销也更小</li>
+<li>进而，发送 Snapshot 的时候，并不需要 scan 整个 RocksDB 生成专属该 Region 的 SST，而是可以直接发送一个 RocksDB 实例</li>
+</ul>
+<h2 id="Raft-Group-和-Data-Range-的对应关系"><a href="#Raft-Group-和-Data-Range-的对应关系" class="headerlink" title="Raft Group 和 Data Range 的对应关系"></a>Raft Group 和 Data Range 的对应关系</h2><p>【需要注意，这一部分的内容并不包含在 Partition Raft KV 中，但是一个相关的设计】</p>
+<p>TiKV 中，Raft Group 和 Region 严格一一对应。TiKV 中 Region 管理一段范围内的数据，在其他一些实现中，这段范围可能被称作 Shard、Partition 等。讨论下这个设计：</p>
 <ol>
 <li>Raft 本身和 Region 数据的版本引入了全序关系<br> 首先，Raft Admin Command 会穿插在写入之间形成很多 barrier，带来额外的持久化负担。<br> 然后，这导致了新创建的 peer 只能通过 Snapshot 追进度的情况。从 Raft 协议来看，ConfChange 之前的日志的提交和复制应当遵守 C_old 的配置项目，但是它并没有禁止进入 C_new 状态的 Leader 给新 peer 发送 ConfChange 之前的日志。但考虑到如果新 peer 还在处理 C_old 时代的日志，它的本地状态比如 RegionLocalState 肯定对应了 C_old，这个时候它接受到了一个“不认识”的 store 的 AppendEntries，这是比较奇怪的。</li>
 <li>Raft Group 不稳定<br> Split 会分出独立的 Raft Group，给 pd 调度带来压力。也变相增大了 recover 的工作量。<br> Merge 两个 Region 会销毁一个 Raft Group，这里面有不少 corner case。比如 Leader 关掉后的孤儿 Learner 问题。</li>
@@ -403,11 +454,11 @@
 </ol>
 <h3 id="Raft-Group-和-Data-Range-分开的架构"><a href="#Raft-Group-和-Data-Range-分开的架构" class="headerlink" title="Raft Group 和 Data Range 分开的架构"></a>Raft Group 和 Data Range 分开的架构</h3><p>即使 Raft Group 和 Data Range 是一一对应的，那么在这之上还有一些设计：</p>
 <ol>
-<li>全局需要维护多少个 Raft Group？<br> 一个 Raft Group 可能需要处理不同 Key range 的数据。但全局关系肯定是过强了，破坏了 Partitioning 的初衷。所以会更倾向于引入乱序 Apply 机制来提高 RSM 的吞吐量。</li>
+<li>全局需要维护多少个 Raft Group？<br> 一个 Raft Group 可能需要处理不同 Key range 的数据。但全局关系肯定是过强了，破坏了 Partitioning 的初衷。所以会更倾向于引入乱序 Apply 机制来提高 RSM 的吞吐量。<br> Oceanbase 的方案应该是一个 Node 是一个 Raft Group 的 Leader。</li>
 <li>谁有权限写 Data Range？<br> 一般来说，会将对应的 Raft Group Leader 设置为 Data Range 的 “Leader”，让它来处理写入。这样做的好处是可以减少一次 RPC。</li>
 </ol>
 <p>另外，分开的实现还有个好处，就是如果 Raft 层的 Leader 发生切换，Data Range 层的读取不会收到影响，而是可以 bypass 掉 Raft 层。<a href="https://www.cockroachlabs.com/docs/stable/architecture/replication-layer#leases" target="_blank" rel="noopener">CRDB</a> 就是这样实现的，也就是类似是 Data Range 上的 LeaseRead。相比之下，TiKV 的 LeaseRead 和 Raft Leader 的生命周期是绑定的。</p>
-<p>在本文的后面还会提到 Follower Read 相关的话题，特别是它和乱序 apply 的关系。我个人觉得，如果将 Data Range 和 Raft Group 分开，我们仍然是可以实现 Follower Read 的。如果你把 Data Range 看成一个 RSM，那这种架构就类似于一个 Raft Group 去管理多个 RSM。我们在 Data Range 上维护一个 index，应该就行了。</p>
+<p>在 <a href="/2025/01/19/raft-learner/">Raft Learner 文章中</a>中特别提到了 Follower Read 和乱序 apply 的关系。</p>
 <h1 id="Partitioned-RaftKV-相关"><a href="#Partitioned-RaftKV-相关" class="headerlink" title="Partitioned RaftKV 相关"></a>Partitioned RaftKV 相关</h1><h2 id="和-Mono-store-RaftKV-的兼容性问题"><a href="#和-Mono-store-RaftKV-的兼容性问题" class="headerlink" title="和 Mono-store RaftKV 的兼容性问题"></a>和 Mono-store RaftKV 的兼容性问题</h2><p>新架构简化了 Snapshot 的生成和注入流程：</p>
 <ol>
 <li>在生成时，只需要对当前 Region 对应的 RocksDB 做一个 Snapshot 就行。这个 Snapshot 包含的数据可以新于 Raft Local State。</li>
@@ -420,15 +471,6 @@
 </ol>
 <p>不光是 Snapshot，在 Partitioned RaftKV 中，Region Peer 之间也可能互相 Overlap。所幸这个场景只会出现在 BatchSplit 和调度 Peer 发生冲突的情况下。</p>
 <p>在新架构中，Apply 的落盘也实现了异步化，现在下层引擎可以选择在任意时刻落盘数据，并且在落盘完毕后通知 raftstore。这对 TiFlash 来说是一件好事，我们可以由此来让 KVStore 的落盘不再阻塞。</p>
-<h2 id="采用更大的-Region-的性能影响"><a href="#采用更大的-Region-的性能影响" class="headerlink" title="采用更大的 Region 的性能影响"></a>采用更大的 Region 的性能影响</h2><ol>
-<li>可以采用 Parallel Raft 的方式实现并行 Apply。</li>
-<li>单个 Region 的 Apply 压力会增大，但是下层 RocksDB 的负担减轻了。相比于单个实例的 RocksDB，新架构的层数更少，并且并发写入也更少。后续还可以尝试支持多盘部署。</li>
-</ol>
-<p>另一个考量点是如果集群中出现很多小表，那么大 Region 的效果不能完全展示：</p>
-<ol>
-<li>因为编码的问题，table 编码不相邻的表不能被合并到同一个 Region 中。</li>
-<li>相邻的 table 合并会给 TiFlash 带来不少问题。例如如果给一些小表添加 TiFlash 副本，并且这个小表被合并到一个大 Region 中，那么发来的 Snapshot 可能非常大，并且包含了大量 TiFlash 不需要的数据。此外，TiFlash 本身的存储引擎也需要做出调整。</li>
-</ol>
 
       
     </div>
@@ -494,8 +536,8 @@
         <div class="post-nav">
           <div class="post-nav-next post-nav-item">
             
-              <a href="/2023/07/22/tikv-tidb-thought/" rel="next" title="关于 TiKV、TiDB、TiFlash 的一些思考">
-                <i class="fa fa-chevron-left"></i> 关于 TiKV、TiDB、TiFlash 的一些思考
+              <a href="/2023/07/22/on-cloud-tidb-tiflash/" rel="next" title="云上的 TiDB 和 TiFlash">
+                <i class="fa fa-chevron-left"></i> 云上的 TiDB 和 TiFlash
               </a>
             
           </div>
@@ -585,7 +627,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">240</span>
+                <span class="site-state-item-count">242</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -598,7 +640,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">151</span>
+                <span class="site-state-item-count">152</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -691,7 +733,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#一些设计上的讨论"><span class="nav-number">1.</span> <span class="nav-text">一些设计上的讨论</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#关于-Region-大小的讨论"><span class="nav-number">1.1.</span> <span class="nav-text">关于 Region 大小的讨论</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Raft-Group-和-Data-Range-的对应关系"><span class="nav-number">1.2.</span> <span class="nav-text">Raft Group 和 Data Range 的对应关系</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Raft-Group-和-Data-Range-分开的架构"><span class="nav-number">1.2.1.</span> <span class="nav-text">Raft Group 和 Data Range 分开的架构</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Partitioned-RaftKV-相关"><span class="nav-number">2.</span> <span class="nav-text">Partitioned RaftKV 相关</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#和-Mono-store-RaftKV-的兼容性问题"><span class="nav-number">2.1.</span> <span class="nav-text">和 Mono-store RaftKV 的兼容性问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#采用更大的-Region-的性能影响"><span class="nav-number">2.2.</span> <span class="nav-text">采用更大的 Region 的性能影响</span></a></li></ol></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#一些设计上的讨论"><span class="nav-number">1.</span> <span class="nav-text">一些设计上的讨论</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#日志和数据分离存储"><span class="nav-number">1.1.</span> <span class="nav-text">日志和数据分离存储</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#关于-Region-大小的讨论"><span class="nav-number">1.2.</span> <span class="nav-text">关于 Region 大小的讨论</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#KV-热点问题"><span class="nav-number">1.2.1.</span> <span class="nav-text">KV 热点问题</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#较小的-Region-vs-较大的-Region？"><span class="nav-number">1.2.2.</span> <span class="nav-text">较小的 Region vs 较大的 Region？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#采用更大的-Region-的性能影响"><span class="nav-number">1.2.3.</span> <span class="nav-text">采用更大的 Region 的性能影响</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Mono-LSMs-和-Multi-LSMs"><span class="nav-number">1.3.</span> <span class="nav-text">Mono LSMs 和 Multi LSMs</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Region-Management-角度"><span class="nav-number">1.3.1.</span> <span class="nav-text">Region Management 角度</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#存储角度"><span class="nav-number">1.3.2.</span> <span class="nav-text">存储角度</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Raft-Group-和-Data-Range-的对应关系"><span class="nav-number">1.4.</span> <span class="nav-text">Raft Group 和 Data Range 的对应关系</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Raft-Group-和-Data-Range-分开的架构"><span class="nav-number">1.4.1.</span> <span class="nav-text">Raft Group 和 Data Range 分开的架构</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Partitioned-RaftKV-相关"><span class="nav-number">2.</span> <span class="nav-text">Partitioned RaftKV 相关</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#和-Mono-store-RaftKV-的兼容性问题"><span class="nav-number">2.1.</span> <span class="nav-text">和 Mono-store RaftKV 的兼容性问题</span></a></li></ol></li></ol></div>
             
 
           </div>
