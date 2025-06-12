@@ -107,8 +107,10 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/masstree/7.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/masstree/remove.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/ceph/1.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/ceph/2.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/ceph/3.png">
-<meta property="og:updated_time" content="2025-03-11T14:01:39.304Z">
+<meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/ceph/4.png">
+<meta property="og:updated_time" content="2025-04-20T10:08:19.447Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Database paper part 1">
 <meta name="twitter:description" content="在比较早的时候，我使用腾讯文档记录一些数据库的论文。但我越来越无法忍受腾讯文档的 bug 等不便利。因此我打算将这些文章转移到博客中，即使它们中的部分的完成度并不是很高。 这篇文章中，包含 CStore、Kudu、Masstree 和 Ceph。">
@@ -553,15 +555,23 @@
 <p>Border node 因为彼此之间有 link，所以可以借助于 link 来处理 split。这里的规则是总是把右边部分分出去创建新 node。<br>Masstree 还有下面的规定：<br>1.B+ 树中的第一个 node 是 border node。他不会删除，除非整棵树都被删掉了。它始终是整棵树中最小的节点。<br>2.每个 border node 管理区间 [lowkey(n), highkey(n))。Split 或者 delete 操作可能修改右区间，但是不会修改左区间。<br>所以，get操作可以始终通过和下一个 border node 的 lowkey 比较来找到自己要找的 node。</p>
 <h4 id="Remove"><a href="#Remove" class="headerlink" title="Remove"></a>Remove</h4><p>首先回忆之前的 border insert，在里面并没有更新 vinsert。在这里的场景中我们会介绍和 remove 操作组合起来的时候，因为 remove 也不修改 version 所以可能出现错误。我理解这有点像像是 ABA 问题。<br>考虑下面的场景，get 操作和 remove 操作重叠了，所以 remove 操作不能 gc 掉 k1 和 v1，不然就影响了 reader。这里应该是对应了前面的 RCU？<br>相应的，remove 操作是修改 permutation。但如果后续有一个 put操作，刚好把 key 也放到了 i 上。这就会导致 get 返回 v2 了。所以当已经删除了的 slot 被重用的时候，也要更新 vinsert。</p>
 <p><img src="/img/dbpaper/masstree/remove.png"></p>
-<h1 id="Ceph"><a href="#Ceph" class="headerlink" title="Ceph"></a>Ceph</h1><h2 id="对-Ceph-的简单介绍"><a href="#对-Ceph-的简单介绍" class="headerlink" title="对 Ceph 的简单介绍"></a>对 Ceph 的简单介绍</h2><p>Ceph 文件系统 CephFS 是一种基于 Ceph 分布式对象存储 RADOS 的 POSIX 兼容文件系统。它旨在为各种应用程序提供高性能、高可用性和可扩展的文件存储解决方</p>
+<h1 id="Ceph"><a href="#Ceph" class="headerlink" title="Ceph"></a>Ceph</h1><h2 id="对-Ceph-的简单介绍"><a href="#对-Ceph-的简单介绍" class="headerlink" title="对 Ceph 的简单介绍"></a>对 Ceph 的简单介绍</h2><p>Ceph 文件系统 CephFS 是一种基于 Ceph 分布式对象存储 RADOS 的 POSIX 兼容文件系统。它旨在为各种应用程序提供高性能、高可用性和可扩展的文件存储解决方案。</p>
 <p>架构：</p>
 <ul>
-<li>RADOS：CephFS 构建在 Ceph 的分布式对象存储 RADOS 之上，RADOS 提供了可靠的数据存储和管理功能。</li>
+<li>RADOS(Reliable Autonomic Distributed Object Store)：CephFS 构建在 Ceph 的分布式对象存储 RADOS 之上，RADOS 提供了可靠的数据存储和管理功能。</li>
 <li>元数据服务器 MDS：CephFS 使用一个可扩展的元数据服务器集群来管理文件系统的元数据。这些元数据服务器负责协调客户端对文件系统的访问，并维护元数据的一致性。</li>
 <li>客户端：CephFS 客户端可以直接与 RADOS 交互，进行文件数据的读写操作，无需通过中间网关或代理，从而提高了性能和可扩展性。</li>
 </ul>
-<p>OSD 是 Ceph 的基本存储单元，全称为 Object Storage Daemon。每个 OSD 进程通常对应于存储集群中的一个物理或虚拟存储设备，如硬盘或 SSD。</p>
-<p>数据存储：OSD 将数据以对象的形式存储在本地文件系统中，并通过网络提供对这些数据的访问。<br>数据复制：根据 Ceph 的配置（如副本数），OSD 负责将数据复制到多个节点上，以确保数据的冗余性和安全性。<br>数据恢复：在硬件故障或节点失效的情况下，OSD 可以自动检测并恢复数据，确保数据的完整性和可用性。<br>数据均衡：OSD 会与其他 OSD 协作，动态均衡集群中的数据存储负载。</p>
+<p>OSD 是 Ceph 的基本存储单元，全称为 Object Storage Daemon。每个 OSD 进程通常对应于存储集群中的一个物理或虚拟存储设备，如硬盘或 SSD。其功能如下：</p>
+<ul>
+<li>存储：OSD 将数据以对象的形式存储在本地文件系统中，并通过网络提供访问。</li>
+<li>复制：根据 Ceph 的配置（如副本数），OSD 负责将数据复制到多个节点上，以确保数据的冗余性和安全性。</li>
+<li>恢复：在硬件故障或节点失效的情况下，OSD 可以自动检测并恢复数据，确保数据的完整性和可用性。</li>
+<li>均衡：OSD 会与其他 OSD 协作，动态均衡集群中的数据存储负载。</li>
+</ul>
+<p>MDS 并不是 Ceph 块存储和对象存储必须的组件。因为元数据也存在 OSD 中。这个组件对 Ceph 文件存储 CephFS 是必要的。</p>
+<p>Placement Group 中包含多个 OSD。引入 PG 这一层其实是为了更好的分配和定位数据。</p>
+<h1 id="Ceph-CephFS"><a href="#Ceph-CephFS" class="headerlink" title="Ceph(CephFS)"></a>Ceph(CephFS)</h1><p>Ceph: A Scalable, High-Performance Distributed File System (OSDI, 2006)</p>
 <h2 id="Introduction"><a href="#Introduction" class="headerlink" title="Introduction"></a>Introduction</h2><p>目前有一些依赖对象存储的设计，其中对象存储设备，即 object storage device 也被称作 OSD，元数据服务器即 metadata server，也被称作 MDS。现在并不是读 block 了，而是读更大的 named objects，并且这些 object 的大小也未必要相同。底层的 block 分配由设备处理。Clients typically interact with a metadata server (MDS) to perform metadata operations (open, rename), while communicating directly with OSDs to perform file I/O (reads and writes), significantly improving overall scalability.<br>这样的架构依然不能解决 MDS 本身的扩展性，元数据没有做 partition。在设计上依旧依赖 allocation lists 和 inode tables，并且不愿意下推一些决策给 OSD。<br>Ceph 的设计基于的假设是 PB 级的存储实际上是动态的：</p>
 <ol>
 <li>大的系统是基于增量构建出来的</li>
@@ -590,24 +600,170 @@
 <p>striping strategy 指的是文件是条带化存储的，一个文件可以对应到若干 object 上。</p>
 </blockquote>
 <p>客户端的 capability 分为 read、cache read、write 和 buffer write。后续也会支持管控。<br>Ceph 的 striping strategy 中为了避免 file allocation metadata，object name 只包含 inode number 和 stripe number。然后就借助于 CRUSH 去将它们映射到 OSD 上。比如说，只要一个 client 知道 inode number、layout 和 file size，它就可以定位到文件对应的所有对象。</p>
-<h3 id="Client-Synchronization"><a href="#Client-Synchronization" class="headerlink" title="Client Synchronization"></a>Client Synchronization</h3><p>POSIX semantics sensibly require that reads reflect any data previously written, and that writes are atomic. 这里我理解就是强一致性。<br>如果有读写或者写写冲突，那么 MDS 就会撤回之前发出的 read caching 和 write buffering 的 capacity，强制同步 IO。也就是说，所有应用的读和写都会被 block，直到被 OSD 确认。这样 update serialization 和 synchronization 的负担被转移给了 OSD。<br>当写请求跨越 object 的边界的时候，会向所有对象对应的 OSD 请求各自的锁，然后提交 write 并释放锁。Object locks are similarly used to mask latency for large writes by acquiring locks and flushing data asynchronously.</p>
-<p>当然，同步 IO 对特别是小读写请求的影响比较大，因为每次都会请求一次 OSD。在一些情况下，可以选择更松的一致性要求。当然，性能和一致性是一组 tradeoff。<br>Ceph 支持一些 POSIX IO 的 HPC 接口，比如 O_LAZY flag，也就是放松了 coherency 要求。但是，HPC 程序自己会去控制一致性。这是因为一些应用可能只是让不同的线程写同一个文件的不同部分，这样就和一致性不冲突。<br>还有两个高级功能，lazyio_propagate 能够 flush 一个 range 到 object store 上。lazyio_ synchronize will ensure that the effects of previous propagations are reflected in any subsequent reads.</p>
-<h3 id="Namespace-Operations"><a href="#Namespace-Operations" class="headerlink" title="Namespace Operations"></a>Namespace Operations</h3><p>Namespace Operations 诸如 readdir、unlink、chmod 之类的由 MDS 处理。<br>For simplicity, no metadata locks or leases are issued to clients. For HPC workloads in particular, callbacks offer minimal upside at a high potential cost in complexity.</p>
+<h3 id="Client-Synchronization"><a href="#Client-Synchronization" class="headerlink" title="Client Synchronization"></a>Client Synchronization</h3><p>POSIX semantics sensibly require that：</p>
+<ul>
+<li>reads reflect any data previously written</li>
+<li>and that writes are atomic</li>
+</ul>
+<p>这里我理解放到分布式系统里面就是要实现强一致性。</p>
+<p>如果有读写或者写写冲突，那么 MDS 就会撤回之前发出的 read caching 和 write buffering 的 capacity，强制同步 IO。也就是说，所有应用的读和写都会被 block，直到被 OSD 确认。这样 update serialization 和 synchronization 的负担被转移给了 OSD。<br>当写请求跨越 object 的边界的时候，会向所有对象对应的 OSD 请求各自的锁，然后提交 write 并释放锁。Object locks are similarly used to mask latency for large writes by acquiring locks and flushing data asynchronously.</p>
+<p>当然，同步 IO 对特别是小读写请求的影响比较大，因为每次都会请求一次 OSD。在一些情况下，可以选择更松的一致性要求。当然，性能和一致性是一组 tradeoff。<br>Ceph 支持一些 POSIX IO 的 HPC 接口，比如 O_LAZY flag，也就是放松了 coherency 要求。但是，HPC 程序自己会去控制一致性。这是因为一些应用可能只是让不同的线程写同一个文件的不同部分，这样就和一致性不冲突。<br>还有两个高级功能，lazyio_propagate 能够 flush 一个 range 到 object store 上。lazyio_synchronize will ensure that the effects of previous propagations are reflected in any subsequent reads.</p>
+<h3 id="Namespace-Operations"><a href="#Namespace-Operations" class="headerlink" title="Namespace Operations"></a>Namespace Operations</h3><p>Namespace Operations 诸如 readdir、unlink、chmod 之类的由 MDS 处理。<br>出于简化的目的，不会给 client 分发诸如 metadata lock 或者 lease 之类的东西。特别是对于 HPC 负载，callbacks offer minimal upside at a high potential cost in complexity.</p>
 <p>Ceph 会对一些最常见的 metadata 访问场景进行优化，比如 readir 后面接一系列 stat 这个场景是 performance killer，Ceph 会选择在 readdir 的时候就直接取回来缓存。因为中间某个文件的属性可能变更了，访问缓存可能会牺牲一点 coherence，但性能提升很大。<br>对此的另一个优化手段是在 stat 被触发时，MDS 撤回所有的 write capacity，让所有的写暂停。然后获取所有的 writer 上的最新文件大小和 mtime，选择其中的最大的值返回。<br>当然，如果只有一个 writer，那么就可以直接从 writing client 取到正确的值，从而就不需要上面的过程了。<br>Applications for which coherent behavior is unnecesssary-victims of a POSIX interface that doesn’t align with their needs-can use <code>statlite</code>, which takes a bit mask specifying which inode fields are not required to be coherent. 这里不太看得懂。</p>
-<h2 id="Dynamically-Distributed-Metadata"><a href="#Dynamically-Distributed-Metadata" class="headerlink" title="Dynamically Distributed Metadata"></a>Dynamically Distributed Metadata</h2><p>Metadata operation 通常占据了近乎一半的文件系统开销，并且处在 critical path 上。Metadata management also presents a critical scaling challenge in distributed file systems: although capacity and aggregate I/O rates can scale almost arbitrarily with the addition of more storage devices, metadata operations involve a greater degree of interdependence that makes scalable consistency and coherence management more difficult.</p>
+<h2 id="Dynamically-Distributed-Metadata"><a href="#Dynamically-Distributed-Metadata" class="headerlink" title="Dynamically Distributed Metadata"></a>Dynamically Distributed Metadata</h2><p>Metadata operation 通常占据了近乎一半的文件系统开销，并且处在 critical path 上。</p>
+<p>下面这段话值得是 metadata 的操作往往涉及的依赖更多，导致扩容方面存在更大的挑战。</p>
+<blockquote>
+<p>Metadata management also presents a critical scaling challenge in distributed file systems: although capacity and aggregate I/O rates can scale almost arbitrarily with the addition of more storage devices, metadata operations involve a greater degree of interdependence that makes scalable consistency and coherence management more difficult.</p>
+</blockquote>
 <p>Ceph 的上的 metadata 很小，基本只包含 file name 和 inode。对象名通过 inode 构建出来，并且通过 CRUSH 来分布到不同的 OSD 上。这简化了 metadata workload，并且让 Ceph 管理能力和文件的大小无关。<br>此外，Ceph 还要减少和 metadata 相关的 IO 次数。它使用了一个 two-tiered storage strategy，并且通过 Dynamic Subtree Partitioning 最大化 locality，并且提高 cache efficiency。</p>
-<h3 id="Metatada-storage"><a href="#Metatada-storage" class="headerlink" title="Metatada storage"></a>Metatada storage</h3><p>MDS 使用 journal 来持久化。每个 journal 有几百兆，可以 absorb repetitive metadata updates。journer 被 lazy 和流式地地写入 OSD 集群。<br>这个设计有几点好处，但说得有点模糊。<br>This strategy provides the best of both worlds: streaming updates to disk in an efficient (sequential) fashion, and a vastly reduced re-write workload, allowing the long-term on-disk storage layout to be optimized for future read access. In particular, inodes are embedded directly within directories, allowing the MDS to prefetch entire directories with a single OSD read request and exploit the high degree of directory locality present in most workloads [22]. Each directory’s content is written to the OSD cluster using the same striping and distribution strategy as metadata journals and file data. Inode numbers are allocated in ranges to metadata servers and considered immutable in our prototype, although in the future they could be trivially reclaimed on file deletion. An auxiliary anchor table [28] keeps the rare inode with multiple hard links globally addressable by inode number-all without encumbering the overwhelmingly common case of singly-linked files with an enormous, sparsely populated and cumbersome inode table.</p>
-<h3 id="Dynamic-Subtree-Partitioning"><a href="#Dynamic-Subtree-Partitioning" class="headerlink" title="Dynamic Subtree Partitioning"></a>Dynamic Subtree Partitioning</h3><p>SOTA 的方案包括静态子树切割，或者动态地基于 hash 来做。哈希的方案会破坏元数据的 locality，也会破坏 prefetch 的可能性。<br>Ceph 的 Dynamic Subtree Partitioning 首先是引入了 hierachy。然后通过 counters with an exponential time decay 维护元数据的 popularity。这个 popularity 会向上往树根处传播，从而 MDS 可以得到一棵反映负载分布的权重树。MDS 可以通过迁移子树的方式来实现负载均衡。这个负载均衡可以只在内存中进行，从而减少对 coherence lock 或者 client capability 的影响。The resulting subtree-based partition is kept coarse to minimize prefix replication overhead and to preserve locality. 不太明白这里说的 prefix replication 是什么。</p>
+<h3 id="Metatada-storage"><a href="#Metatada-storage" class="headerlink" title="Metatada storage"></a>Metatada storage</h3><p>MDS 使用 journal 来持久化。每个 journal 有几百兆，可以 absorb repetitive metadata updates。journer 被 lazy 和流式地地写入 OSD 集群。<br>下面这段话，这个设计有几点好处，但有点模糊。简单来说是：</p>
+<ul>
+<li>流式地将更新写入磁盘，顺序写对读取友好</li>
+<li>Inode 直接嵌入在目录里面，这样一次 OSD 读就可以获取到整个目录的结构。充分利用了 directory locality</li>
+</ul>
+<blockquote>
+<p>This strategy provides the best of both worlds: streaming updates to disk in an efficient (sequential) fashion, and a vastly reduced re-write workload, allowing the long-term on-disk storage layout to be optimized for future read access. In particular, inodes are embedded directly within directories, allowing the MDS to prefetch entire directories with a single OSD read request and exploit the high degree of directory locality present in most workloads [22]. </p>
+</blockquote>
+<p>细节：</p>
+<ul>
+<li>Each directory’s content is written to the OSD cluster using the same striping and distribution strategy as metadata journals and file data.</li>
+<li>Inode numbers are allocated in ranges to metadata servers and considered immutable in our prototype, although in the future they could be trivially reclaimed on file deletion.</li>
+<li>An auxiliary anchor table [28] keeps the rare inode with multiple hard links globally addressable by inode number-all without encumbering the overwhelmingly common case of singly-linked files with an enormous, sparsely populated and cumbersome inode table.</li>
+</ul>
+<h3 id="Dynamic-Subtree-Partitioning"><a href="#Dynamic-Subtree-Partitioning" class="headerlink" title="Dynamic Subtree Partitioning"></a>Dynamic Subtree Partitioning</h3><p>做 delegate authority，SOTA 的方案包括：</p>
+<ul>
+<li>静态子树切割<br>  指的类似于 forcing an administrator to carve the dataset into smaller static “volumes” 这样的方案。</li>
+<li>动态地基于 hash<br>  哈希的方案会破坏元数据的 locality，也会破坏 prefetch 的可能性。</li>
+</ul>
+<p>Ceph 的 Dynamic Subtree Partitioning 首先是引入了 hierachy。也就是 adaptively distributes cached metadata hierarchically across a set of nodes，如下图所示：</p>
+<ul>
+<li>每个 MDS 通过 counters with an exponential time decay 去计算当前的 directory hierarchy 的元数据的 popularity<br>  对某个 inode 的 counter 增加计数，会导致所有的祖先，直到树根的 counter 都增加。</li>
+<li>这个 popularity 会向上往树根处传播，从而每个 MDS 可以计算得到一棵反映负载分布的权重树。</li>
+<li>MDS 可以通过迁移子树的方式来实现负载均衡。</li>
+</ul>
+<p><img src="/img/dbpaper/ceph/2.png"></p>
+<p>这个负载均衡可以只在内存中进行，从而减少对 coherence lock 或者 client capability 的影响。原理是：</p>
+<ul>
+<li>共享的长期存储</li>
+<li>精心设计的命名空间锁</li>
+</ul>
+<p>Imported metadata is written to the <strong>new MDS’s</strong> journal for safety, while additional journal entries on both ends ensure that the transfer of authority is invulnerable to intervening failures (similar to a two-phase commit).</p>
+<p>The resulting subtree-based partition is kept coarse to minimize prefix replication overhead and to preserve locality. 不太明白这里说的 prefix replication 是什么。</p>
 <p>在 replication 的时候，inode 的内容被分为三块：security、file 和 immutable。security、file 两个组会被使用单独的 FSM 管理。其目的是减少 lock contention。这里也不太明白说的是什么。</p>
-<h3 id="Traffic-control"><a href="#Traffic-control" class="headerlink" title="Traffic control"></a>Traffic control</h3><p>尽管做了 partition，但是还是会存在 hotspot 或者 flash crowds(瞬时拥堵)的问题，比如很多个客户端同时访问同一个文件或者目录。Ceph 会根据 popularity 来决定是否将 hotspot 进行分散，同时也会想办法避免损失 locality：<br>1.读取压力比较大的目录会设有多个 replica 来分散负载。如果一个目录不 popular，那么他就不会被创建其他的 replica。<br>2.写入压力比较大的目录中的文件会被 hash 到不同的节点上。这会牺牲目录的 locality，但负载是均衡的。写入会直接被 direct 到 authority 节点上。</p>
+<h3 id="Traffic-control"><a href="#Traffic-control" class="headerlink" title="Traffic control"></a>Traffic control</h3><p>尽管做了 partition，但是还是会存在 hotspot 或者 flash crowds(瞬时拥堵)的问题，比如很多个客户端同时访问同一个文件或者目录。Ceph 会根据 popularity 来决定是否将 hotspot 进行分散，同时也会想办法避免损失 locality：<br>1.读取压力比较大的目录会设有多个 replica 来分散负载。如果一个目录不 popular，那么它就不会被创建其他的 replica。<br>2.写入压力比较大的目录中的文件会被 hash 到不同的节点上。这会牺牲目录的 locality，但负载是均衡的。写入会直接被 direct 到 authority 节点上。</p>
 <h2 id="Distributed-Object-Storage"><a href="#Distributed-Object-Storage" class="headerlink" title="Distributed Object Storage"></a>Distributed Object Storage</h2><p>让 OSD 处理注入 replicate 之类的工作，让 Ceph 的 RADOS 取得在容量和聚合能力上的线性伸缩。</p>
-<h3 id="CRUSH"><a href="#CRUSH" class="headerlink" title="CRUSH"></a>CRUSH</h3><p>首先Ceph 会把对象映射到不同的 PG 里面。这是通过一个简单的哈希函数实现的。<br>然后通过 CRUSH 也就是 Controlled Replication Under Scalable Hashing 函数将 PG 映射到 OSD。</p>
+<h3 id="CRUSH-Controlled-Replication-Under-Scalable-Hashing"><a href="#CRUSH-Controlled-Replication-Under-Scalable-Hashing" class="headerlink" title="CRUSH(Controlled Replication Under Scalable Hashing)"></a>CRUSH(Controlled Replication Under Scalable Hashing)</h3><p>如下图所示，一个文件会被分为多个 Object，通过 inode 和 ono 可以定位到某个对象的 oid。有了 oid 可以经过下面两步转换，得到存放的 OSD。</p>
+<ul>
+<li>Ceph 通过简单的 hash 函数将对象映射到不同的 PG 里面。</li>
+<li>通过 CRUSH 函数将 PG 映射到 OSD。</li>
+</ul>
 <p><img src="/img/dbpaper/ceph/3.png"></p>
-<p>那么定位一个对象就只需要知道 PG 和一个 OSD cluster map。因为这个 map 不会很频繁变化，或者变化也是只其中一小部分，比如上下线节点，所以会元数据也不会被动来动去。<br>OSD cluster map 是分层的描述，比如可以分为 shelf、rack cabinet、row of cabinet。<br>CRUSH 会根据 placement rule 将 PG 映射到 OSD。<br>OSD cluster map 还包含 down 或者 inactive 机器的列表，以及一个 version 号。所有对 OSD 的请求都会带上 version 号。</p>
-<h3 id="Replication-1"><a href="#Replication-1" class="headerlink" title="Replication"></a>Replication</h3><p>Replication 的粒度是 PG。<br>Primary 会确保所有的 replica 都被写完之后，再回复 client。</p>
-<h3 id="Data-safety"><a href="#Data-safety" class="headerlink" title="Data safety"></a>Data safety</h3><p>RADOS 解耦了 sync 和 safety。他的意思是共享存储有两个作用，第一个是同步，也就是让一个更新尽快对其他 client 可见。第二个是可靠性，也就是持久化。<br>所以，当所有的 OSD 写完 in-memory buffer cache 之后，primary OSD 就会给 client 回复一个 ack，表示 sync 结束了。<br>之后，当数据被落盘之后，primary OSD 还会再回复一个 commit 给客户端，表示数据 safe 了。</p>
-<h3 id="故障检测"><a href="#故障检测" class="headerlink" title="故障检测"></a>故障检测</h3><p>主要是分为两个阶段。短暂的无响应会被标记为 down，此时会移交 primary。长期的无响应会被标记为 out，会派其他的 OSD 来接管。这么做的目的也是为了减少数据的搬运。</p>
-
+<p>那么 CRUSH 函数定位一个 Object 所在的 OSD 就只需要知道：</p>
+<ul>
+<li>PG</li>
+<li>OSD cluster map<br>  这个 map 实际上就是 OSD 节点的分布。<br>  所以不会很频繁变化，或者变化也是只其中一小部分，比如上下线节点。</li>
+</ul>
+<p>有关 OSD cluster map：</p>
+<ul>
+<li>OSD cluster map 是分层的描述，比如可以分为 shelf、rack cabinet（机柜）、row of cabinet（机柜列）。</li>
+<li>每个 OSD 有个权重，表示自己能承受的数据的数量。</li>
+<li>CRUSH 会根据 placement rule 将 PG 映射到 OSD<br>  Placement rule 定义了复制级别（level of replication）和放置的限制。例如：<ul>
+<li>将 3 个 replica 都放到一个 row 中，从而避免 inter row 的流量。</li>
+<li>但是在不同的 cabinet 中，从而实现容灾。</li>
+</ul>
+</li>
+<li>OSD cluster map 还包含 down 或者 inactive 机器的列表，以及一个 epoch 号。<br>  所有对 OSD 的请求都会带上 epoch 号。<br>  OSD 之间会互相传播 epoch 以及对应的 OSD cluster map 从而实现相互的更新。</li>
+<li>【Q】从后面的介绍可以看出，还有个专门的 Monitor 集群来维护 OSD cluster map。不是很清楚这里的关系。</li>
+</ul>
+<h3 id="Replication-1"><a href="#Replication-1" class="headerlink" title="Replication"></a>Replication</h3><p>Ceph 这里的假设：</p>
+<blockquote>
+<p>对于 PB/EB 级别的系统，故障应该被认为是常态而不是意外。</p>
+</blockquote>
+<p>Replication 的粒度是 PG。</p>
+<p>写入流程：</p>
+<ul>
+<li>Client 会将写入发送个第一个没有 fail 的 OSD 中。</li>
+<li>这个 OSD 会负责生成一个新版本，并进行复制。</li>
+<li>Primary 会确保所有的 replica 都被写完之后，再写入自己本地，然后回复 client。</li>
+</ul>
+<p>读流程：</p>
+<ul>
+<li>始终从 Primary 读。</li>
+</ul>
+<h3 id="Data-safety"><a href="#Data-safety" class="headerlink" title="Data safety"></a>Data safety</h3><p>Ceph 认为共享存储的必要性在于两个方面：</p>
+<ul>
+<li>同步，也就是让一个更新<strong>尽快</strong>对其他 client 可见<br>  <strong>尽快</strong>在这里是很重要的，因为可能有多个客户端并发写，或者有并发读和并发写的存在，导致需要系统的写入比较快。</li>
+<li>可靠性，也就是持久化。</li>
+</ul>
+<p>在 ack update 的时候，Ceph 的 RADOS 解耦了 sync 和 safety。同时保证了快速的写入，以及持久性。</p>
+<p>如下所示，和客户端的交互主要分为两个消息：</p>
+<ul>
+<li>ack 消息，表示 Primary 已经将 update 复制到了所有的 OSD 的 in-memory buffer cache 中</li>
+<li>commit 消息，表示所有 OSD 已经落完盘了<br>  这个 commit 消息，可能需要等待几秒钟了。</li>
+</ul>
+<p><img src="/img/dbpaper/ceph/4.png"></p>
+<p>于此同时，在 commit 之前，client 本身也要 buffer 对应的 update，以避免所有的 OSD 都挂掉。When recovering in such cases, RADOS allows the replay of previously acknowledged (and thus ordered) updates for a fixed interval before new updates are accepted.</p>
+<p>【Q】我觉得这种全部写入的方案，实际上简化了“选举”，因为如果关于一个 update 节点之间没有达成一致是不可能 ack 或者 commit 的。但是，如果一个 OSD 挂掉，那么可能导致写入无法被 commit，从而产生较大的内存开销。</p>
+<h3 id="故障检测"><a href="#故障检测" class="headerlink" title="故障检测"></a>故障检测</h3><p>大部分情况下，replication 扮演了一个被动的 liveness 确认机制。当一个 OSD 无法收到最近 peer 的消息时，会发送一个专门的 ping。</p>
+<p>RADOS 将 OSD liveness 分为两个维度：</p>
+<ul>
+<li>OSD 是否 reachable<br>  对应了后面的 up/down</li>
+<li>OSD 是否被 CRUSH assigned 了 data<br>  对应了后面的 in/out</li>
+</ul>
+<p>然后分为两个阶段：</p>
+<ul>
+<li>短暂无响应的 OSD 会被标记为 down，此时会移交 primary 工作，比如 update serialization, replication 给这个 PG 对应的下一个 OSD。</li>
+<li>长期无响应的 OSD 会被标记为 out，会派其他的 OSD 来接管。这个新的 OSD 会重新复制。</li>
+</ul>
+<p>如下所示，Ceph 还是引入了一个 Monitor 集群来提供强一致的 OSD cluster map 的视图。</p>
+<blockquote>
+<p>Because a wide variety of network anomalies may cause intermittent lapses in OSD connectivity, a small<br>cluster of monitors collects failure reports and filters out transient or systemic problems (like a network partition) centrally.<br>Monitors (which are only partially implemented) use elections, active peer monitoring, short-term leases, and two-phase commits to collectively provide consistent and available access to the cluster map.</p>
+</blockquote>
+<p>这里作者又再一次说，OSD cluster map 的变化是在 OSD 之间传播的。</p>
+<blockquote>
+<p>When the map is updated to reflect any failures or recoveries, affected OSDs are provided incremental map updates, which then spread throughout the cluster by piggybacking on existing inter-OSD communication. </p>
+</blockquote>
+<p>下面的意思是，Monitor 更多的是作为一个仲裁的角色来解决不一致的问题。</p>
+<blockquote>
+<p>Distributed detection allows fast detection without unduly burdening monitors, while resolving the occurrence of inconsistency with centralized arbitration.</p>
+</blockquote>
+<p>这一章以下面这句话作为收尾。我理解就是 up/down 和 in/out 是两个维度的概念。一个节点挂掉了，或者被分区了，那么它就是 down 的节点。但是 down 掉的节点不一定就不可以恢复。如果我们发现节点 down 掉了，就立刻扩容，就会造成很多额外的 replication。</p>
+<blockquote>
+<p>Most importantly, RADOS avoids initiating widespread data re-replication due to systemic problems by marking OSDs down but not out (e. g., after a power loss to half of all OSDs).</p>
+</blockquote>
+<h3 id="Recovery-and-Cluster-Updates"><a href="#Recovery-and-Cluster-Updates" class="headerlink" title="Recovery and Cluster Updates"></a>Recovery and Cluster Updates</h3><p>为使恢复更快，OSD 为：</p>
+<ul>
+<li>每个 Object 维护了版本号，这里叫 version</li>
+<li>每个 PG 维护最近改动的 Object 的日志<br>  类似于 Harp 的 replication logs</li>
+</ul>
+<p>【Q】区别，epoch 用来标记 OSD cluster map 的版本，而 version 用来标记 PG 和 Object 的版本。</p>
+<p>当一个 active OSD 收到一个更新过的 cluster map，它会遍历本地所有的 PG，计算 CRUSH mapping，确定每个 OSD 是该作为 primary OSD 还是 replica OSD。</p>
+<p>如果一个 PG 的 OSD 成员列表变了，或者如果一个 OSD 刚启动，那这个 OSD 必须和 PG 的其他 OSD （也称为 peer）进行同步：</p>
+<ul>
+<li>对于 replicated PG，它需要向 primary OSD 提供它自己当前的 PG 版本号</li>
+<li>如果一个 OSD 是 PG 的 primary OSD，it collects current (and former) replicas’ PG versions. </li>
+</ul>
+<p>下面这里说的是，如果一个 Primary 没有最近 PG 的状态，它就需要从之前的 OSD 中获取 PG change log，然后恢复。</p>
+<blockquote>
+<p>If the primary lacks the most recent PG state, it retrieves the log of recent PG changes (or a complete<br>content summary, if needed) from current or prior OSDs in the PG in order to determine the correct (most recent)<br>PG contents. </p>
+</blockquote>
+<p>然后，Primary 会视情况给所有的 replica 发送一个增量或者全量的更新。这个更新会覆盖。</p>
+<blockquote>
+<p>The primary then sends each replica an incremental log update (or complete content summary, if<br>needed), such that all parties know what the PG contents should be, even if their locally stored object set may not<br>match. </p>
+</blockquote>
+<p>只有当上面这个过程同步，才能恢复对这个 PG 中 object 的 IO。</p>
+<blockquote>
+<p>Only after the primary determines the correct PG state and shares it with any replicas is I/O to objects in the PG permitted.</p>
+</blockquote>
+<p>OSDs are then independently responsible for retrieving missing or outdated objects from their peers. If an OSD receives a request for a stale or missing object, it delays processing and moves that object to the front of the recovery queue.</p>
+<p>下面是个例子。从这个例子可以更加发现 down 的节点在恢复后，是可以继续 Primary 的职责的：</p>
+<ul>
+<li>假如 osd1 crash 了，然后被标记为了 down。osd2 会代替它成为 pgA 的 Primary。</li>
+<li>如果 ods1 后面恢复了，它会在启动时请求最新的 map。然后 Monitor 会将它标记为 up。</li>
+<li>当 osd2 收到了这个更新后，它会发现 <strong>osd2</strong> 不再是 Primary 了。他就会将 pgA 的 version number 发送给 osd1。</li>
+<li>osd1 会从 osd2 收到最近的 pgA 的日志，然后告诉 osd2 自己的内容是最新的了，and then begin processing requests while any updated objects are recovered in the background.</li>
+</ul>
+<h3 id="Object-Storage-with-EBOFS"><a href="#Object-Storage-with-EBOFS" class="headerlink" title="Object Storage with EBOFS"></a>Object Storage with EBOFS</h3>
       
     </div>
 
@@ -763,7 +919,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">243</span>
+                <span class="site-state-item-count">246</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -869,7 +1025,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#CStore"><span class="nav-number">1.</span> <span class="nav-text">CStore</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Kudu"><span class="nav-number">2.</span> <span class="nav-text">Kudu</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#综述"><span class="nav-number">2.1.</span> <span class="nav-text">综述</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Write"><span class="nav-number">2.1.1.</span> <span class="nav-text">Write</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Read"><span class="nav-number">2.1.2.</span> <span class="nav-text">Read</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Consistency-Model"><span class="nav-number">2.1.3.</span> <span class="nav-text">Consistency Model</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Timestamp"><span class="nav-number">2.1.4.</span> <span class="nav-text">Timestamp</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Partitioning"><span class="nav-number">2.2.</span> <span class="nav-text">Partitioning</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Replication"><span class="nav-number">2.3.</span> <span class="nav-text">Replication</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Master"><span class="nav-number">2.4.</span> <span class="nav-text">Master</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#catalog-manager"><span class="nav-number">2.4.1.</span> <span class="nav-text">catalog manager</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#cluster-coordinator"><span class="nav-number">2.4.2.</span> <span class="nav-text">cluster coordinator</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#tablet-directory"><span class="nav-number">2.4.3.</span> <span class="nav-text">tablet directory</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Tablet-storage"><span class="nav-number">2.5.</span> <span class="nav-text">Tablet storage</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#RowSets"><span class="nav-number">2.5.1.</span> <span class="nav-text">RowSets</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#MemRowSets"><span class="nav-number">2.5.1.1.</span> <span class="nav-text">MemRowSets</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#DiskRowSet"><span class="nav-number">2.5.1.2.</span> <span class="nav-text">DiskRowSet</span></a><ol class="nav-child"><li class="nav-item nav-level-5"><a class="nav-link" href="#base-data"><span class="nav-number">2.5.1.2.1.</span> <span class="nav-text">base data</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#delta-store"><span class="nav-number">2.5.1.2.2.</span> <span class="nav-text">delta store</span></a></li></ol></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Compaction"><span class="nav-number">2.6.</span> <span class="nav-text">Compaction</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Delta-Compaction"><span class="nav-number">2.6.1.</span> <span class="nav-text">Delta Compaction</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#RowSet-Compaction"><span class="nav-number">2.6.2.</span> <span class="nav-text">RowSet Compaction</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Scheduling-maintainance"><span class="nav-number">2.6.3.</span> <span class="nav-text">Scheduling maintainance</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Reference"><span class="nav-number">2.7.</span> <span class="nav-text">Reference</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Masstree"><span class="nav-number">3.</span> <span class="nav-text">Masstree</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Intros"><span class="nav-number">3.1.</span> <span class="nav-text">Intros</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#结构"><span class="nav-number">3.2.</span> <span class="nav-text">结构</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Layout"><span class="nav-number">3.3.</span> <span class="nav-text">Layout</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Nonconcurrent-modification"><span class="nav-number">3.3.1.</span> <span class="nav-text">Nonconcurrent modification</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Concurrency-overview"><span class="nav-number">3.3.2.</span> <span class="nav-text">Concurrency overview</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Writer–writer-coordination"><span class="nav-number">3.4.</span> <span class="nav-text">Writer–writer coordination</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Writer–reader-coordination"><span class="nav-number">3.4.1.</span> <span class="nav-text">Writer–reader coordination</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#Update"><span class="nav-number">3.4.1.1.</span> <span class="nav-text">Update</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Border-inserts"><span class="nav-number">3.4.1.2.</span> <span class="nav-text">Border inserts</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#New-layers"><span class="nav-number">3.4.1.3.</span> <span class="nav-text">New layers</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Splits"><span class="nav-number">3.4.1.4.</span> <span class="nav-text">Splits</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#get"><span class="nav-number">3.4.1.5.</span> <span class="nav-text">get</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Remove"><span class="nav-number">3.4.1.6.</span> <span class="nav-text">Remove</span></a></li></ol></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Ceph"><span class="nav-number">4.</span> <span class="nav-text">Ceph</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#对-Ceph-的简单介绍"><span class="nav-number">4.1.</span> <span class="nav-text">对 Ceph 的简单介绍</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Introduction"><span class="nav-number">4.2.</span> <span class="nav-text">Introduction</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Overview"><span class="nav-number">4.3.</span> <span class="nav-text">Overview</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Decoupled-Data-and-Metadata"><span class="nav-number">4.3.1.</span> <span class="nav-text">Decoupled Data and Metadata</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Dynamic-Distributed-Metadata-Management"><span class="nav-number">4.3.2.</span> <span class="nav-text">Dynamic Distributed Metadata Management</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Reliable-Autonomic-Distributed-Object-Storage"><span class="nav-number">4.3.3.</span> <span class="nav-text">Reliable Autonomic Distributed Object Storage</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Client-Operation"><span class="nav-number">4.4.</span> <span class="nav-text">Client Operation</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#File-IO-and-capabilities"><span class="nav-number">4.4.1.</span> <span class="nav-text">File IO and capabilities</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Client-Synchronization"><span class="nav-number">4.4.2.</span> <span class="nav-text">Client Synchronization</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Namespace-Operations"><span class="nav-number">4.4.3.</span> <span class="nav-text">Namespace Operations</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Dynamically-Distributed-Metadata"><span class="nav-number">4.5.</span> <span class="nav-text">Dynamically Distributed Metadata</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Metatada-storage"><span class="nav-number">4.5.1.</span> <span class="nav-text">Metatada storage</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Dynamic-Subtree-Partitioning"><span class="nav-number">4.5.2.</span> <span class="nav-text">Dynamic Subtree Partitioning</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Traffic-control"><span class="nav-number">4.5.3.</span> <span class="nav-text">Traffic control</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Distributed-Object-Storage"><span class="nav-number">4.6.</span> <span class="nav-text">Distributed Object Storage</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#CRUSH"><span class="nav-number">4.6.1.</span> <span class="nav-text">CRUSH</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Replication-1"><span class="nav-number">4.6.2.</span> <span class="nav-text">Replication</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Data-safety"><span class="nav-number">4.6.3.</span> <span class="nav-text">Data safety</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#故障检测"><span class="nav-number">4.6.4.</span> <span class="nav-text">故障检测</span></a></li></ol></li></ol></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#CStore"><span class="nav-number">1.</span> <span class="nav-text">CStore</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Kudu"><span class="nav-number">2.</span> <span class="nav-text">Kudu</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#综述"><span class="nav-number">2.1.</span> <span class="nav-text">综述</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Write"><span class="nav-number">2.1.1.</span> <span class="nav-text">Write</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Read"><span class="nav-number">2.1.2.</span> <span class="nav-text">Read</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Consistency-Model"><span class="nav-number">2.1.3.</span> <span class="nav-text">Consistency Model</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Timestamp"><span class="nav-number">2.1.4.</span> <span class="nav-text">Timestamp</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Partitioning"><span class="nav-number">2.2.</span> <span class="nav-text">Partitioning</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Replication"><span class="nav-number">2.3.</span> <span class="nav-text">Replication</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Master"><span class="nav-number">2.4.</span> <span class="nav-text">Master</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#catalog-manager"><span class="nav-number">2.4.1.</span> <span class="nav-text">catalog manager</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#cluster-coordinator"><span class="nav-number">2.4.2.</span> <span class="nav-text">cluster coordinator</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#tablet-directory"><span class="nav-number">2.4.3.</span> <span class="nav-text">tablet directory</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Tablet-storage"><span class="nav-number">2.5.</span> <span class="nav-text">Tablet storage</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#RowSets"><span class="nav-number">2.5.1.</span> <span class="nav-text">RowSets</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#MemRowSets"><span class="nav-number">2.5.1.1.</span> <span class="nav-text">MemRowSets</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#DiskRowSet"><span class="nav-number">2.5.1.2.</span> <span class="nav-text">DiskRowSet</span></a><ol class="nav-child"><li class="nav-item nav-level-5"><a class="nav-link" href="#base-data"><span class="nav-number">2.5.1.2.1.</span> <span class="nav-text">base data</span></a></li><li class="nav-item nav-level-5"><a class="nav-link" href="#delta-store"><span class="nav-number">2.5.1.2.2.</span> <span class="nav-text">delta store</span></a></li></ol></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Compaction"><span class="nav-number">2.6.</span> <span class="nav-text">Compaction</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Delta-Compaction"><span class="nav-number">2.6.1.</span> <span class="nav-text">Delta Compaction</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#RowSet-Compaction"><span class="nav-number">2.6.2.</span> <span class="nav-text">RowSet Compaction</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Scheduling-maintainance"><span class="nav-number">2.6.3.</span> <span class="nav-text">Scheduling maintainance</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Reference"><span class="nav-number">2.7.</span> <span class="nav-text">Reference</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Masstree"><span class="nav-number">3.</span> <span class="nav-text">Masstree</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Intros"><span class="nav-number">3.1.</span> <span class="nav-text">Intros</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#结构"><span class="nav-number">3.2.</span> <span class="nav-text">结构</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Layout"><span class="nav-number">3.3.</span> <span class="nav-text">Layout</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Nonconcurrent-modification"><span class="nav-number">3.3.1.</span> <span class="nav-text">Nonconcurrent modification</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Concurrency-overview"><span class="nav-number">3.3.2.</span> <span class="nav-text">Concurrency overview</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Writer–writer-coordination"><span class="nav-number">3.4.</span> <span class="nav-text">Writer–writer coordination</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Writer–reader-coordination"><span class="nav-number">3.4.1.</span> <span class="nav-text">Writer–reader coordination</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#Update"><span class="nav-number">3.4.1.1.</span> <span class="nav-text">Update</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Border-inserts"><span class="nav-number">3.4.1.2.</span> <span class="nav-text">Border inserts</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#New-layers"><span class="nav-number">3.4.1.3.</span> <span class="nav-text">New layers</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Splits"><span class="nav-number">3.4.1.4.</span> <span class="nav-text">Splits</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#get"><span class="nav-number">3.4.1.5.</span> <span class="nav-text">get</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Remove"><span class="nav-number">3.4.1.6.</span> <span class="nav-text">Remove</span></a></li></ol></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Ceph"><span class="nav-number">4.</span> <span class="nav-text">Ceph</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#对-Ceph-的简单介绍"><span class="nav-number">4.1.</span> <span class="nav-text">对 Ceph 的简单介绍</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Ceph-CephFS"><span class="nav-number">5.</span> <span class="nav-text">Ceph(CephFS)</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Introduction"><span class="nav-number">5.1.</span> <span class="nav-text">Introduction</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Overview"><span class="nav-number">5.2.</span> <span class="nav-text">Overview</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Decoupled-Data-and-Metadata"><span class="nav-number">5.2.1.</span> <span class="nav-text">Decoupled Data and Metadata</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Dynamic-Distributed-Metadata-Management"><span class="nav-number">5.2.2.</span> <span class="nav-text">Dynamic Distributed Metadata Management</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Reliable-Autonomic-Distributed-Object-Storage"><span class="nav-number">5.2.3.</span> <span class="nav-text">Reliable Autonomic Distributed Object Storage</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Client-Operation"><span class="nav-number">5.3.</span> <span class="nav-text">Client Operation</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#File-IO-and-capabilities"><span class="nav-number">5.3.1.</span> <span class="nav-text">File IO and capabilities</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Client-Synchronization"><span class="nav-number">5.3.2.</span> <span class="nav-text">Client Synchronization</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Namespace-Operations"><span class="nav-number">5.3.3.</span> <span class="nav-text">Namespace Operations</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Dynamically-Distributed-Metadata"><span class="nav-number">5.4.</span> <span class="nav-text">Dynamically Distributed Metadata</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Metatada-storage"><span class="nav-number">5.4.1.</span> <span class="nav-text">Metatada storage</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Dynamic-Subtree-Partitioning"><span class="nav-number">5.4.2.</span> <span class="nav-text">Dynamic Subtree Partitioning</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Traffic-control"><span class="nav-number">5.4.3.</span> <span class="nav-text">Traffic control</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Distributed-Object-Storage"><span class="nav-number">5.5.</span> <span class="nav-text">Distributed Object Storage</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#CRUSH-Controlled-Replication-Under-Scalable-Hashing"><span class="nav-number">5.5.1.</span> <span class="nav-text">CRUSH(Controlled Replication Under Scalable Hashing)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Replication-1"><span class="nav-number">5.5.2.</span> <span class="nav-text">Replication</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Data-safety"><span class="nav-number">5.5.3.</span> <span class="nav-text">Data safety</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#故障检测"><span class="nav-number">5.5.4.</span> <span class="nav-text">故障检测</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Recovery-and-Cluster-Updates"><span class="nav-number">5.5.5.</span> <span class="nav-text">Recovery and Cluster Updates</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Object-Storage-with-EBOFS"><span class="nav-number">5.5.6.</span> <span class="nav-text">Object Storage with EBOFS</span></a></li></ol></li></ol></li></ol></div>
             
 
           </div>

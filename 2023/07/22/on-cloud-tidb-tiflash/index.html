@@ -99,7 +99,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="介绍一下 TiFlash 和 TiDB 云服务相关的一些设计思考。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2025-03-15T13:40:06.134Z">
+<meta property="og:updated_time" content="2025-04-11T09:58:27.589Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="云上的 TiDB 和 TiFlash">
 <meta name="twitter:description" content="介绍一下 TiFlash 和 TiDB 云服务相关的一些设计思考。">
@@ -427,6 +427,7 @@
 <li>Region<br>  因为 shared nothing 版本的 TiKV 的 Snapshot 传输代价大，所以限制了 region 大小为 96MB，目前已经调整了默认值为 256MB。<br>  但是在云上架构中，新增副本可以通过引用 S3 上的文件来实现，成本接近于 0，所以 Snapshot 的负担就会变小。<br>  调大 Region Size 减少 Region 数量的优势，在 <a href="/2023/07/23/on-partition-raft-kv/">TiKV 的 partitioned raft kv 特性</a> 中也有提及，这里就省略了。</li>
 </ul>
 <h2 id="设计细节"><a href="#设计细节" class="headerlink" title="设计细节"></a>设计细节</h2><h3 id="raft-log"><a href="#raft-log" class="headerlink" title="raft log"></a>raft log</h3><p>Raft log 需要存在 EBS 而不是 Local Disk 上，从而保证持久化。</p>
+<p>相比于 OP 使用的 raft-engine，云上架构中，因为 memtable 中的数据需要从 raft log 恢复，因此需要保留更多的 raft log。如果继续使用 RaftEngine，则对内存的要求会非常高。</p>
 <h3 id="Flush"><a href="#Flush" class="headerlink" title="Flush"></a>Flush</h3><p>为了 S3 上只存一个副本，所以 flush 的方案不太一样：</p>
 <ul>
 <li>Leader flush 得到 L0,</li>
@@ -434,7 +435,19 @@
 <li>Raft 将这次 flush 复制给其他 follower<br>  如果这个过程失败了，说明中间 Leader 切换，直接 abort 即可</li>
 <li>等该 flush 被 apply 后，才会将 L0 写入到存储里面</li>
 </ul>
-<h3 id="Split"><a href="#Split" class="headerlink" title="Split"></a>Split</h3><h3 id="Merge"><a href="#Merge" class="headerlink" title="Merge"></a>Merge</h3>
+<h3 id="Split"><a href="#Split" class="headerlink" title="Split"></a>Split</h3><p>Split 的复杂点主要在：</p>
+<ul>
+<li>Cloud 的架构中的 Split 是物理 Split，不像 OP 一样只需要修改元数据就行了<ul>
+<li>物理 Split 的过程中，Memtable 的 flush 以及 Compaction 是停止的</li>
+</ul>
+</li>
+<li>Split 过程中可能出现 Leader 切换</li>
+<li>分布式场景中，Leader 要得知所有 Follower 上的 Split 状态是困难的<ul>
+<li>因为分布式系统的不可靠性，只要有大多数节点完成了物理 Split SST 文件的操作，就应该运行执行 FinishSplit 了。对于那些落后的节点，就需要特殊处理。</li>
+</ul>
+</li>
+</ul>
+<h3 id="Merge"><a href="#Merge" class="headerlink" title="Merge"></a>Merge</h3>
       
     </div>
 
@@ -590,7 +603,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">243</span>
+                <span class="site-state-item-count">246</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
