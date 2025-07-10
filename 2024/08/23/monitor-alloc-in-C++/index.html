@@ -101,7 +101,7 @@
 <meta property="og:locale" content="zh-Hans">
 <meta property="og:image" content="http://www.calvinneo.com/img/monitor-memory/11.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/monitor-memory/heap-hire.png">
-<meta property="og:updated_time" content="2024-12-19T16:32:23.312Z">
+<meta property="og:updated_time" content="2025-06-29T16:24:11.156Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="C++ 内存监控方案">
 <meta name="twitter:description" content="介绍 C++ 上的内存监控方案。 默认使用 jemalloc。">
@@ -460,9 +460,33 @@
 <li><p>heap、symbol<br> 这个接口最为灵活，因为它支持 jeprof 从外部环境访问这个接口，从而避免访问用户的机器，或者 binary。</p>
  <figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//go:embed jeprof.in</span></span><br><span class="line"><span class="keyword">var</span> jeprof <span class="keyword">string</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">fetch</span><span class="params">()</span></span> &#123;</span><br><span class="line">    cmd := exec.Command(<span class="string">"perl"</span>, <span class="string">"/dev/stdin"</span>, <span class="string">"--raw"</span>, scheme+<span class="string">"://"</span>+op.ip+<span class="string">":"</span>+strconv.Itoa(op.port)+op.path) </span><br><span class="line">    cmd.Stdin = strings.NewReader(jeprof)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
-<p> 注意，这种方式一般要持续开启 <code>prof.activate</code>。因为临时开启，则收集的时间过于短暂，可能无法生成有信息的报告。</p>
+<p> 注意，这种方式一般要持续开启 <code>prof.activate</code>。因为<a href="https://github.com/pingcap/tidb-engine-ext/pull/403/files" target="_blank" rel="noopener">临时开启</a>，则收集的时间过于短暂，可能无法生成有信息的报告。<br> 这种⽅式其实上是 jeprof 调⽤ <code>/debug/pprof/heap?jeprof=false</code> ，把 heap 下载到本地来处理的。也可以⼿动 curl 这个下载下来，⽤ jeprof 处理。注意，这个时候需要⼿动指定 TiFlash 的 binary，如果没有指定，或者⼿动指定出错，则会报错 The first profile should be a remote form to use /pprof/symbol。</p>
 </li>
 </ol>
+<h2 id="遇到的一些问题"><a href="#遇到的一些问题" class="headerlink" title="遇到的一些问题"></a>遇到的一些问题</h2><p>Arm 架构下，一些功能无法执行：</p>
+<ul>
+<li>在 AWS 的 arm + Rocky9 Linux 下，/heap 和 /heap_activate 不会显示 C++ 部分的栈，需要开启 <code>lg_prof_interval</code> 才行<ul>
+<li>开启 <code>lg_prof_interval</code> 后，即使关闭 prof.active，仍然可能会有 dump 产生</li>
+</ul>
+</li>
+<li>在 AWS 的 arm + ubuntu 下，profiling 正常</li>
+<li>在 Kunpeng + Rocky9 Linux 下，会在 libunwind 中报错 panic</li>
+</ul>
+<p>上⾯提到过有的时候⽣成的不详细，如下所⽰。这是因为 addr2line 版本的问题，有条件的可以通过传参的⽅式把 jeprof.in 使⽤的 addr2line ⾃⾏魔改为 llvm-addr2line。注意，llvm-addr2line 的版本，也需要和 tiflash ⼀样，不然</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">addr2line: DWARF error: could not find variable specification at offset</span><br></pre></td></tr></table></figure>
+
+<p>报错 DWARF error:section.debug_info is larger than its file size. 这个问题需要连同 nm、objdump 等全部换成 llvm 的版本。</p>
+<h2 id="需要的工具"><a href="#需要的工具" class="headerlink" title="需要的工具"></a>需要的工具</h2><p>如果使⽤宿主机 tiflash 上的 jeprof.in，则必须宿主机上有下列⼯具：</p>
+<ul>
+<li>perl<br>  缺少 perl 可能会有报错3329，或者Nosuchfileordirectory</li>
+<li>objdump</li>
+</ul>
+<p>但此时 raw 会报错“jeprof can only dump remote profiles for –raw”，⽽ text 只有简略信息，并且不能反应出 addr2line 之后的结果。还需要⾄少如下⼯具，才能返回正常</p>
+<ul>
+<li>addr2line</li>
+<li>nm</li>
+<li>c++filt</li>
+</ul>
 <p>另外，注意在 jeprof.in 中使用 llvm-addrline，不然可能会出现 0x25 的报错，并且生成的 svg 图有缺失。</p>
 <h2 id="TiFlash-的-continuous-profiling"><a href="#TiFlash-的-continuous-profiling" class="headerlink" title="TiFlash 的 continuous profiling"></a>TiFlash 的 continuous profiling</h2>
       
@@ -728,7 +752,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#MemoryTracker"><span class="nav-number">1.</span> <span class="nav-text">MemoryTracker</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#prof-dump"><span class="nav-number">2.</span> <span class="nav-text">prof.dump</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#有关-dl-iterate-phdr-的死锁"><span class="nav-number">2.1.</span> <span class="nav-text">有关 dl_iterate_phdr 的死锁</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#有关-dwarf-下-prof-变慢"><span class="nav-number">2.2.</span> <span class="nav-text">有关 dwarf 下 prof 变慢</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Jemalloc-allocatedptr"><span class="nav-number">3.</span> <span class="nav-text">Jemalloc allocatedptr</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Jemalloc-Arena"><span class="nav-number">4.</span> <span class="nav-text">Jemalloc Arena</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#thread-local-memory-tracker"><span class="nav-number">5.</span> <span class="nav-text">thread_local memory tracker</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Jemalloc-mallocx"><span class="nav-number">6.</span> <span class="nav-text">Jemalloc mallocx</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-的堆内存管理层级"><span class="nav-number">7.</span> <span class="nav-text">C++ 的堆内存管理层级</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-Custom-Allocator"><span class="nav-number">8.</span> <span class="nav-text">C++ Custom Allocator</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#pmr"><span class="nav-number">8.1.</span> <span class="nav-text">pmr</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-Custom-global-operator-new"><span class="nav-number">9.</span> <span class="nav-text">C++ Custom global operator new</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-Custom-class-operator-new"><span class="nav-number">10.</span> <span class="nav-text">C++ Custom class operator new</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#我的一些实践"><span class="nav-number">11.</span> <span class="nav-text">我的一些实践</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#TiFlash-的-heap-profiling"><span class="nav-number">11.1.</span> <span class="nav-text">TiFlash 的 heap profiling</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#TiFlash-的-continuous-profiling"><span class="nav-number">11.2.</span> <span class="nav-text">TiFlash 的 continuous profiling</span></a></li></ol></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#MemoryTracker"><span class="nav-number">1.</span> <span class="nav-text">MemoryTracker</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#prof-dump"><span class="nav-number">2.</span> <span class="nav-text">prof.dump</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#有关-dl-iterate-phdr-的死锁"><span class="nav-number">2.1.</span> <span class="nav-text">有关 dl_iterate_phdr 的死锁</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#有关-dwarf-下-prof-变慢"><span class="nav-number">2.2.</span> <span class="nav-text">有关 dwarf 下 prof 变慢</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Jemalloc-allocatedptr"><span class="nav-number">3.</span> <span class="nav-text">Jemalloc allocatedptr</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Jemalloc-Arena"><span class="nav-number">4.</span> <span class="nav-text">Jemalloc Arena</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#thread-local-memory-tracker"><span class="nav-number">5.</span> <span class="nav-text">thread_local memory tracker</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Jemalloc-mallocx"><span class="nav-number">6.</span> <span class="nav-text">Jemalloc mallocx</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-的堆内存管理层级"><span class="nav-number">7.</span> <span class="nav-text">C++ 的堆内存管理层级</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-Custom-Allocator"><span class="nav-number">8.</span> <span class="nav-text">C++ Custom Allocator</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#pmr"><span class="nav-number">8.1.</span> <span class="nav-text">pmr</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-Custom-global-operator-new"><span class="nav-number">9.</span> <span class="nav-text">C++ Custom global operator new</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-Custom-class-operator-new"><span class="nav-number">10.</span> <span class="nav-text">C++ Custom class operator new</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#我的一些实践"><span class="nav-number">11.</span> <span class="nav-text">我的一些实践</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#TiFlash-的-heap-profiling"><span class="nav-number">11.1.</span> <span class="nav-text">TiFlash 的 heap profiling</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#遇到的一些问题"><span class="nav-number">11.2.</span> <span class="nav-text">遇到的一些问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#需要的工具"><span class="nav-number">11.3.</span> <span class="nav-text">需要的工具</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#TiFlash-的-continuous-profiling"><span class="nav-number">11.4.</span> <span class="nav-text">TiFlash 的 continuous profiling</span></a></li></ol></li></ol></div>
             
 
           </div>
