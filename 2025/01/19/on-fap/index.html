@@ -99,7 +99,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="目前 FAP 特性在 TiDB Serverless 上已经发布，减少了新建副本的 CPU 和内存开销，提高了吞吐量。在大部分情况下，还能">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2025-03-09T07:50:45.335Z">
+<meta property="og:updated_time" content="2025-08-19T11:57:52.497Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="TiFlash 的快速新建副本(FAP)特性">
 <meta name="twitter:description" content="目前 FAP 特性在 TiDB Serverless 上已经发布，减少了新建副本的 CPU 和内存开销，提高了吞吐量。在大部分情况下，还能">
@@ -413,9 +413,14 @@
 <li>S3 的访问延迟还是比较大的。看 P99，线上最高的 PutObject 在 1.5s，GetObject 在 500ms。</li>
 <li>并发较高的时候，对 CPU 的开销较大，同时可能触发 S3 的限流。<br>  解决方案主要是：<ul>
 <li>利用 PageStorage 的 data locality。</li>
-<li>缓存。先前我们缓存的 segment meta 信息，但并不是很顺手。后面我们是通过缓存的 <code>(file_name, offset) -&gt; data</code> 来处理的。</li>
+<li>缓存<ul>
+<li>先前我们 cache 的 segment meta 信息，但并不是很顺手。因为 segment 很多的时候，总是需要遍历完所有的 segment 才能够返回结果。如果构建 cache 对应的线程要找的 segment 在很后面，构建 cache 就会很慢，从而会造成之前阻塞的情况。</li>
+<li>后面我们是通过缓存的 <code>(file_name, offset) -&gt; data</code> 来处理的。这里同样是利用了局部性，但是因为 cache 的粒度变小了，对应的 block 现象也会变小。</li>
 </ul>
 </li>
+</ul>
+</li>
+<li>TiFlash 大量使用 LIST 去轮询 S3 上的状态。一般来说，LIST 的 qps 要低于 1000，否则会造成比较严重的读放大。FAP 中主要使用 LIST 来追踪某个 Region 对应的 Checkpoint 的上传状态，所以 LIST 的并发是和 FAP 的并发相关的。</li>
 </ul>
 <h2 id="FAP-对-UniPS-的改造"><a href="#FAP-对-UniPS-的改造" class="headerlink" title="FAP 对 UniPS 的改造"></a>FAP 对 UniPS 的改造</h2><ol>
 <li>Checkpoint 中不仅需要上传 Stable 数据，也要上传 Delta 和 Raft Log 数据<br> 原因是必须要上传对应的 Raft Meta 数据才能构建出副本。由此，必须要上传 KVStore 和 Delta 层。此时唯一的可选项就是 applied_index 之后的没有被 apply 的日志了。目前是同样选择上传的，原因是代价可控。并且上传了 Raft Log 后，能够避免新建立的副本从 TiKV Leader 处继续下载这些 Log，从而造成新一轮的落后。<br> 理论上，上传 Delta 数据后，CN 可以从 S3 去读取这些 Delta 数据，从而避免重复请求 WN。我们现在没有做主要是发现 Delta 层的数据流处理没有给 TiFlash 产生太大的性能开销。<br> 在上传 Raft Log 和 Meta 数据后，甚至可以在 CN 上处理 Learner Read 强一致读。但这可能得不偿失，因为读 S3 的开销可能更大。并且我们还是要在 CN 上实现一套 Read Index 的。<br> 相比之下 Snowflake 将事务层移动到 Cloud Service 层上，从而使得可以直接从 S3 读存储层。但可能它们的写入场景应该没有 TiFlash 频繁。</li>
@@ -594,7 +599,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">247</span>
+                <span class="site-state-item-count">250</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
