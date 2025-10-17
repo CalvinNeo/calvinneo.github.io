@@ -73,7 +73,7 @@
 <link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="C++,Linux,网络,并行计算,多线程,atomic,CPU,多进程," />
+  <meta name="keywords" content="C++,并行计算,多线程,Linux,atomic,网络,CPU,多进程," />
 
 
 
@@ -92,7 +92,7 @@
 
 
 <meta name="description" content="在本篇中比较了各种并发、并行技术。并发(concurrency) 强调的是逻辑上的同时发生，是语义上的模型(semantic model)，在实际上并发程序可能是由一个处理器同时(simultaneously)处理多个任务，因此并发过程中常出现一个线程等待其他资源的情况。此时常伴随着线程的阻塞和调度。并发过程通常可划分为多个级别：Blocking、Obstruction-Free、Lock-Fre">
-<meta name="keywords" content="C++,Linux,网络,并行计算,多线程,atomic,CPU,多进程">
+<meta name="keywords" content="C++,并行计算,多线程,Linux,atomic,网络,CPU,多进程">
 <meta property="og:type" content="article">
 <meta property="og:title" content="并发编程重要概念及比较">
 <meta property="og:url" content="http://www.calvinneo.com/2017/12/28/Concurrency-Programming-Compare/index.html">
@@ -125,7 +125,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/concur/acquire_fence.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/concur/dclpjj.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/concur/chenshuo2.png">
-<meta property="og:updated_time" content="2024-03-08T15:15:48.141Z">
+<meta property="og:updated_time" content="2025-10-17T13:40:04.942Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="并发编程重要概念及比较">
 <meta name="twitter:description" content="在本篇中比较了各种并发、并行技术。并发(concurrency) 强调的是逻辑上的同时发生，是语义上的模型(semantic model)，在实际上并发程序可能是由一个处理器同时(simultaneously)处理多个任务，因此并发过程中常出现一个线程等待其他资源的情况。此时常伴随着线程的阻塞和调度。并发过程通常可划分为多个级别：Blocking、Obstruction-Free、Lock-Fre">
@@ -1251,7 +1251,7 @@
 <li>所以理论上，<code>C -&gt; D</code> 和 <code>A -&gt; B</code> 并不具备“传递性”。</li>
 </ol>
 <p>另一个<a href="https://stackoverflow.com/questions/25287484/does-sequenced-before-relation-in-c11-prevent-compiler-cpu-reordering" target="_blank" rel="noopener">问题</a>进一步做了阐释。</p>
-<h3 id="内存模型：acquire-release-以及-release-consume"><a href="#内存模型：acquire-release-以及-release-consume" class="headerlink" title="内存模型：acquire/release 以及 release/consume"></a>内存模型：acquire/release 以及 release/consume</h3><p>acquire/release 模型相对灵活一点。<br><strong>acquire 只对应读(Load)操作使用，release 只对应写(Store)操作使用</strong>。<a href="https://stackoverflow.com/questions/20398094/atomict-load-with-stdmemory-order-release" target="_blank" rel="noopener">如果对 W 使用 acquire fence，或者对 R 使用 release fence 会怎么样呢</a>？很简单，C++中不允许：</p>
+<h3 id="内存模型：acquire-release-以及-release-consume"><a href="#内存模型：acquire-release-以及-release-consume" class="headerlink" title="内存模型：acquire/release 以及 release/consume"></a>内存模型：acquire/release 以及 release/consume</h3><p>acquire/release 模型相对灵活一点。<br><strong>acquire 只对应读(Load)操作使用，release 只对应写(Store)操作使用</strong>。<a href="https://stackoverflow.com/questions/20398094/atomict-load-with-stdmemory-order-release" target="_blank" rel="noopener">如果对 W 使用 acquire fence，或者对 R 使用 release fence 会怎么样呢</a>？很简单，C++ 中不允许：</p>
 <ol>
 <li>对读，不允许 <code>memory_order_release</code> 和 <code>memory_order_acq_rel</code>。</li>
 <li>对写，不允许 <code>memory_order_consume</code> 和 <code>memory_order_acquire</code> 和 <code>memory_order_acq_rel</code>。</li>
@@ -1260,10 +1260,18 @@
 <p>对 STORE/LOAD 操作，下面直接翻译<a href="https://en.cppreference.com/w/cpp/atomic/memory_order" target="_blank" rel="noopener">CppReference</a>，在阅读时需要注意“当前线程”和“其他线程”的区别。</p>
 <p>同时<a href="https://stackoverflow.com/questions/70846124/how-to-deduce-order-of-two-variables-store-load-with-acq-rel-order" target="_blank" rel="noopener">需要注意</a>，这里<strong>不能理解为</strong>对 atomic 变量的读会等待对 atomic 的写完成，更准确的说法是**a release store synchronizes with an acquire load that takes its value from the store.**。可以参考“Synchronizes-with”的介绍。</p>
 <h4 id="acquire-release-配对："><a href="#acquire-release-配对：" class="headerlink" title="acquire-release 配对："></a>acquire-release 配对：</h4><ol>
-<li><code>memory_order_acquire</code> 的 Load<br> 在<strong>当前线程</strong>上，任何后面的 R、W 都不能重排到自己这个 Load 之前。<strong>也就是禁止 load-store 和 load-load 重排</strong>。<br> 在其他线程中的所有 release 相同 atomic 变量的 W，都对当前线程可见。<br> 直觉上来看，acquire 是获得锁。那么不能把被锁保护的东西(读和写)提到获得锁前面。另外，必须要先释放锁再获得锁。</li>
-<li><code>memory_order_release</code> 的 Store<br> 在<strong>当前线程</strong>上，任何前面的 R、W 都不能重排到自己这个 Store 操作之后。<strong>也就是禁止 load-store 和 store-store 重排</strong>。<br> 在当前线程中的所有 W，对其他线程中所有 acquire 相同的 atomic 变量的 R，都是可见的。<br> 直觉上来看，release 是释放锁。那么不能把被锁保护的东西(读和写)放到释放锁后面。另外，必须要先释放锁再获得锁。</li>
+<li><code>memory_order_acquire</code> 的 Load(R)<br> 在<strong>当前线程</strong>上，任何后面的 R、W 都不能重排到自己这个 R 之前。<strong>也就是禁止 load-store 和 load-load 重排</strong>。<br> 在<strong>其他线程</strong>中的所有 release 相同 atomic 变量的 W，都对<strong>当前线程</strong>可见。<br> 直觉上来看，acquire 是获得锁。那么不能把被锁保护的东西(读和写)提到获得锁前面。另外，必须要先释放锁再获得锁。</li>
+<li><code>memory_order_release</code> 的 Store(W)<br> 在<strong>当前线程</strong>上，任何前面的 R、W 都不能重排到自己这个 W 操作之后。<strong>也就是禁止 load-store 和 store-store 重排</strong>。<br> 在<strong>当前线程</strong>中的所有 W，对<strong>其他线程</strong>中所有 acquire 相同的 atomic 变量的 R，都是可见的。<br> 直觉上来看，release 是释放锁。那么不能把被锁保护的东西(读和写)放到释放锁后面。另外，必须要先释放锁再获得锁。</li>
 </ol>
-<p>下面是 CppReference 上的介绍，部分我们之前已经讨论过了。<br>如果线程 A 上的 release atomic store 和线程 B 上的 acquire atomic load 读写同一个变量，并且线程 B 恰恰是读的线程 A 的写入。那么线程 A 上的 store synchronizes-with 线程 B 上的 load。</p>
+<p>看着很绕，实际记住两点就行：</p>
+<ul>
+<li>对当前线程，不能和这个 R/W 重排</li>
+<li>对当前变量，前面的 W 对后面的 R 可见</li>
+</ul>
+<p>下面，CppReference 强调了 <strong>synchronizes-with</strong> 的含义，虽然之前提到过了，但是这里再次翻译一下</p>
+<blockquote>
+<p>如果线程 A 上的 release atomic store 和线程 B 上的 acquire atomic load 读写同一个变量，并且线程 B 恰恰是读的线程 A 的写入。那么线程 A 上的 store synchronizes-with 线程 B 上的 load。</p>
+</blockquote>
 <p>从线程 A 来看，所有的 non-atomic 和 relaxed atomic 写，如果它们 happen-before release atomic store，则它们在线程 B 中有 visible side-effects。也就是说，一旦线程 B 中的 atomic load 完成了，线程 B 保证能见到线程 A 写入的任何数据。当然，这个也只在 B 真的返回了 A 存储的变量，或者返回 a value from later in the release sequence 时成立。</p>
 <p>这样的 acquire-release 同步需要这些不同的线程读写同一个变量才成立。其他的线程可能见到和这些同步线程不一样的 order。</p>
 <p>互斥锁，例如 std::mutex，或者 atomic spinlock，是 release-acquire 同步的例子。当这个锁被线程 A release，并被随后线程 B acquire，那么线程 A 的关键段(也就是 release 前)中所有发生的一切，都在线程 B acquire 之后可见。当然，线程 B 也是在执行同一个关键段。</p>
@@ -1299,23 +1307,26 @@
 <h4 id="Demo-release-consume"><a href="#Demo-release-consume" class="headerlink" title="Demo release/consume"></a>Demo release/consume</h4><p>如下所示，对a的赋值和对c的赋值涉及两个内存地址，所以a和c的赋值可能会进行乱序。</p>
 <figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">a = <span class="number">0</span>;</span><br><span class="line">c = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">thread <span class="number">1</span>:</span><br><span class="line">&#123;</span><br><span class="line">  a = <span class="number">1</span>;</span><br><span class="line">  c.store(<span class="number">3</span>, memory_order_release);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">thread <span class="number">2</span>:</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">while</span> (c.load(memory_order_consume) != <span class="number">3</span>);</span><br><span class="line">  assert(a == <span class="number">1</span>); <span class="comment">// assert 可能失败也可能不失败</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
-<h3 id="内存模型：Sequential"><a href="#内存模型：Sequential" class="headerlink" title="内存模型：Sequential"></a>内存模型：Sequential</h3><p>顺序一致性(sequential consistency, SC)要求程序中的行为从任意角度来看，序列顺序都是一致的(have single total order)。这是在说这段多线程程序的行为和一段单线程程序的行为是一致的，类似于不是并行的并发。这个模型禁止了任何四种类型的读写重排，因此可以认为SC下每次读到的都是最新值。</p>
-<h4 id="不能太乐观"><a href="#不能太乐观" class="headerlink" title="不能太乐观"></a>不能太乐观</h4><p>虽然SC是C++下最强的一致性模型，但不能有“无脑SC”就行了的看法。</p>
-<h5 id="出于正确性原因"><a href="#出于正确性原因" class="headerlink" title="出于正确性原因"></a>出于正确性原因</h5><p>可以把SC简单理解成</p>
+<h3 id="内存模型：Sequential"><a href="#内存模型：Sequential" class="headerlink" title="内存模型：Sequential"></a>内存模型：Sequential</h3><p>顺序一致性(sequential consistency, SC)要求程序中的行为从任意角度来看，序列顺序都是一致的(have single total order)。</p>
+<p>即，该多线程程序的行为和一个单线程程序的行为一致，类似于不是并行的并发。我们可以类比为数据库的 Sequencial 隔离等级。</p>
+<p>SC 禁止了任何四种类型的读写重排，因此可以认为 SC 下每次读到的都是最新值。</p>
+<h4 id="不能太乐观"><a href="#不能太乐观" class="headerlink" title="不能太乐观"></a>不能太乐观</h4><p>虽然 SC 是C++下最强的一致性模型，但不能有“无脑 SC”就行了的看法。</p>
+<h5 id="出于正确性原因"><a href="#出于正确性原因" class="headerlink" title="出于正确性原因"></a>出于正确性原因</h5><p>从实现上讲，可以把 SC 简单理解成：</p>
 <ol>
-<li>给Load加Acquire</li>
-<li>给Store加Release</li>
-<li>给所有SC的操作，赋予global total order</li>
+<li>给 Load 加 Acquire</li>
+<li>给 Store 加 Release</li>
+<li>给所有 SC 的操作，赋予 global total order<br> <a href="(https://stackoverflow.com/questions/39053600/does-standard-c11-guarantee-that-memory-order-seq-cst-prevents-storeload-reord)">它实际暗示了 SC 操作和非 SC 操作之间并没有 global total order</a>，这是比较 tricky 的。包含两个层面：<ol>
+<li>SC 操作和非 SC 的 atomic 操作之间没有 global total order</li>
+<li>SC 操作和 plain 操作之间更没有 global total order</li>
 </ol>
-<p>而这第三个是tricky的，<a href="(https://stackoverflow.com/questions/39053600/does-standard-c11-guarantee-that-memory-order-seq-cst-prevents-storeload-reord)">它实际暗示了SC操作和非SC操作之间并没有global total order，这包含两个层面</a>：</p>
-<ol>
-<li>SC操作和非SC的atomic操作之间没有</li>
-<li>SC操作和plain操作之间更没有</li>
+</li>
 </ol>
-<p>换种说法，<a href="https://stackoverflow.com/questions/39053600/does-standard-c11-guarantee-that-memory-order-seq-cst-prevents-storeload-reord?rq=1" target="_blank" rel="noopener">SoF上</a>指出虽然<code>atomic(seq_cst)</code>和<code>atomic(seq_cst)</code>始终不会重排，但是在<code>atomic(seq_cst)</code>附近的<code>non-atomic</code>甚至是<code>atomic(non-seq_cst)</code>形式的<code>STORE-LOAD</code>都会被重排。例如在下面的代码中1和3的<code>STORE-LOAD</code>肯定不会被重排，但2和3的<code>STORE-LOAD</code>就可能被重排，所以一定要注意。</p>
-<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">std</span>::atomic&lt;<span class="keyword">int</span>&gt; a, b, c;</span><br><span class="line">a.store(<span class="number">2</span>, <span class="built_in">std</span>::memory_order_seq_cst);          <span class="comment">// 1: movl 2,[a]; mfence;</span></span><br><span class="line">c.store(<span class="number">4</span>, <span class="built_in">std</span>::memory_order_release);          <span class="comment">// 2: movl 4,[c];</span></span><br><span class="line"><span class="keyword">int</span> tmp = b.load(<span class="built_in">std</span>::memory_order_seq_cst);    <span class="comment">// 3: movl [b],[tmp];</span></span><br></pre></td></tr></table></figure>
-
-<p>比如考虑下面的Litmus test：Store buffer，C++11是可以同时见到r1和r2为0的。此时操作1/2之间并没有global total order，3/4也是这样。此时我们可以将两个<code>memory_order_seq_cst</code>直接替换成<code>memory_order_acquire</code>，</p>
+<p>换种说法，<a href="https://stackoverflow.com/questions/39053600/does-standard-c11-guarantee-that-memory-order-seq-cst-prevents-storeload-reord?rq=1" target="_blank" rel="noopener">SoF 上</a>指出：</p>
+<ul>
+<li><code>atomic(seq_cst)</code> 和 <code>atomic(seq_cst)</code> 始终不会重排</li>
+<li>在 <code>atomic(seq_cst)</code> 附近的 <code>non-atomic</code> 甚至是 <code>atomic(non-seq_cst)</code> 形式的 <code>STORE-LOAD</code>都可能会被重排<br>  例如，下面的代码中 1 和 3 的 <code>STORE-LOAD</code> 肯定不会被重排，但 2 和 3 的 <code>STORE-LOAD</code> 就可能被重排，所以一定要注意。  <figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">std</span>::atomic&lt;<span class="keyword">int</span>&gt; a, b, c;</span><br><span class="line">a.store(<span class="number">2</span>, <span class="built_in">std</span>::memory_order_seq_cst);          <span class="comment">// 1: movl 2,[a]; mfence;</span></span><br><span class="line">c.store(<span class="number">4</span>, <span class="built_in">std</span>::memory_order_release);          <span class="comment">// 2: movl 4,[c];</span></span><br><span class="line"><span class="keyword">int</span> tmp = b.load(<span class="built_in">std</span>::memory_order_seq_cst);    <span class="comment">// 3: movl [b],[tmp];</span></span><br></pre></td></tr></table></figure></li>
+</ul>
+<p>比如考虑下面的 Litmus test：Store buffer，C++11 是可以同时见到 r1 和 r2 为 0 的。此时操作 1/2 之间并没有 global total order，3/4 也是这样。此时可将两个 <code>memory_order_seq_cst</code> 直接替换成 <code>memory_order_acquire</code></p>
 <figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// https://godbolt.org/g/2NLy12</span></span><br><span class="line"><span class="built_in">std</span>::atomic&lt;<span class="keyword">int</span>&gt; x(<span class="number">0</span>), y(<span class="number">0</span>);</span><br><span class="line"><span class="comment">// Thread 1</span></span><br><span class="line">x.store(<span class="number">1</span>, <span class="built_in">std</span>::memory_order_release); <span class="comment">// 1</span></span><br><span class="line"><span class="keyword">int</span> r1 = y.load(<span class="built_in">std</span>::memory_order_seq_cst); <span class="comment">// 2</span></span><br><span class="line"><span class="comment">// Thread 2</span></span><br><span class="line">y.store(<span class="number">1</span>, <span class="built_in">std</span>::memory_order_release); <span class="comment">// 3</span></span><br><span class="line"><span class="keyword">int</span> r2 = x.load(<span class="built_in">std</span>::memory_order_seq_cst); <span class="comment">// 4</span></span><br></pre></td></tr></table></figure>
 
 <p>稍微进行修改，下面的代码根据C++11，也是可以同时见到r1和r2为0的。但在X86上实际是见不到的，这是因为<code>x.store(memory_order_seq_cst)</code>会产生一个Full Barrier，即mfence。</p>
@@ -1764,15 +1775,15 @@
           
             <a href="/tags/C/" rel="tag"># C++</a>
           
-            <a href="/tags/Linux/" rel="tag"># Linux</a>
-          
-            <a href="/tags/网络/" rel="tag"># 网络</a>
-          
             <a href="/tags/并行计算/" rel="tag"># 并行计算</a>
           
             <a href="/tags/多线程/" rel="tag"># 多线程</a>
           
+            <a href="/tags/Linux/" rel="tag"># Linux</a>
+          
             <a href="/tags/atomic/" rel="tag"># atomic</a>
+          
+            <a href="/tags/网络/" rel="tag"># 网络</a>
           
             <a href="/tags/CPU/" rel="tag"># CPU</a>
           
@@ -1880,7 +1891,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">250</span>
+                <span class="site-state-item-count">251</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -1893,7 +1904,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">153</span>
+                <span class="site-state-item-count">154</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

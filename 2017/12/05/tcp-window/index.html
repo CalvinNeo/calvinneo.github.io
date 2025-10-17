@@ -104,7 +104,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/tcp-window/cwnd-grow.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/tcp-window/bbr-stage.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/tcp-window/bbr-process.png">
-<meta property="og:updated_time" content="2023-08-08T13:37:32.725Z">
+<meta property="og:updated_time" content="2025-10-05T14:55:03.762Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="TCP的流量控制和拥塞控制">
 <meta name="twitter:description" content="本文作为一个专题来讨论TCP的流量控制和拥塞控制，其中部分论述迁移自libutp源码简析。有关可靠传输的实现，详见TCP的可靠传输。 流量控制着眼于接收端，保证发送端的发送速率能够匹配接收端的接受速率和缓存大小。流量控制包含滑动窗口 rwnd 、Nagle算法等。拥塞控制着眼于整个网络的性能，是当前发送端的速率匹配当前链路能承载的的限额。拥塞控制包含拥塞窗口 rwnd 、慢启动、拥塞避免、Fast">
@@ -412,7 +412,13 @@
 <h2 id="不合理的通告窗口"><a href="#不合理的通告窗口" class="headerlink" title="不合理的通告窗口"></a>不合理的通告窗口</h2><p>滑动窗口的精髓是不是有多少缓冲区空间就把窗口大小设成多少的，不然这个协议一句话就能讲明白了。<br>下面介绍了一些不合理的通告窗口。</p>
 <h3 id="窗口大小为0"><a href="#窗口大小为0" class="headerlink" title="窗口大小为0"></a>窗口大小为0</h3><p>在滑动窗口协议中，如果接收方通告窗口为0，意味着接收方暂时不希望发送方继续发送数据。当接收方能够继续接收时，它可以在发回的 ACK 报文中重新设置自己的通告窗口。但这其中存在一个问题，ACK 报文会发几遍呢？如果接收方启用了保活定时器，也许能发送一些探测包？但发送方需要寄希望于接收方来处理这个事情么？<br>可以看出，如果 ACK 报文被意外丢弃后，发送方就不能接受到接收方的新通告窗口大小，因此继续不发送报文。接受方没有办法区分出自己没有接受到报文是因为没报文可发，还是窗口问题，还是丢包等问题，因此死锁形成了。</p>
 <h4 id="坚持定时器"><a href="#坚持定时器" class="headerlink" title="坚持定时器"></a>坚持定时器</h4><p>此时需要在收到0窗口通告后，启动坚持定时器。坚持定时器<a href="/2019/08/06/spark-sql/">会**指数退避(exponential back-off)**地增加</a>，发送窗口探查(window probe)报文，直到监视到对方的窗口变化为止。坚持定时器会不停地发送payload为一个字节的报文，当然这个报文肯定不被对方ACK，因为对方缓冲区不够了。但是坚持定时器会一直坚持重传，并且不像重传定时器一样，坚持定时器没有放弃时间。</p>
-<h3 id="糊涂窗口综合征"><a href="#糊涂窗口综合征" class="headerlink" title="糊涂窗口综合征"></a>糊涂窗口综合征</h3><p><a href="https://zh.wikipedia.org/wiki/%E7%B3%8A%E6%B6%82%E7%AA%97%E5%8F%A3%E7%BB%BC%E5%90%88%E7%97%87" target="_blank" rel="noopener">维基百科</a>对糊涂窗口综合征(SWS)是这样解释的：当发送程序缓慢地生产数据，接收程序缓慢地消耗数据，或者两者同时存在时，滑动窗口运作会出现严重问题。如果一个服务器无法处理所有传入的数据而存在此问题，它会要求客户端减少一次发送的数据量.如果这个过程循环往复，数据量会越来越少，导致连接上交换的数据段是小数据段而不是全尺寸的数据段。<br>简单地来说，SWS 的不利影响是它的 payload 相比 TCP Header 很小，从而导致信道的利用率很差。</p>
+<h3 id="糊涂窗口综合征"><a href="#糊涂窗口综合征" class="headerlink" title="糊涂窗口综合征"></a>糊涂窗口综合征</h3><p><a href="https://zh.wikipedia.org/wiki/%E7%B3%8A%E6%B6%82%E7%AA%97%E5%8F%A3%E7%BB%BC%E5%90%88%E7%97%87" target="_blank" rel="noopener">维基百科</a>对糊涂窗口综合征(SWS)是这样解释的：当发送程序缓慢地生产数据，接收程序缓慢地消耗数据，或者两者同时存在时，滑动窗口运作会出现严重问题。</p>
+<p>简单地来说，SWS 的不利影响是它的 payload 相比 TCP Header 很小，从而导致信道的利用率很差。比如 TCP 的接收窗口大小很小，发送方只能发送极少量的数据（甚至1字节），这样就引起频繁的小包传输，增加了网络负担，浪费了带宽和CPU资源。</p>
+<p>为什么会有这种情况呢？</p>
+<ul>
+<li>接收方服务器无法处理所有传入的数据而存在此问题，它会要求客户端减少一次发送的数据量</li>
+<li>如果这个过程循环往复，数据量会越来越少，导致连接上交换的数据段是小数据段而不是全尺寸的数据段</li>
+</ul>
 <p>对于这种情况的正确做法是：</p>
 <ol>
 <li>接收方应该等到可以发较大窗口通告再发窗口通告<br> 根据David D Clark算法，这个阈值是<code>min(MSS，cache_size/2)</code>，不满足这个阈值要通知窗口为0。<br> 但这里有一个注意点，因为TCP协议是非常不鼓励左移窗口右界的，所以在Demo中，出现了一个509的窗口。</li>
@@ -625,7 +631,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">250</span>
+                <span class="site-state-item-count">251</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -638,7 +644,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">153</span>
+                <span class="site-state-item-count">154</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

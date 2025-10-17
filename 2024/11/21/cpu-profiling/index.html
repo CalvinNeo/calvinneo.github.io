@@ -100,7 +100,7 @@
 <meta property="og:description" content="记录了自己在执行 CPU Profiling 的时候遇到的一些经验。 相关文章：  heap profiling">
 <meta property="og:locale" content="zh-Hans">
 <meta property="og:image" content="https://www.brendangregg.com/blog/images/2017/cpubusystalledidle.png">
-<meta property="og:updated_time" content="2025-09-22T02:55:52.295Z">
+<meta property="og:updated_time" content="2025-10-09T11:00:05.459Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="CPU Profiling 经验之谈">
 <meta name="twitter:description" content="记录了自己在执行 CPU Profiling 的时候遇到的一些经验。 相关文章：  heap profiling">
@@ -386,7 +386,7 @@
 </ol>
 <a id="more"></a>
 
-<h1 id="Profiling-基础"><a href="#Profiling-基础" class="headerlink" title="Profiling 基础"></a>Profiling 基础</h1><p>首先，<a href="/2023/12/17/patmc/">Performance analysis and tuning on modern CPUs</a> 这本书是值得阅读的基础。但是里面讲述的很多内容，我目前还没有机会完全实践。</p>
+<h1 id="Profiling-基础"><a href="#Profiling-基础" class="headerlink" title="Profiling 基础"></a>Profiling 基础</h1><p>首先，<a href="/2023/12/17/patmc/">Performance analysis and tuning on modern CPUs</a> 这本书是值得阅读的基础。但是里面讲述的很多内容，目前还没有机会完全实践。</p>
 <h1 id="关于线程池"><a href="#关于线程池" class="headerlink" title="关于线程池"></a>关于线程池</h1><h2 id="记录线程名"><a href="#记录线程名" class="headerlink" title="记录线程名"></a>记录线程名</h2><p>有一些方法设置线程名，包括：</p>
 <ol>
 <li>pthread_setname_np</li>
@@ -411,7 +411,7 @@
 <p>作者给出了方案是利用 Performance Monitoring Counters (PMCs)</p>
 <figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">perf <span class="built_in">stat</span> -a -- sleep 10</span><br></pre></td></tr></table></figure>
 
-<p>我们主要要关注 instructions per cycle (insns per cycle: IPC)。它表示了 CPU 的每个 clock cycle 中多少个指令被执行了。CPU 有一个参数表示它一个 cycle 可以 retire 多少个指令（是指的 superscalar 么？）。例如在知道下面 CPU 的 issue width 是 4-wide 之后，下面的 0.78 的 IPC 就显得比较低了。</p>
+<p>主要要关注 instructions per cycle (insns per cycle: IPC)。它表示了 CPU 的每个 clock cycle 中多少个指令被执行了。CPU 有一个参数表示它一个 cycle 可以 retire 多少个指令（是指的 superscalar 么？）。例如在知道下面 CPU 的 issue width 是 4-wide 之后，下面的 0.78 的 IPC 就显得比较低了。</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"># perf stat -a -- sleep 10</span><br><span class="line"></span><br><span class="line"> Performance counter stats for &apos;system wide&apos;:</span><br><span class="line"></span><br><span class="line">     641398.723351      task-clock (msec)         #   64.116 CPUs utilized            (100.00%)</span><br><span class="line">           379,651      context-switches          #    0.592 K/sec                    (100.00%)</span><br><span class="line">            51,546      cpu-migrations            #    0.080 K/sec                    (100.00%)</span><br><span class="line">        13,423,039      page-faults               #    0.021 M/sec                  </span><br><span class="line"> 1,433,972,173,374      cycles                    #    2.236 GHz                      (75.02%)</span><br><span class="line">   &lt;not supported&gt;      stalled-cycles-frontend  </span><br><span class="line">   &lt;not supported&gt;      stalled-cycles-backend   </span><br><span class="line"> 1,118,336,816,068      instructions              #    0.78  insns per cycle          (75.01%)</span><br><span class="line">   249,644,142,804      branches                  #  389.218 M/sec                    (75.01%)</span><br><span class="line">     7,791,449,769      branch-misses             #    3.12% of all branches          (75.01%)</span><br><span class="line"></span><br><span class="line">      10.003794539 seconds time elapsed</span><br></pre></td></tr></table></figure>
 
 <h2 id="使用-perf-probe-记录函数调用耗时"><a href="#使用-perf-probe-记录函数调用耗时" class="headerlink" title="使用 perf probe 记录函数调用耗时"></a>使用 perf probe 记录函数调用耗时</h2><p>该方案整理自某同事的 idea。</p>
@@ -419,7 +419,13 @@
 <figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">perf probe --del <span class="string">'probe_libtiflash_proxy:*'</span></span><br><span class="line">BIN=/path/to/libtiflash_proxy.so</span><br><span class="line">TOKEN=handle_pending_applies</span><br><span class="line">ITER=0</span><br><span class="line">objdump <span class="variable">$BIN</span> --syms | grep <span class="variable">$TOKEN</span> | awk <span class="string">'&#123;print $6&#125;'</span> | <span class="keyword">while</span> <span class="built_in">read</span> -r tok ; <span class="keyword">do</span></span><br><span class="line">    ITER=$(expr <span class="variable">$ITER</span> + 1)</span><br><span class="line">    NAME=<span class="variable">$TOKEN</span>\_<span class="variable">$ITER</span></span><br><span class="line">    <span class="built_in">echo</span> <span class="variable">$NAME</span>, <span class="variable">$TOKEN</span>, <span class="variable">$ITER</span>, <span class="variable">$TOKEN</span>\_<span class="variable">$ITER</span></span><br><span class="line">    perf probe -x <span class="variable">$BIN</span> --no-demangle <span class="variable">$NAME</span>=<span class="variable">$tok</span></span><br><span class="line">    perf probe -x <span class="variable">$BIN</span> --no-demangle <span class="variable">$NAME</span>=<span class="variable">$tok</span>%<span class="built_in">return</span></span><br><span class="line"><span class="keyword">done</span></span><br><span class="line">perf record -e probe_libtiflash_proxy:\* -aR sleep 10</span><br><span class="line">perf script -s perf-script.py</span><br></pre></td></tr></table></figure>
 
 <p><a href="/asset/highconcurrency/perf-script.py">附上 perf-script.py</a></p>
-<h1 id="关于-benchmark"><a href="#关于-benchmark" class="headerlink" title="关于 benchmark"></a>关于 benchmark</h1><h2 id="pitfall"><a href="#pitfall" class="headerlink" title="pitfall"></a>pitfall</h2><ul>
+<h1 id="常见-profiling-工具和实现原理"><a href="#常见-profiling-工具和实现原理" class="headerlink" title="常见 profiling 工具和实现原理"></a>常见 profiling 工具和实现原理</h1><h2 id="gprof-GNU-Profiler"><a href="#gprof-GNU-Profiler" class="headerlink" title="gprof(GNU Profiler)"></a>gprof(GNU Profiler)</h2><p>采用插桩(instrumentation)的方式。</p>
+<h2 id="perf-Linux-Perf-Events"><a href="#perf-Linux-Perf-Events" class="headerlink" title="perf(Linux Perf Events)"></a>perf(Linux Perf Events)</h2><ul>
+<li>使用 Linux 内核的 <code>perf_event</code> 接口，这个接口在后面专门介绍</li>
+<li>支持 sample-based 和事件统计 event-based</li>
+<li>基于硬件性能计数器如 CPU cycles, cache misses</li>
+</ul>
+<h2 id="Intel-VTune-Profiler"><a href="#Intel-VTune-Profiler" class="headerlink" title="Intel VTune Profiler"></a>Intel VTune Profiler</h2><h2 id="Google-CPU-Profiler-pprof-gperftools"><a href="#Google-CPU-Profiler-pprof-gperftools" class="headerlink" title="Google CPU Profiler(pprof + gperftools)"></a>Google CPU Profiler(pprof + gperftools)</h2><h1 id="关于-benchmark"><a href="#关于-benchmark" class="headerlink" title="关于 benchmark"></a>关于 benchmark</h1><h2 id="pitfall"><a href="#pitfall" class="headerlink" title="pitfall"></a>pitfall</h2><ul>
 <li>需要多次运行</li>
 <li>需要预热，加载缓存<br>  通常可以使用启发式的方法，等待性能收敛。</li>
 <li>使用高精度时钟</li>
@@ -438,16 +444,37 @@
 <li>根据提示的行号，拷贝一份对应的源码到指定位置</li>
 <li>自己编译一个同样 layout 的对象，然后 load 进去解析</li>
 </ol>
-<h1 id="一些工具"><a href="#一些工具" class="headerlink" title="一些工具"></a>一些工具</h1><h2 id="pstack"><a href="#pstack" class="headerlink" title="pstack"></a>pstack</h2><p>可以通过 <a href="https://gist.github.com/JaySon-Huang/e374da1fafa41a3fa30a24e135c60825" target="_blank" rel="noopener">https://gist.github.com/JaySon-Huang/e374da1fafa41a3fa30a24e135c60825</a> 去合并相同的堆栈。</p>
+<h1 id="一些元工具"><a href="#一些元工具" class="headerlink" title="一些元工具"></a>一些元工具</h1><h2 id="pstack"><a href="#pstack" class="headerlink" title="pstack"></a>pstack</h2><p>可以通过 <a href="https://gist.github.com/JaySon-Huang/e374da1fafa41a3fa30a24e135c60825" target="_blank" rel="noopener">https://gist.github.com/JaySon-Huang/e374da1fafa41a3fa30a24e135c60825</a> 去合并相同的堆栈。</p>
 <p>如果 pstack 没有安装，可以借助于 GDB 的 <code>thread apply all bt</code> 命令。但这个命令会对屏幕输入一堆字符，不是很好看。因此可以</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">set logging file mylog.txt</span><br><span class="line">set logging on</span><br></pre></td></tr></table></figure>
 
 <p>或者使用命令行直接输出</p>
 <figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">gdb -ex <span class="string">"thread apply all bt"</span> -batch -p <span class="variable">$PID</span></span><br></pre></td></tr></table></figure>
 
+<h2 id="perf-event-接口"><a href="#perf-event-接口" class="headerlink" title="perf_event 接口"></a>perf_event 接口</h2><p><a href="https://man7.org/linux/man-pages/man2/perf_event_open.2.html" target="_blank" rel="noopener">https://man7.org/linux/man-pages/man2/perf_event_open.2.html</a></p>
+<p>目前 glibc 库还没有封装这个接口，所以需要手动调用。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">syscall</span><span class="params">(SYS_perf_event_open, struct perf_event_attr *attr,</span></span></span><br><span class="line"><span class="function"><span class="params">           <span class="keyword">pid_t</span> pid, <span class="keyword">int</span> cpu, <span class="keyword">int</span> group_fd, <span class="keyword">unsigned</span> <span class="keyword">long</span> flags)</span></span>;</span><br></pre></td></tr></table></figure>
+
+<p>pid 和 cpu 可以指定需要追踪的 pid 和 cpu：</p>
+<ul>
+<li>pid 指定 0，表示要追踪的是调用者进程</li>
+<li>pid 指定 -1，表示追踪所有进程</li>
+<li>CPU 为 -1，表示追踪所有 CPU</li>
+<li>其他情况下，都表示追踪某个特定的进程或者 cpu</li>
+<li>cpu 和 pid 不能同时为 -1</li>
+</ul>
+<h2 id="SIGPROF"><a href="#SIGPROF" class="headerlink" title="SIGPROF"></a>SIGPROF</h2><p>SIGPROF 是一种用户级定时器信号，通过如下函数设置</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">setitimer(ITIMER_PROF, &amp;interval, <span class="literal">NULL</span>);</span><br></pre></td></tr></table></figure>
+
+<p>缺点：</p>
+<ul>
+<li>定时器分辨率受限（通常 1ms 左右）。</li>
+<li>信号处理本身有开销，不适合高采样率。</li>
+<li>在多线程程序中可能出现信号不精确的问题。</li>
+</ul>
 <h2 id="uprobe"><a href="#uprobe" class="headerlink" title="uprobe"></a>uprobe</h2><h2 id="func-latency-工具"><a href="#func-latency-工具" class="headerlink" title="func_latency 工具"></a>func_latency 工具</h2><p>这也是 bcc 套装里面的一个工具。</p>
-<h2 id="PT-PERF-技术"><a href="#PT-PERF-技术" class="headerlink" title="PT_PERF 技术"></a>PT_PERF 技术</h2><p>主要是看 <a href="http://mysql.taobao.org/monthly/2024/04/02/" target="_blank" rel="noopener">mysql 内核月报</a> 和<a href="http://mysql.taobao.org/monthly/2024/04/03/" target="_blank" rel="noopener">续集</a>学的，它还给了一个<a href="http://mysql.taobao.org/monthly/2024/07/04/" target="_blank" rel="noopener">应用场景</a>。<br>这个工具的原理是 Intel CPU 的一个 Processor Trace 技术。主要特点是开销小。它记录程序控制流，特别是 branch 跳转的信息。</p>
-<p>这个工具可以：</p>
+<h2 id="PT-PERF-技术"><a href="#PT-PERF-技术" class="headerlink" title="PT_PERF 技术"></a>PT_PERF 技术</h2><p>主要是看 <a href="http://mysql.taobao.org/monthly/2024/04/02/" target="_blank" rel="noopener">mysql 内核月报</a> 和<a href="http://mysql.taobao.org/monthly/2024/04/03/" target="_blank" rel="noopener">续集</a>学的，它还给了一个<a href="http://mysql.taobao.org/monthly/2024/07/04/" target="_blank" rel="noopener">应用场景</a>。<br>这个工具的原理是 Intel CPU 的 Processor Trace 技术。主要特点是开销小。它记录程序控制流，特别是 branch 跳转的信息。需要配合 pref 使用。</p>
+<p>可以：</p>
 <ol>
 <li>跟踪某个函数在历史时间中执行时间的分布情况。</li>
 <li>跟踪该函数所有子函数的执行情况，包含各自花了多久，占比如何。</li>
@@ -457,8 +484,8 @@
 </ol>
 <p>需要：</p>
 <ol>
-<li>修改 perf_event_mlock_kb 支持更大的 trace buffer，减少 trace 数据丢失。</li>
-<li>修改 kptr_restrict 支持追踪内核函数，如追踪 off-cpu 分析需要的 schedule 内核函数。</li>
+<li>修改 <code>perf_event_mlock_kb</code> 支持更大的 trace buffer，减少 trace 数据丢失。</li>
+<li>修改 <code>kptr_restrict</code> 支持追踪内核函数，如追踪 off-cpu 分析需要的 schedule 内核函数。</li>
 </ol>
 <p>此外对 Linux 版本也有依赖。</p>
 <h2 id="eBPF-技术原理"><a href="#eBPF-技术原理" class="headerlink" title="eBPF 技术原理"></a>eBPF 技术原理</h2><p>包括 kprobe、uprobe、tcpdump 等工具都是<a href="https://cloudnative.to/blog/bpf-intro/" target="_blank" rel="noopener">基于 eBPF 技术实现的</a>：</p>
@@ -632,7 +659,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">250</span>
+                <span class="site-state-item-count">251</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -645,7 +672,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">153</span>
+                <span class="site-state-item-count">154</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -738,7 +765,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Profiling-基础"><span class="nav-number">1.</span> <span class="nav-text">Profiling 基础</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#关于线程池"><span class="nav-number">2.</span> <span class="nav-text">关于线程池</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#记录线程名"><span class="nav-number">2.1.</span> <span class="nav-text">记录线程名</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#线程名的切换问题"><span class="nav-number">2.2.</span> <span class="nav-text">线程名的切换问题</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#On-CPU-和-Off-CPU-time"><span class="nav-number">3.</span> <span class="nav-text">On CPU 和 Off CPU time</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#设计上的-pitfall"><span class="nav-number">3.1.</span> <span class="nav-text">设计上的 pitfall</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#CPU-Utilization-CPU-的理解"><span class="nav-number">3.2.</span> <span class="nav-text">CPU Utilization(%CPU) 的理解</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#使用-perf-probe-记录函数调用耗时"><span class="nav-number">3.3.</span> <span class="nav-text">使用 perf probe 记录函数调用耗时</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#关于-benchmark"><span class="nav-number">4.</span> <span class="nav-text">关于 benchmark</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#pitfall"><span class="nav-number">4.1.</span> <span class="nav-text">pitfall</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#google-benchmark"><span class="nav-number">4.2.</span> <span class="nav-text">google benchmark</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#关于死锁"><span class="nav-number">5.</span> <span class="nav-text">关于死锁</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#寻找死锁的原因"><span class="nav-number">5.1.</span> <span class="nav-text">寻找死锁的原因</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#一些工具"><span class="nav-number">6.</span> <span class="nav-text">一些工具</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#pstack"><span class="nav-number">6.1.</span> <span class="nav-text">pstack</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#uprobe"><span class="nav-number">6.2.</span> <span class="nav-text">uprobe</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#func-latency-工具"><span class="nav-number">6.3.</span> <span class="nav-text">func_latency 工具</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#PT-PERF-技术"><span class="nav-number">6.4.</span> <span class="nav-text">PT_PERF 技术</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#eBPF-技术原理"><span class="nav-number">6.5.</span> <span class="nav-text">eBPF 技术原理</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">7.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Profiling-基础"><span class="nav-number">1.</span> <span class="nav-text">Profiling 基础</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#关于线程池"><span class="nav-number">2.</span> <span class="nav-text">关于线程池</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#记录线程名"><span class="nav-number">2.1.</span> <span class="nav-text">记录线程名</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#线程名的切换问题"><span class="nav-number">2.2.</span> <span class="nav-text">线程名的切换问题</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#On-CPU-和-Off-CPU-time"><span class="nav-number">3.</span> <span class="nav-text">On CPU 和 Off CPU time</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#设计上的-pitfall"><span class="nav-number">3.1.</span> <span class="nav-text">设计上的 pitfall</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#CPU-Utilization-CPU-的理解"><span class="nav-number">3.2.</span> <span class="nav-text">CPU Utilization(%CPU) 的理解</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#使用-perf-probe-记录函数调用耗时"><span class="nav-number">3.3.</span> <span class="nav-text">使用 perf probe 记录函数调用耗时</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#常见-profiling-工具和实现原理"><span class="nav-number">4.</span> <span class="nav-text">常见 profiling 工具和实现原理</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#gprof-GNU-Profiler"><span class="nav-number">4.1.</span> <span class="nav-text">gprof(GNU Profiler)</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#perf-Linux-Perf-Events"><span class="nav-number">4.2.</span> <span class="nav-text">perf(Linux Perf Events)</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Intel-VTune-Profiler"><span class="nav-number">4.3.</span> <span class="nav-text">Intel VTune Profiler</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Google-CPU-Profiler-pprof-gperftools"><span class="nav-number">4.4.</span> <span class="nav-text">Google CPU Profiler(pprof + gperftools)</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#关于-benchmark"><span class="nav-number">5.</span> <span class="nav-text">关于 benchmark</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#pitfall"><span class="nav-number">5.1.</span> <span class="nav-text">pitfall</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#google-benchmark"><span class="nav-number">5.2.</span> <span class="nav-text">google benchmark</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#关于死锁"><span class="nav-number">6.</span> <span class="nav-text">关于死锁</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#寻找死锁的原因"><span class="nav-number">6.1.</span> <span class="nav-text">寻找死锁的原因</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#一些元工具"><span class="nav-number">7.</span> <span class="nav-text">一些元工具</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#pstack"><span class="nav-number">7.1.</span> <span class="nav-text">pstack</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#perf-event-接口"><span class="nav-number">7.2.</span> <span class="nav-text">perf_event 接口</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#SIGPROF"><span class="nav-number">7.3.</span> <span class="nav-text">SIGPROF</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#uprobe"><span class="nav-number">7.4.</span> <span class="nav-text">uprobe</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#func-latency-工具"><span class="nav-number">7.5.</span> <span class="nav-text">func_latency 工具</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#PT-PERF-技术"><span class="nav-number">7.6.</span> <span class="nav-text">PT_PERF 技术</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#eBPF-技术原理"><span class="nav-number">7.7.</span> <span class="nav-text">eBPF 技术原理</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">8.</span> <span class="nav-text">Reference</span></a></li></ol></div>
             
 
           </div>

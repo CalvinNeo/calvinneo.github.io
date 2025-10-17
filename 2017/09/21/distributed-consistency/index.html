@@ -122,7 +122,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/fbs/lamport_snapshot/f4.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/fbs/lamport_snapshot/algo.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/fbs/fzztj.jpg">
-<meta property="og:updated_time" content="2024-11-18T16:52:57.003Z">
+<meta property="og:updated_time" content="2025-10-15T15:59:45.014Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="分布式一致性详解">
 <meta name="twitter:description" content="本文被拆分自分布式一致性和分布式共识协议。拆分的目的是：  上一篇文章更贴近于 DDIA 的架构 本篇文章理论性较强，可以单独被拆出">
@@ -422,17 +422,16 @@
 </ol>
 <p><img src="/img/fbs/yzxdj.png" alt="一致性的等级"></p>
 <p>本章节中会涉及到一些复制的内容，但详细有关复制的会在<a href="/2017/09/20/distributed-system-consistency-and-consensus/">分布式一致性和分布式共识协议</a>中论述，也是部分基于 DDIA 的。</p>
-<h2 id="最终一致系统"><a href="#最终一致系统" class="headerlink" title="最终一致系统"></a>最终一致系统</h2><p>首先考虑为什么需要 Replicate 呢？可以列出下面的理由：</p>
+<h2 id="最终一致系统"><a href="#最终一致系统" class="headerlink" title="最终一致系统"></a>最终一致系统</h2><p>为什么需要 Replicate？</p>
 <ol>
 <li>Fault Tolerance</li>
 <li>Scalability</li>
-<li>Latency<br> 没错，通过复制可以允许在不同地区设置 Replica，从而让用户就近选择。</li>
+<li>Latency<br> 复制得到的不同副本可以分布在不同地区，从而让用户就近选择。</li>
 </ol>
-<p>然后必须意识到同步复制很难实现，因为这样单个节点的宕机，或者网络分区就会导致这个系统不可用。</p>
-<p>但如果使用异步复制，那么要我因为一个异步的 Follower 节点可能落后，所以如果从这个节点读，就可能读到旧数据。例如，如果在 Leader 和 Follower 上跑相同的查询，就可能读到不同的结果，尽管这个过程是暂时的。这就是所谓的最终一致。</p>
-<p>这里的最终是很模糊的，因为它并没有一个明确的 deadline。</p>
+<p>显然，同步复制很难实现，因为这样单个节点的宕机，或者网络分区就会导致这个系统不可用。</p>
+<p>但是，如果使用异步复制，则一个异步的 Follower 节点可能落后。如果从这个节点读，就可能读到旧数据。例如，如果在 Leader 和 Follower 上跑相同的查询，就可能读到不同的结果，尽管这个过程是暂时的。这样就是最终一致的状态。这里的最终是很模糊的，因为它并没有一个明确的 deadline，也就是说是 Boundless 的。</p>
 <p>下面，介绍最终一致系统中可能存在的一些问题，并引入一些“弱一致性”来解决对应的问题。</p>
-<p>有的时候系统保证在更新操作后的一段时间后，系统能够达到一致性状态，这称为弱一致性。弱一致性和强一致性的区别是弱一致性存在“不一致窗口”，在不一致窗口中系统不一定保证用户总能看到最新的值。弱一致性可以分为最终一致性、因果一致性、单调读一致性、单调写一致性、有界旧一致性、前缀一致性等。<br><a href="https://docs.microsoft.com/en-us/azure/cosmos-db/consistency-levels" target="_blank" rel="noopener">在Azure Cosmos中将一致性的强弱程度建立以下的关系</a>。Strong–Bounded staleness–Session–Consistent prefix–Eventual。从前向后的延迟。可用性和扩展性越好，但一致性会差一点。</p>
+<p>系统保证在更新操作后一段时间内能达到一致性状态，则称为弱一致性。弱一致性和强一致性的区别是弱一致性存在“不一致窗口”，在不一致窗口内系统不一定保证用户总能看到最新的值。弱一致性可以分为最终一致性、因果一致性、单调读一致性、单调写一致性、有界旧一致性、前缀一致性等。<br><a href="https://docs.microsoft.com/en-us/azure/cosmos-db/consistency-levels" target="_blank" rel="noopener">在Azure Cosmos中将一致性的强弱程度建立以下的关系</a>。Strong–Bounded staleness–Session–Consistent prefix–Eventual。从前向后的延迟。可用性和扩展性越好，但一致性会差一点。</p>
 <h3 id="最终一致性"><a href="#最终一致性" class="headerlink" title="最终一致性"></a>最终一致性</h3><p>最终一致性也被称为乐观复制(optimistic replication)，要求当没有新的对 X 的提交发生时，最终所有对 X 的访问都返回最后一次更新的值。<br>常见的异步复制的主从架构实现的是<strong>最终一致性</strong>。它的一个典型常见是用户读取异步从库时，可能读取到较旧的信息，因为该从库尚未完全与主库同步。注意，同步复制的主从架构会出现<strong>任一节点</strong>宕机导致的单点问题。</p>
 <p>最终一致性通常用来提供 BASE 语义。</p>
 <p>最终一致性是一种<a href="https://en.wikipedia.org/wiki/Eventual_consistency" target="_blank" rel="noopener">获得 HA 的常见方式</a>。</p>
@@ -513,9 +512,9 @@
 <p>总而言之，一个 consistent snapshot 中不会包含比这个 snapshot 更新的写入，那么从这个 snapshot 去读，就不是 linearizable 的，因为没有能读到最新写入的数据了。</p>
 <h3 id="线性一致与提交顺序"><a href="#线性一致与提交顺序" class="headerlink" title="线性一致与提交顺序"></a>线性一致与提交顺序</h3><p>对复制自动机进行乱序提交有可能破坏线性一致，这是因为复制自动机按顺序执行日志本身就暗示了一种全序关系，只有从同样的初始状态，apply 同样的操作序列，才能保证得到同样的操作结果。乱序执行，相当于重新定序。给出如下的讨论：</p>
 <ol>
-<li><p>各个副本之间的 apply 顺序不同。<br> 例如日志中 key 的顺序是 A B C，结果 store 1 乱序提交是 A -&gt; C -&gt; B，store 2 是 B -&gt; A -&gt; C，那么此时一个客户端去读不同的 store，返回的结果是不一样的。<br> 那么如果 client 带着一个 index，只有这个 index 被 apply 完才能读。这样能解决问题么？</p>
+<li><p>各个副本之间的 apply 顺序不同。<br> 例如日志中 key 的顺序是 A B C，结果 store 1 乱序提交是 A -&gt; C -&gt; B，store 2 是 B -&gt; A -&gt; C，那么此时一个客户端去读不同的 store，返回的结果是不一样的。<br> 那么如果 client 带着一个 index，它起到了一个快照的作用。只有这个 index 被 apply 完才能读。这样能解决问题么？</p>
 </li>
-<li><p>答案是不行。实际上无法获得一个快照，其中的每个 key 要么是最近一次写入，要么在它之前的写入都已经被 apply。<br> 如下所示，所有的 key 都在被并行 apply，A1 表示 A 的第 1 个版本，圆括号中的表示还没有被 apply。假设 A1 和 C1 在同一时间被 apply 完毕。对于这个场景，如果在 A1 被 apply 完时取 snapshot 读，那么 C1 之前有 B1 没有被 apply。因为 C1 都能读到了，B1 却不能读到，不满足线性一致。</p>
+<li><p>答案是不行。实际上无法获得一个 index 即快照，其中的每个 key 要么是最近一次写入，要么在它之前的写入都已经被 apply。<br> 如下所示，所有的 key 都在被并行 apply，A1 表示 A 的第 1 个版本，圆括号中的表示还没有被 apply。假设 A1 和 C1 在同一时间被 apply 完毕。对于这个场景，如果在 A1 被 apply 完时取 snapshot 读，那么 C1 之前有 B1 没有被 apply。因为 C1 都能读到了，B1 却不能读到，不满足线性一致。</p>
  <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">A1 (B1) C1</span><br></pre></td></tr></table></figure>
 
 <p> 同理，如果等 B1 apply 完了再取 Snapshot 读，那么此时取到的 Snapshot 可能像下面这样了。D1 就和刚才的 B1 一样了。</p>
@@ -999,7 +998,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">250</span>
+                <span class="site-state-item-count">251</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -1012,7 +1011,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">153</span>
+                <span class="site-state-item-count">154</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

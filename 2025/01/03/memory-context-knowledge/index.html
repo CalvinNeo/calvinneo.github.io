@@ -99,7 +99,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="从jemalloc 的实现过来的。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2025-09-29T14:56:22.653Z">
+<meta property="og:updated_time" content="2025-10-12T17:54:43.692Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="内存领域知识">
 <meta name="twitter:description" content="从jemalloc 的实现过来的。">
@@ -446,7 +446,54 @@
 <li>在 CoW 时，会产生写放大。</li>
 <li>出现 NUMA 跨节点访问的时候，也会出现放大。</li>
 </ul>
-<h1 id="PageCache-和缺页中断"><a href="#PageCache-和缺页中断" class="headerlink" title="PageCache 和缺页中断"></a>PageCache 和缺页中断</h1><h1 id="NUMA-架构"><a href="#NUMA-架构" class="headerlink" title="NUMA 架构"></a>NUMA 架构</h1><h1 id="shm"><a href="#shm" class="headerlink" title="shm"></a>shm</h1><h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ul>
+<h1 id="Linux-的物理内存管理"><a href="#Linux-的物理内存管理" class="headerlink" title="Linux 的物理内存管理"></a>Linux 的物理内存管理</h1><p>Linux 把物理内存页按用途大致分为：</p>
+<ul>
+<li>Anonymous pages<br>  进程堆、栈、匿名 mmap</li>
+<li>Page cache<br>  文件内容缓存页，在文件 I/O 时产生。</li>
+<li>Slab / Kernel pages<br>  内核数据结构</li>
+<li>Free pages<br>  空闲页</li>
+</ul>
+<p>在 Anonymous pages 和 Page cache 中的 page 可能是 inactive 的。对于前者，可以 swap，对于后者，可以写回或者丢弃。</p>
+<h2 id="PageCache-和缺页中断"><a href="#PageCache-和缺页中断" class="headerlink" title="PageCache 和缺页中断"></a>PageCache 和缺页中断</h2><h1 id="NUMA-架构"><a href="#NUMA-架构" class="headerlink" title="NUMA 架构"></a>NUMA 架构</h1><p>UMA(Uniform Memory Access)：</p>
+<ul>
+<li>所有 CPU 访问内存的延迟相同，常见于单处理器或 SMP</li>
+<li>这种情况下，CPU 通过 FSB 总线连接到北桥，然后北桥的内存控制器连接到内存。</li>
+</ul>
+<p>NUMA(Non-Uniform Memory Access)：</p>
+<ul>
+<li>原因：提高 CPU 频率 -&gt; 增加 CPU 数量。越来越多的 CPU 对 FSB 总线形成争抢，因此引入了 NUMA。</li>
+<li>实现<ul>
+<li>内存控制器集成到 CPU 内部，一般一个 CPU socket 会有一个独立的内存控制器。</li>
+<li>每个 CPU socket 独立连接到一部分内存，这部分 CPU 直连的内存称为本地内存。</li>
+<li>CPU 之间通过 QPI(Quick Path Interconnect) 总线进行连接。通过该总线，要和可以访问不直连的远程内存。</li>
+</ul>
+</li>
+</ul>
+<h2 id="numactl"><a href="#numactl" class="headerlink" title="numactl"></a>numactl</h2><p>一个进程在 numa 上运行，需要考虑：</p>
+<ul>
+<li><p>它的各个线程在哪个 cpu 上运行<br>  指定 –cpubind 表示在哪些节点上的 cpu 上运行。<br>  指定 –physcpubind 表示在哪些 cpu 核心上运行。<br>  可以通过 numactl –hardware 查看节点与 cpu 核心的映射：</p>
+  <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">available: 2 nodes (0-1)</span><br><span class="line">node 0 cpus: 0-7</span><br><span class="line">node 1 cpus: 8-15</span><br></pre></td></tr></table></figure></li>
+<li><p>内存从哪个节点分配<br>  指定 –membind 则一定在指定的节点上分配，如果无法分配则失败。<br>  指定 –interleave 则表示在这些节点上按照 round robin 的方式分配。</p>
+</li>
+</ul>
+<h2 id="numa-和-swap"><a href="#numa-和-swap" class="headerlink" title="numa 和 swap"></a>numa 和 swap</h2><ul>
+<li>每个节点的压力过高，则该节点就可能触发 swap</li>
+<li>swap 到的磁盘设备是共享的，不同的节点可能 swap 到一个设备上</li>
+</ul>
+<h1 id="shm"><a href="#shm" class="headerlink" title="shm"></a>shm</h1><h1 id="访存问题"><a href="#访存问题" class="headerlink" title="访存问题"></a>访存问题</h1><p>访存问题主要是各种 cache miss、inter-core cache 的调优。</p>
+<h2 id="TLB-miss"><a href="#TLB-miss" class="headerlink" title="TLB miss"></a>TLB miss</h2><p>程序使用的是虚拟地址 Virtual Address，实际访问内存要用物理地址 Physical Address。虚拟地址到物理地址的映射存储在页表 Page Table 中。如果每次访问内存都要查页表就很很慢，因此 CPU 中增加了 TLB 来缓存最近的页表项。</p>
+<p>需要考虑 TLB miss 的场景：</p>
+<ul>
+<li>大内存随机访问<br>  比如哈希表、图算法</li>
+<li>数据结构跨越多个页<br>  如 linked list</li>
+<li>频繁 context switch 导致 TLB flush</li>
+<li>NUMA 架构下跨节点访问内存<br>  在 NUMA 系统中，每个 CPU 节点有自己的一套本地内存。<br>  当发生 TLB miss 时，CPU 会进行多级页表遍历，而这些页表可能也存在不同的 NUMA 节点中。<br>  当线程从 NUMA 节点 A 迁移到节点 B 时，会执行 TLB flush，因为 TLB 是 CPU 级别的。迁移后的所有地址都需要重新建立 TLB 映射。</li>
+</ul>
+<p>可以使用 perf 采样 TLB miss 的情况。同理，eBPF 也支持。</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">perf <span class="built_in">stat</span> -a -e dTLB-load-misses,iTLB-load-misses sleep 10</span><br></pre></td></tr></table></figure>
+
+<h2 id="TLB-Shootdown"><a href="#TLB-Shootdown" class="headerlink" title="TLB Shootdown"></a>TLB Shootdown</h2><p>见 <a href="/2024/12/25/database-paper-6/">Are You Sure You Want to Use MMAP in Your Database Management System？</a>。</p>
+<h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ul>
 <li><a href="https://man7.org/linux/man-pages/man7/shm_overview.7.html" target="_blank" rel="noopener">https://man7.org/linux/man-pages/man7/shm_overview.7.html</a></li>
 </ul>
 
@@ -603,7 +650,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">250</span>
+                <span class="site-state-item-count">251</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -616,7 +663,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">153</span>
+                <span class="site-state-item-count">154</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -709,7 +756,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#OOMKiller"><span class="nav-number">1.</span> <span class="nav-text">OOMKiller</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Linux-的-overcommit-机制"><span class="nav-number">1.1.</span> <span class="nav-text">Linux 的 overcommit 机制</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#mmap"><span class="nav-number">2.</span> <span class="nav-text">mmap</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#mmap-1"><span class="nav-number">2.1.</span> <span class="nav-text">mmap</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#msync"><span class="nav-number">2.2.</span> <span class="nav-text">msync</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#madvise"><span class="nav-number">2.3.</span> <span class="nav-text">madvise</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#关于透明大页"><span class="nav-number">2.4.</span> <span class="nav-text">关于透明大页</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#PageCache-和缺页中断"><span class="nav-number">3.</span> <span class="nav-text">PageCache 和缺页中断</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#NUMA-架构"><span class="nav-number">4.</span> <span class="nav-text">NUMA 架构</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#shm"><span class="nav-number">5.</span> <span class="nav-text">shm</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">6.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#OOMKiller"><span class="nav-number">1.</span> <span class="nav-text">OOMKiller</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Linux-的-overcommit-机制"><span class="nav-number">1.1.</span> <span class="nav-text">Linux 的 overcommit 机制</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#mmap"><span class="nav-number">2.</span> <span class="nav-text">mmap</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#mmap-1"><span class="nav-number">2.1.</span> <span class="nav-text">mmap</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#msync"><span class="nav-number">2.2.</span> <span class="nav-text">msync</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#madvise"><span class="nav-number">2.3.</span> <span class="nav-text">madvise</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#关于透明大页"><span class="nav-number">2.4.</span> <span class="nav-text">关于透明大页</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Linux-的物理内存管理"><span class="nav-number">3.</span> <span class="nav-text">Linux 的物理内存管理</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#PageCache-和缺页中断"><span class="nav-number">3.1.</span> <span class="nav-text">PageCache 和缺页中断</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#NUMA-架构"><span class="nav-number">4.</span> <span class="nav-text">NUMA 架构</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#numactl"><span class="nav-number">4.1.</span> <span class="nav-text">numactl</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#numa-和-swap"><span class="nav-number">4.2.</span> <span class="nav-text">numa 和 swap</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#shm"><span class="nav-number">5.</span> <span class="nav-text">shm</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#访存问题"><span class="nav-number">6.</span> <span class="nav-text">访存问题</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#TLB-miss"><span class="nav-number">6.1.</span> <span class="nav-text">TLB miss</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#TLB-Shootdown"><span class="nav-number">6.2.</span> <span class="nav-text">TLB Shootdown</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">7.</span> <span class="nav-text">Reference</span></a></li></ol></div>
             
 
           </div>
