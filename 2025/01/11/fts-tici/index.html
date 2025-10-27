@@ -99,7 +99,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="主要介绍 TiCI 的一些实现。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2025-10-15T15:51:24.429Z">
+<meta property="og:updated_time" content="2025-10-26T05:17:27.868Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="TiCI 的设计考量">
 <meta name="twitter:description" content="主要介绍 TiCI 的一些实现。">
@@ -380,20 +380,47 @@
         <p>主要介绍 TiCI 的一些实现。</p>
 <a id="more"></a>
 
-
-<h1 id="写入路径"><a href="#写入路径" class="headerlink" title="写入路径"></a>写入路径</h1><ul>
+<h1 id="TiCI-要解决什么问题？"><a href="#TiCI-要解决什么问题？" class="headerlink" title="TiCI 要解决什么问题？"></a>TiCI 要解决什么问题？</h1><p>TiFlash 中已经实现了 Vector Index 和 Inverted Index 了，在一些版本中也支持 FTS 了。但是在 TiFlash 中使用这些索引存在一些问题：</p>
+<ul>
+<li>TiFlash 中的 Region 的分布随 TiKV 而定，这导致优化空间较小<ul>
+<li>Region 的迁入和迁出会导致重建 Inverted Index 字典和 HNSW 图，开销大。</li>
+</ul>
+</li>
+<li>TiFlash 的并发较低，但本质上，并发低的原因还是和索引有关</li>
+<li>TiFlash 默认提供了强一致和 SI 的隔离级别，但是这些特性并不是全部必须的，而它们又带来很高的成本，如 MVCC、Learner Read 等</li>
+</ul>
+<h1 id="写入路径"><a href="#写入路径" class="headerlink" title="写入路径"></a>写入路径</h1><h2 id="涉及到的问题"><a href="#涉及到的问题" class="headerlink" title="涉及到的问题"></a>涉及到的问题</h2><ul>
 <li>确定 Compaction 的策略</li>
 <li>Compaction vs Split</li>
 <li>S3 的 SlowDown</li>
 </ul>
 <h2 id="数据源"><a href="#数据源" class="headerlink" title="数据源"></a>数据源</h2><h3 id="Push-or-Pull"><a href="#Push-or-Pull" class="headerlink" title="Push or Pull"></a>Push or Pull</h3><p>TiCI 设计主要以 TiCDC 作为数据源。所以一开始是每个 Shard 会不停 Poll S3 上的某个 prefix，复杂度是 <code>O(shard_count*log_count)</code>。为了减小 LIST 的读放大，我们对 CDC 的日志进行了编号，这样只需要不停 GET 就行。</p>
+<h3 id="延迟"><a href="#延迟" class="headerlink" title="延迟"></a>延迟</h3><p>根据 <a href="/2025/01/18/percolator-2/">TiCDC 的原理</a>，基于 TiCDC 为数据源，很难将延迟降低到秒以内。</p>
 <h1 id="MetaService"><a href="#MetaService" class="headerlink" title="MetaService"></a>MetaService</h1><h2 id="Outline"><a href="#Outline" class="headerlink" title="Outline"></a>Outline</h2><h2 id="Shard"><a href="#Shard" class="headerlink" title="Shard"></a>Shard</h2><p>在 shard 的大小默认设置为 4 GiB，这样对于 80 TiB 的集群规模，会有 20k+ 个 shard。一个 shard 中有多个 fragment，fragment 之间是可以 overlap 的，我们也按照传统方法引入了 leveled compaction。</p>
-<p>过多（小）的 shard 和 fragment，对于查询是不利的：</p>
+<p>过多的 shard/fragment 意味更小的 shard/fragment 的 size，这对于查询是不利的：</p>
 <ul>
 <li>过多的 fragment，会导致每个 fragment 中的词典会很小，压缩率不高</li>
 <li>此外，一个查询如果覆盖多个 fragment，就需要按照每个 fragment 的词典都过滤一遍，再 merge，这样并发上不去</li>
 </ul>
 <h3 id="Split-amp-Compaction"><a href="#Split-amp-Compaction" class="headerlink" title="Split &amp; Compaction"></a>Split &amp; Compaction</h3><p>Split 和 Compaction 存在冲突。</p>
+<h1 id="tantivy"><a href="#tantivy" class="headerlink" title="tantivy"></a>tantivy</h1><h2 id="保序"><a href="#保序" class="headerlink" title="保序"></a>保序</h2><h3 id="如果要支持逆向？"><a href="#如果要支持逆向？" class="headerlink" title="如果要支持逆向？"></a>如果要支持逆向？</h3><p>Tantivy 的倒排表文件是顺序压缩存储的，例如：</p>
+<ul>
+<li>doc_id 列表经过 delta-encoded<br>  如果要支持逆向，则需要保存两个方向的差值，十分麻烦</li>
+<li>然后通过 bit-packed 或 block-wise 压缩</li>
+<li>压缩的 Block 按顺序写入文件<br>  如果要支持逆向，则需要能定位到前一个 Block 的 offset。</li>
+<li>查找时通过 BlockReader 顺序解码</li>
+</ul>
+<p>这么做的目的是因为顺序访问能够提高吞吐量。而对于随机访问，tantivy 主要是通过如下方式进行快速的 seek：</p>
+<ul>
+<li>skiplist</li>
+</ul>
+<p>对于搜索引擎而言，存储空间通常比随机访问代价更便宜，尤其是 posting list 占比主要来自长尾词，常见高频词列表短，存两份并不会显著膨胀。</p>
+<p>为什么常见高频词反而消耗 posting list 的物理空间更小？</p>
+<ul>
+<li>因为足够高频，所以 delta-encode + bitpack 的优化效果非常好</li>
+<li>高频词可能是 Stopword，不会为它生成倒排表</li>
+<li>基于布尔逻辑，或者范围过滤的短路逻辑，常常能够跳过这些高频词的 posting list 的读取</li>
+</ul>
 
       
     </div>
@@ -548,7 +575,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">251</span>
+                <span class="site-state-item-count">253</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -561,7 +588,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">154</span>
+                <span class="site-state-item-count">156</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -654,7 +681,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#写入路径"><span class="nav-number">1.</span> <span class="nav-text">写入路径</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#数据源"><span class="nav-number">1.1.</span> <span class="nav-text">数据源</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Push-or-Pull"><span class="nav-number">1.1.1.</span> <span class="nav-text">Push or Pull</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#MetaService"><span class="nav-number">2.</span> <span class="nav-text">MetaService</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Outline"><span class="nav-number">2.1.</span> <span class="nav-text">Outline</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Shard"><span class="nav-number">2.2.</span> <span class="nav-text">Shard</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Split-amp-Compaction"><span class="nav-number">2.2.1.</span> <span class="nav-text">Split &amp; Compaction</span></a></li></ol></li></ol></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#TiCI-要解决什么问题？"><span class="nav-number">1.</span> <span class="nav-text">TiCI 要解决什么问题？</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#写入路径"><span class="nav-number">2.</span> <span class="nav-text">写入路径</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#涉及到的问题"><span class="nav-number">2.1.</span> <span class="nav-text">涉及到的问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#数据源"><span class="nav-number">2.2.</span> <span class="nav-text">数据源</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Push-or-Pull"><span class="nav-number">2.2.1.</span> <span class="nav-text">Push or Pull</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#延迟"><span class="nav-number">2.2.2.</span> <span class="nav-text">延迟</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#MetaService"><span class="nav-number">3.</span> <span class="nav-text">MetaService</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Outline"><span class="nav-number">3.1.</span> <span class="nav-text">Outline</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Shard"><span class="nav-number">3.2.</span> <span class="nav-text">Shard</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Split-amp-Compaction"><span class="nav-number">3.2.1.</span> <span class="nav-text">Split &amp; Compaction</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#tantivy"><span class="nav-number">4.</span> <span class="nav-text">tantivy</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#保序"><span class="nav-number">4.1.</span> <span class="nav-text">保序</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#如果要支持逆向？"><span class="nav-number">4.1.1.</span> <span class="nav-text">如果要支持逆向？</span></a></li></ol></li></ol></li></ol></div>
             
 
           </div>

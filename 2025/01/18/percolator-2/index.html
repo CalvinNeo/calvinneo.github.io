@@ -100,7 +100,7 @@
 <meta property="og:description" content="将 关于 TiKV、TiDB、TiFlash 的一些思考中关于 Percolator 事务的部分独立出来。">
 <meta property="og:locale" content="zh-Hans">
 <meta property="og:image" content="http://www.calvinneo.com/img/ti-arch-thought/consensus_order_txn_order.png">
-<meta property="og:updated_time" content="2025-01-18T16:59:15.825Z">
+<meta property="og:updated_time" content="2025-10-25T13:54:47.385Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="关于 Percolator 的进一步论述">
 <meta name="twitter:description" content="将 关于 TiKV、TiDB、TiFlash 的一些思考中关于 Percolator 事务的部分独立出来。">
@@ -445,10 +445,10 @@
 <li>不能<br>  参考“一个两难问题”</li>
 </ul>
 <h3 id="一个两难问题"><a href="#一个两难问题" class="headerlink" title="一个两难问题"></a>一个两难问题</h3><blockquote>
-<p>假设一个事务 [ST1, CT1] 准备提交了，它可以看到另一个事务 [ST2, ?]，并且 ST2 小于 ST1。请问此时它是否可以立即提交？</p>
+<p>假设一个事务 [ST1, CT1] 准备提交了，它可以看到另一个事务 [ST2, ?]，并且 ST2 小于 ST1。请问此时 ST1 事务是否可以立即提交？</p>
 </blockquote>
 <p>答案是不行，因为不知道 ST2 这个事务的 Commit TS 是多少。在一个异步系统中，这个消息总是可以被任意延迟的。</p>
-<p>在 Percolator 中的解决方式是：ST2 意味着会读到一个 Lock，所以 ST1 这个事务要先 Resolve Lock。</p>
+<p>在 Percolator 中的解决方式是：如果能看到 ST2，则意味着会读到一个 Lock，所以 ST1 这个事务要先 Resolve Lock。</p>
 <p>这个问题，就展现了事务序和共识序之间的相互关联。这就如同之前全序广播中论述的一样，核心是能够确保消息被不重不漏地编号，例如 TCP 的 seq 一样。共识系统通过日志的全序性来保障了这一点。</p>
 <h3 id="共识层和事务层的关系"><a href="#共识层和事务层的关系" class="headerlink" title="共识层和事务层的关系"></a>共识层和事务层的关系</h3><p>Percolator 事务提交模型中，commit_ts(R) &lt; start_ts(T) 的事务 R 对事务 T 可⻅。不满⾜该关系的事务为并发事务，并发事务如果访问相同的 key 将会导致其中⼀个事务会碰到 Lock ⽽回滚。因此，Percolator 本质上是一个 2PL 协议，因为一个事务会在 Prewrite 阶段尝试获得自己所有需要的锁。start_ts 此时被用来决议这些锁的 order。</p>
 <p>Raft 的 Read Index 模型中，一个读请求需要等到 applied_index 大于等于 read_index 时，才能读取数据。<strong>但并不保证是否能读到 <code>applied_index = x + 1</code> 时的数据</strong>。实际上无论是否读到，都不违背强一致读的原则。因为如果一个读 A 能读到 applied_index = x + 1，而另一个读 B happen after 读 A，那么读 B 一定会读到 <code>applied_index &gt;= x + 1</code> 的数据。</p>
@@ -468,40 +468,50 @@
 <ol>
 <li>不是原子的</li>
 <li>也不构成全序关系<br> 实际上也没必要，两个不相交的事务按照事务序本来可以并行 Commit 的，但因为要写到共识层，必须又要排出一个全序关系来。</li>
-<li>甚至一个事务的 commit_ts （相比某个特定事务）更小，而 index 更大<br> 下面会展示这种情况，并详细阐述。</li>
+<li>甚至一个事务的 commit_ts 相比别的事务更小，而 raft log index 更大<br> 下面会展示这种情况，并详细阐述。</li>
 </ol>
 <p>总而言之：</p>
 <ul>
 <li>Percolator 协议保证了事务层能够生成一个特定的排序，并且按照它的二阶段方式写入到共识层</li>
 <li>共识层保证了所有的副本都会应用该特定排序</li>
 </ul>
-<h4 id="共识层为事务层提供帮助"><a href="#共识层为事务层提供帮助" class="headerlink" title="共识层为事务层提供帮助"></a>共识层为事务层提供帮助</h4><p>目前 TiKV 通过一个 pd 分配一个全局的 tso 来作为事务的 start_ts 和 commit_ts，所以它们之间彼此构成全序关系。当然，实际上不同的事务可能具有同一个 commit_ts，但这并不影响下面的讨论。通过 start_ts 和 commit_ts 可以构建有依赖的事务之间偏序关系，也可以用来判断事务是否是 concurrent 的。如果在单个节点上串行地 commit 这些事务，则面临问题：</p>
+<h4 id="共识层为事务层提供帮助"><a href="#共识层为事务层提供帮助" class="headerlink" title="共识层为事务层提供帮助"></a>共识层为事务层提供帮助</h4><p>目前 TiKV 通过一个 pd 分配一个全局的 tso 来作为事务的 <code>start_ts</code> 和 <code>commit_ts</code>，所以它们之间构成全序关系。当然，实际上不同的事务可能具有同一个 <code>commit_ts</code>，但这并不影响下面的讨论。通过 <code>start_ts</code> 和 <code>commit_ts</code> 可以构建有依赖的事务之间偏序关系，也可以用来判断事务是否是 concurrent 的。如果在单个节点上串行地 commit 这些事务，则面临问题：</p>
 <ol>
-<li>整个系统毫无并行度<br> 这个应该算是 MultiRaft 的一个 bonus，正如后面讲的，如果没有 MultiRaft，同样可以做 partitioning。<br> 因此，TiKV 在多个线性一致的存储(Region)上储存这些事务，它保证了每个事务在每个 Region 上都遵循了 start_ts 和 commit_ts 所 imply 的顺序，也 Percolator 那一套。这样尽管各个 Region 之间是并发的了，但只要 Region 内遵循这个 order 就行了。<blockquote>
+<li>整个系统毫无并行度<br> 这个应该算是 MultiRaft 的一个 bonus，正如后面讲的，如果没有 MultiRaft，同样可以做 partitioning。<br> 因此，TiKV 在多个线性一致的存储，即 Region 上储存这些事务。它保证了每个事务在每个 Region 上都遵循了 <code>start_ts</code> 和 <code>commit_ts</code> 所 imply 的顺序，也 Percolator 那一套。这样尽管各个 Region 之间是并发的了，但只要 Region 内遵循这个 order 就行了。<blockquote>
 <p>当然，这个切分也未必是按照 Region 来，比如 CDC 会使用表来切分。无论按照哪种方式来切分，我觉得一个实现的要点是每个 shard 在调度上是不可以再分的了。比如一个 Region 的一部分数据在 store 1 上，另一部分数据在 store 2 上，这样做实际上会导致无论在 store 1 和 store 2 上都很难独立构建出该 Region 上数据的全序关系，比如 store 1 如果不和 store 2 交互，那么就很难知道 store 2 上还有没有 happen before 它的事务了。比如说，如果两个 store 上 apply 这个 Region 的 log 的进度不一样。</p>
 </blockquote>
 </li>
-<li>如何判断某个 tso 之前还有没有其他 Lock 或者 Write？<br> 因此，读事务会在取得 start_ts 后，再通过 ReadIndex 请求一下 Region Leader 上的 commit_index。那么假设在这之前 Region 上有写入任意的 Lock 或者 Write，都能被 ReadIndex 扫到。这样就保证了读事务能看到 start_ts 之前的所有修改。至于 start_ts 之后的也有 Lock 可以帮忙。<br> 同样考虑一个<a href="/2017/09/20/transaction/">Snapshot Isolation(SI)/一个两难问题</a>，这里不再详细展开具体内容。但 ReadIndex 提供了一个保证，就是截止到 read_index，这个 Region 上到底有没有 Write，是很确定的。我理解这实际上就是一种全序广播了。破坏这种全序广播可能会有严重后果，比如如果将 Write 乱序到 Lock 前面，则违反了 Percolator 事务的约束。我们实际上也没办法很好的处理，在“跨 Region 提交事务”中，就构造出了这样的场景。</li>
+<li>如何判断某个 tso 之前还有没有其他 Lock 或者 Write？<br> 因此，读事务会在取得自己的 start_ts 后，再通过 ReadIndex 请求一下 Region Leader 上的 commit_index。那么假设在这之前 Region 上有写入任意的 Lock 或者 Write，都能被 ReadIndex 扫到。这样就保证了读事务能看到 start_ts 之前的所有修改。至于 start_ts 之后的也有 Lock 可以帮忙。<br> 同样考虑一个<a href="/2017/09/20/transaction/">Snapshot Isolation(SI)/一个两难问题</a>，这里不再详细展开具体内容。但 ReadIndex 提供了一个保证，就是截止到 read_index，这个 Region 上到底有没有 Write，是很确定的。我理解这实际上就是一种全序广播了。破坏这种全序广播可能会有严重后果，比如如果将 Write 乱序到 Lock 前面，则违反了 Percolator 事务的约束。我们实际上也没办法很好的处理，在“跨 Region 提交事务”中，就构造出了这样的场景。</li>
 </ol>
 <p>此外，对于并发事务，共识层也会对它们之间排出一个串行的顺序，比如两个并发的事务不能同时 Commit，而要等到 Log 按序 apply 而这可能有点过强。诸如 ParallelRaft 或者 MultiPaxos 的算法允许并行 apply，可以解决此问题，但会导致 Leader 和 Follower 之间的 apply order 难以统一，从而无法实现 Follower Read。</p>
-<h4 id="共识层对并发事务的乱序"><a href="#共识层对并发事务的乱序" class="headerlink" title="共识层对并发事务的乱序"></a>共识层对并发事务的乱序</h4><p>刚才说过，共识层未必会按照事务序写入。这也很容易理解，因为取 start_ts 和 commit_ts 和真正写共识层不是原子的。<br>TiKV 事务在读取时，需要同时接收事务层和共识层的定序。为了满⾜线性⼀致读，需要⾸先带上 start_ts，发送⼀个 ReadIndexRequest 给对应的 Region，求出⼀个 applied_index。在实际实现中，start_ts 并⽆作⽤。<br>如下所示，Key a 和 Key b 属于两个事务。在事务提交前，可以看到或者得到的保证是：</p>
+<h4 id="共识层对并发事务的乱序"><a href="#共识层对并发事务的乱序" class="headerlink" title="共识层对并发事务的乱序"></a>共识层对并发事务的乱序</h4><p>刚才说过，共识层未必会按照事务序写入。这也很容易理解，因为取 <code>start_ts</code> 和 <code>commit_ts</code> 和真正写共识层不是原子的。<br>TiKV 事务在读取时，需要同时接收事务层和共识层的定序。为了满⾜线性⼀致读，需要⾸先带上 <code>start_ts</code>，发送⼀个 ReadIndexRequest 给对应的 Region，求出⼀个 applied_index。在实现中，<code>start_ts</code> 并⽆作⽤。<br>如下所示，Key a 和 Key b 属于两个事务。在事务提交前，可以看到或者得到的保证是：</p>
 <ol>
 <li>start_ts(a) &lt; commit_ts(a)</li>
 <li>start_ts(b) &lt; commit_ts(b)</li>
 <li>start_ts(a) &lt; start_ts(b)</li>
 <li>并且这两个是并发事务，也就是说 commit_ts(a) &gt; start_ts(b)</li>
 </ol>
-<p>共识层的序至少保证了同一个 key 的 prewrite 在 commit 前面。</p>
-<p>不妨假设 commit_ts 分别为 4 和 6，然后再假如以 (read_ts=7, read_index=202) 读取，如下所示。</p>
+<p>共识层的序至少保证了同一个 key 的 prewrite 在 commit 前面。并且共识层主要还保证了在所有副本中，看到的都是这个顺序。</p>
+<p>不妨假设 commit_ts 分别为 4 和 6，然后再假如以 (read_ts=7, read_index=202) 读取。如下所示，可以看到 Key a 的 commit_ts 更小，applied_index 却比 Key b 的更大，这并不违反上面事务的序：</p>
 <ol>
 <li>Key a：(start_ts: 1, applied_index: 100), (commit_ts: 4, applied_index: 210）</li>
 <li>Key b：(start_ts: 3, applied_index: 101), (commit_ts: 6, applied_index: 200)</li>
 </ol>
-<p>从事务层上讲，Key a 和 Key b 的写入对 read_ts=7 的读取事务可见，从共识层上讲 applied_index 等于 read_index，或者超过它的的任意时刻都可以读了。因此，此时可能读到一个锁和 Key b（刚好 apply 到 read_index），或者读到 Key a 和 Key b（apply 超过 read_index 很多，比如到 211 了）。前者需要 ResolveLock，实际上导致以新的 read_index 来重新读取。</p>
-<p>反过来讲，如果共识层给出下面的顺序，我们看到了中间的 a 或者 b 上有锁。因为这两个事务是并发事务，所以这也是 OK 的</p>
+<p>在这种情况下：</p>
+<ul>
+<li>从事务层上讲，Key a 和 Key b 的写入对 read_ts=7 的读取事务应当可见</li>
+<li>从共识层上讲，只要 applied_index 等于 read_index，或者超过它的的任意时刻都可以读了。因此 <code>applied_index: 210</code> 这个条目通过 ReadIndex 就可能读不到</li>
+</ul>
+<p>因此，此时可能：</p>
+<ul>
+<li>读到一个锁和 Key b<br>  此时，刚好 apply 到 read_index=202。<br>  需要 ResolveLock，实际上导致以新的 read_index 来重新读取。</li>
+<li>或者读到 Key a 和 Key b<br>  此时，apply 超过 read_index=202 很多，比如到 211 了。</li>
+</ul>
+<p>但以上两种情况都符合事务隔离的要求。</p>
+<p>反过来讲，如果共识层给出下面的顺序，Key a 的 commit_ts 更小，applied_index 也更小。我们可以看到中间的 a 或者 b 上有锁。因为这两个事务是并发事务，所以这也是 OK 的</p>
 <ol>
 <li>Key a：(start_ts: 1, applied_index: 100), (commit_ts: 4, applied_index: 200）</li>
-<li>Key b：(start_ts: 3, applied_index: 101), (commit_ts: 6, applied_index: 210)</li>
+<li>Key b：(start_ts: 3, applied_index: 101), (commit_ts: 6, applied_index: 210)<br> 因为 read_index = 202，则 ReadIndex 可能读不到 Key b 的提交，却能看到它的锁</li>
 </ol>
 <p><img src="/img/ti-arch-thought/consensus_order_txn_order.png"></p>
 <p>可以看到，尽管将事务拆到了 N 个线性一致的存储上执行，并且这些存储可能对并发事务任意定序，但最终读到的结果还是满足了线性一致，以及事务隔离层的要求的。</p>
@@ -512,14 +522,20 @@
 <p>能不能在看到第一个 write 记录时“提交”该事务的所有 key？</p>
 </blockquote>
 <p>这里的“提交”指的是写入下层存储，比如将 Default 写过去，但并不包含删除 Lock 等。</p>
-<p>现在比如考虑两个事务，假设 a 在一个 region r1，b 和 c 在另一个 region r2 让：</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">commit a(applied_index@r1=100), commit b(applied_index@r2=300), commit_ts=4</span><br><span class="line">                                commit c(applied_index@r2=200), commit_ts=1</span><br></pre></td></tr></table></figure>
+<p>考虑两个事务 T1 和 T2，涉及三个 key：a/b/c。假设 a 在一个 region r1，b 和 c 在另一个 region r2：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">            region r1                         region r2</span><br><span class="line">T1: commit a(applied_index@r1=100), commit b(applied_index@r2=300), commit_ts=4</span><br><span class="line">T2:                                 commit c(applied_index@r2=200), commit_ts=1</span><br></pre></td></tr></table></figure>
 
-<p>从事务层上来看，一定有读事务能看到 c，或者 a、b、c。现在如果看到 a 提交了，能不能跑到 b 的 region 上把 b 也提交了呢？我认为是不可以的，因为从共识层上来说，b 在 c 的后面被 commit 的，如果用 (start_ts &gt; 4, read_index = 250) 去读的话，可能读到 lock b，甚至可能连 lock b 也还没被写入，当然也有可能读到 b。但如果我们在 apply a 的 write 记录的时候发现了 a 被 write 了，就直接写 b 的 write 记录，那么就导致 b 一定在 c 前面就能被读到，实际上违反了共识层的序。</p>
+<p>从事务层上来看，一定有读事务能看到 c，或者 a、b、c。但如果看到 a 提交了，能不能跑到 b 所在的 region r2 上把 b 也提交了呢？</p>
+<p>我认为是不可以的，因为从共识层上来说，b 的 commit 是在 c 的后面被写入的，如果用 <code>(start_ts &gt; 4, read_index = 250)</code> 去读的话，可能：</p>
+<ul>
+<li>当然有很大可能读到 b</li>
+<li>但也有可能读到 lock b，甚至可能连 lock b 也还没被写入<br>  虽然 start_ts &gt; 4，但是 read_index = 250，如果刚好在 250 返回了，那肯定是看不到 300 的 commit 记录的。</li>
+</ul>
+<p>但如果我们“跨 Region 提交事务”了，即在 apply a 的 write 记录的时候发现了 a 被 write 了，就直接写 b 的 write 记录。那么就导致 b 一定在 c 前面就能被读到，实际上违反了共识层的序，造成副本间不一致，违反线性一致读。</p>
 <p>具体来说，不妨考虑 client 先后从 Learner 和 Leader 读：</p>
 <ol>
-<li>在 Learner 上，它使用 read_index = 250 读，但是因为 commit a 已经被 apply 的原因，所以它一定读到了 commit b。<br> 当然细究下来，因为 lock + default 是原子的，所以实际上 write 无法被正确执行。但这就是 orphan write key 的问题，之前在处理 multi rocks 的时候就解过，我觉得很复杂。在这个场景下，我觉得免不了要去进行等待。在异步系统中的等待，我觉得可以理解为是一种活性问题。</li>
-<li>在 Leader 上，此时 Leader apply 到了 260，所以此时 Leader 上一定没有 commit b，这导致它读不到 commit b。</li>
+<li>在 Learner 上，它使用 <code>read_index = 250</code> 读。但是因为在 region r1 中我们跨 region 提交了 b，所以一定也能读到 commit b<br> 当然细究下来，因为 lock + default 是原子的，所以实际上 write 无法被正确执行。但这就是 orphan write key 的问题，之前在处理 multi rocks 的时候就解过，实际是很复杂。我觉得在这个场景下，免不了要去进行等待。这种在异步系统中的等待，可以理解为是一种活性问题。</li>
+<li>在 Leader 上，此时 Leader 只 apply 到了 260。并且，Leader 上没有 region，所以没法跨 region 提交。所以此时 Leader 上一定没有 commit b，这导致它读不到 commit b。</li>
 </ol>
 <p>这里线性一致读就被破坏了。反之，如果按共识序 commit，则不会有这种情况。具体就不展开了。</p>
 <h4 id="单-Region-上提交事务？"><a href="#单-Region-上提交事务？" class="headerlink" title="单 Region 上提交事务？"></a>单 Region 上提交事务？</h4><blockquote>
@@ -682,7 +698,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">251</span>
+                <span class="site-state-item-count">253</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -695,7 +711,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">154</span>
+                <span class="site-state-item-count">156</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
