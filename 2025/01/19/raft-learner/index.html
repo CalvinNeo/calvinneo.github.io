@@ -99,7 +99,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="TiFlash 的整个 replication 机制建立在 Raft learner 协议之上。 在本文中介绍 Raft learner 相关的 case 以及优化，主要包括：  涉及 Learner 的活性问题 Learner Snapshot Learner Read 作为前置，还会说明 Leader 的 Lease Read 作为直接的扩展，还会说明 Stale Read">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2025-03-14T04:52:06.704Z">
+<meta property="og:updated_time" content="2025-10-30T17:00:30.833Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Raft learner">
 <meta name="twitter:description" content="TiFlash 的整个 replication 机制建立在 Raft learner 协议之上。 在本文中介绍 Raft learner 相关的 case 以及优化，主要包括：  涉及 Learner 的活性问题 Learner Snapshot Learner Read 作为前置，还会说明 Leader 的 Lease Read 作为直接的扩展，还会说明 Stale Read">
@@ -433,13 +433,34 @@
 <li>否则，下一个尝试对这个 range 读写的 node 会成为 leader</li>
 </ol>
 <h1 id="Learner-read"><a href="#Learner-read" class="headerlink" title="Learner read"></a>Learner read</h1><h2 id="关于读"><a href="#关于读" class="headerlink" title="关于读"></a>关于读</h2><p>Raft 的一个问题就是读的时候无论是 Leader 还是 Follower 都需要 Read Index。比如，对 Leader 而言，它需要问 quorum 自己当前是否还是 Leader。TiKV 一般 Leader Read 提供两种方案，第一种是 read_local，也就是 Leader 节点上 lease 读，另一种是 read_index，也就是在不确定自己是否还是 Leader 的时候，进行 ReadIndex。</p>
-<h2 id="Follower-Read"><a href="#Follower-Read" class="headerlink" title="Follower Read"></a>Follower Read</h2><p>TiDB 支持<a href="https://docs.pingcap.com/zh/tidb/stable/follower-read" target="_blank" rel="noopener">多种读取方式</a>，例如最近 Peer、Leader、Follower、Learner、自适应等多种模式，这些依赖于 Follower Read，在这之前都需要从 Raft Leader 读取。</p>
+<h2 id="Follower-Read"><a href="#Follower-Read" class="headerlink" title="Follower Read"></a>Follower Read</h2><p>TiDB 支持<a href="https://docs.pingcap.com/zh/tidb/stable/follower-read" target="_blank" rel="noopener">多种读取方式</a>，例如最近 Peer、Leader、Follower、Learner、自适应等多种模式，这些依赖于 Follower Read。</p>
 <p>不同于 ParallelRaft 和 MultiPaxos 的部分实现，TiKV 会串行地 apply raft log。</p>
 <ol>
-<li>这样的好处是，更容易通过 Read Index 实现 Follower Read 了。TiKV 在这一点上行得通，主要还是因为它的数据和 Raft Group 绑定的缘故。也就是以 scheduler 为代价来实现 Partitioning，从而减少各个 Raft Group 的压力。</li>
+<li>这样的好处是，更容易通过 Read Index 实现 Follower Read 了。TiKV 能这么 Follower Read，主要还是因为它的数据和 Raft Group 绑定的缘故。进一步说，TiKV 以 scheduler 为代价来实现 Partitioning，从而减少各个 Raft Group 的压力。</li>
 <li>这样的坏处是，引入了更强的全序关系。因为我们实现共识层的目的是服务上层的事务层，而事务层本身就允许并行事务以任意的顺序被提交，所以在共识层排成强序，实际上是多余的。当然，Partitioning 分成多个 Raft Group 能减少这部分的强序关系的数量。</li>
 </ol>
 <p>总的来说，TiKV 实现的 Follower Read，是通常被称作 <a href="https://www.cockroachlabs.com/docs/v23.2/follower-reads" target="_blank" rel="noopener">Strong Follower Read</a> 的类型。</p>
+<h3 id="Follower-Read-的流程"><a href="#Follower-Read-的流程" class="headerlink" title="Follower Read 的流程"></a>Follower Read 的流程</h3><p>从 <a href="https://github.com/tikv/tikv/issues/18417" target="_blank" rel="noopener">https://github.com/tikv/tikv/issues/18417</a> 来：</p>
+<ol>
+<li>A follower read operation must return consistent, up-to-date data, meaning it has to read the latest committed values.</li>
+<li>To achieve this, when a follower receives a read request, it first needs to send a “read index” request to the current leader to get the latest Raft commit index.</li>
+<li>When the leader receives a read index request, it must confirm its leadership. It does this by broadcasting heartbeats to its peers.</li>
+<li>If the leader receives heartbeat responses from a majority of peers, it confirms it is still the valid leader. It then sends a “read index response” back to the requesting follower, containing the latest commit index.</li>
+<li>After the follower receives the read index response, it waits for its apply index to reach (or exceed) the commit index received from the leader. This ensures the follower’s state includes all changes up to that commit index.</li>
+<li>Once the follower’s apply index is sufficiently advanced, it takes a snapshot and uses this snapshot to serve the follower read request (e.g., a coprocessor request or a batch_get request).</li>
+</ol>
+<h3 id="Follower-Read-是一种特殊的-Leader-Read"><a href="#Follower-Read-是一种特殊的-Leader-Read" class="headerlink" title="Follower Read 是一种特殊的 Leader Read"></a>Follower Read 是一种特殊的 Leader Read</h3><p>如果没有 Follower Read，则需要从 Raft Leader 读取。<strong>但是 Follower Read 也需要通过 Read Index 请求 Leader</strong>。虽然下面可以看到有很多优化可以减少 Read Index 的次数，例如 Batch Read Index，但是只要是强一致读，就没有办法完全去掉。</p>
+<p>我倾向于认为 Follower Read 是一种特殊的 Leader Read，只是由 Follower 代替了大部分读的“苦力活”，但最基本的线性一致性，仍然需要通过 Read Index 来保证。</p>
+<h3 id="Follower-Read-真的线性一致么？"><a href="#Follower-Read-真的线性一致么？" class="headerlink" title="Follower Read 真的线性一致么？"></a>Follower Read 真的线性一致么？</h3><p>假设：</p>
+<ul>
+<li>两个 Follower F1 和 F2 上都进行了 read index</li>
+<li>leader 都返回了同一个 commit_index</li>
+<li>F1 比较快，apply 到了 commit_index + 10 返回给了客户端</li>
+<li>F2 比较慢，apply 到了 commit_index + 1 返回给了客户端</li>
+</ul>
+<p>那么对于客户端而言，他先看到了 commit_index + 10 的数据，后看到了 commit_index + 1 的数据，看上去数据回退了，一个较早的读返回了更“未来”的值，这不会违反线性一致么？</p>
+<p>答案是，依然满足！因为 F1 和 F2 上的两个读是肯定是并发读。如果假设 F1 和 F2 不是并发读，如果 F1 返回了 commit_index + 10，那么 F2 再 Read Index，必然是返回至少 commit_index + 10 的。所以 Follower Read 真的线性一致！</p>
+<p>关于这一点，<a href="https://tanxinyu.work/consistency-and-consensus/" target="_blank" rel="noopener">https://tanxinyu.work/consistency-and-consensus/</a> 上论述更为全面。</p>
 <h2 id="Non-stale-Read"><a href="#Non-stale-Read" class="headerlink" title="Non-stale Read"></a>Non-stale Read</h2><p>从共识层上来讲，强一致或者说线性一致有明确的定义。<a href="https://www.cockroachlabs.com/docs/v23.2/architecture/transaction-layer" target="_blank" rel="noopener">CRDB</a>将其“推广”到事务层之上，也就是归结到所谓的 non-stale 读上。因为 CRDB 只有 leaseholder 也就是所谓的 Leader 能服务读请求。不过还是推广到有 Follower Read 的场景下。此时，在任意的节点上：</p>
 <ol>
 <li>在 SERIALIZABLE 下，读事务应该能看到在<strong>它之前</strong>已经提交了的所有的写事务。这里的“<strong>它之前</strong>”我理解取决于如何给事务排序，但至少要在事务的第一个读之前。比如 Percolator 模型中就是 start_ts。</li>
@@ -455,12 +476,12 @@
 </ol>
 <p>使用 Stale Read 需要 NTP 的支持。</p>
 <p>所以它并不是“弱一致读”，无论从哪一个节点返回的结果都是一致的，不会出现 A 返回 1000 笔记录，而 B 返回 1111 笔记录的情况。</p>
-<h2 id="Learner-Read"><a href="#Learner-Read" class="headerlink" title="Learner Read"></a>Learner Read</h2><p>不同于 Follower，Learner 不是 Voter，没有选举功能。所以 Learner Read 和 Follower Read 有不同。<br>Learner Read 在 TiFlash 场景下更为丰富，在 TiFlash 章节讨论。</p>
+<h2 id="Learner-Read"><a href="#Learner-Read" class="headerlink" title="Learner Read"></a>Learner Read</h2><p>不同于 Follower，Learner 不是 Voter，没有选举功能。所以 Learner Read 和 Follower Read 有不同。</p>
 <h3 id="Learner-Read-和-commit-ts"><a href="#Learner-Read-和-commit-ts" class="headerlink" title="Learner Read 和 commit_ts"></a>Learner Read 和 commit_ts</h3><p>即使有在 read index 的时候推进 max ts 的机制，依然会发生在收到 Leader 关于带有 read_ts 的 Read Index 请求的回复后，在 Wait Index 超过返回的 applied_index 之后，看到具有更小的 commit_ts 的提交。但这种情况并不会导致问题，因为在 applied_index 之前，我们至少可以看到对应的锁。</p>
-<p>比如 read_ts 是 10，返回了 applied_index 是 1000。那么在 apply 到 1001 时，可能它对应了一个 commit_ts 为 5 的事务。这里可以参考<a href="/2025/01/18/percolator-2/">我对并发事务的讨论</a>。</p>
+<p>比如 read_ts 是 10，返回了 applied_index 是 1000。那么在 apply 到 1001 时，可能它对应了一个 commit_ts 为 5 的事务。这里可以参考我<a href="/2025/01/18/percolator-2/">对并发事务的讨论</a>。</p>
 <h4 id="Learner-Read-和乱序-apply"><a href="#Learner-Read-和乱序-apply" class="headerlink" title="Learner Read 和乱序 apply"></a>Learner Read 和乱序 apply</h4><p>如果将 Data Range 和 Raft Group 分开，仍然是可以实现 Learner Read 的。<strong>因为本质上 Learner Read 是基于 RSM 做的</strong>。<br>假如 Data Range 和 Raft Group 不绑定了，一个 Raft Group 会维护多个 Data Range 上的数据。但如果把 Data Range 看成一个 RSM，那这种架构就类似于一个 Raft Group 去管理多个 RSM。我们在 Data Range 上维护一个 index，应该就行了。</p>
 <p>在<a href="/2017/09/21/distributed-consistency/">分布式一致性详解</a>中的“线性一致与提交顺序”中，我们进一步进行了说明。</p>
-<h2 id="Read-index"><a href="#Read-index" class="headerlink" title="Read index"></a>Read index</h2><p>TiFlash 自己给自己发送一个 ReadIndex Command，后者会触发一个 ReadIndex Message。为什么要这么做呢？因为走 ReadIndex Command 的链路才是完整的，否则会丢掉包括要求 Concurrency manager 推高 max_ts 的部分。</p>
+<h2 id="TiFlash-对-Read-index-的实现"><a href="#TiFlash-对-Read-index-的实现" class="headerlink" title="TiFlash 对 Read index 的实现"></a>TiFlash 对 Read index 的实现</h2><p>TiFlash 自己给自己发送一个 ReadIndex Command，后者会触发一个 ReadIndex Message。为什么要这么做呢？因为走 ReadIndex Command 的链路才是完整的，否则会丢掉包括要求 Concurrency manager 推高 max_ts 的部分。</p>
 <ol>
 <li>对 Leader，会检查 Lease 并续约，之后再 Read</li>
 <li>对 Follower，会推动 Raft 发送 RaftIndex 类型的 RaftMessage 给 Leader。这个 RaftMessage 包含一个 raft_cmdpb::ReadIndexRequest 作为 entry.data。</li>
@@ -638,7 +659,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">253</span>
+                <span class="site-state-item-count">254</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -651,7 +672,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">156</span>
+                <span class="site-state-item-count">157</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -744,7 +765,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Learner-的总体作用"><span class="nav-number">1.</span> <span class="nav-text">Learner 的总体作用</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Learner-peer"><span class="nav-number">2.</span> <span class="nav-text">Learner peer</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#活性"><span class="nav-number">2.1.</span> <span class="nav-text">活性</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Add-Learner"><span class="nav-number">2.1.1.</span> <span class="nav-text">Add Learner</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Orphan-Learner"><span class="nav-number">2.1.2.</span> <span class="nav-text">Orphan Learner</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Snapshot"><span class="nav-number">2.2.</span> <span class="nav-text">Snapshot</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Follower-Replication-和-Follower-Snapshot"><span class="nav-number">2.2.1.</span> <span class="nav-text">Follower Replication 和 Follower Snapshot</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Lease-read"><span class="nav-number">3.</span> <span class="nav-text">Lease read</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Why-Lease？"><span class="nav-number">3.1.</span> <span class="nav-text">Why Lease？</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#是否有单独的-Lease-Leader？"><span class="nav-number">3.2.</span> <span class="nav-text">是否有单独的 Lease Leader？</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Lease-绑定-node-还是-raft-group？"><span class="nav-number">3.3.</span> <span class="nav-text">Lease 绑定 node 还是 raft group？</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Learner-read"><span class="nav-number">4.</span> <span class="nav-text">Learner read</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#关于读"><span class="nav-number">4.1.</span> <span class="nav-text">关于读</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Follower-Read"><span class="nav-number">4.2.</span> <span class="nav-text">Follower Read</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Non-stale-Read"><span class="nav-number">4.3.</span> <span class="nav-text">Non-stale Read</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Stale-Read"><span class="nav-number">4.4.</span> <span class="nav-text">Stale Read</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Learner-Read"><span class="nav-number">4.5.</span> <span class="nav-text">Learner Read</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Learner-Read-和-commit-ts"><span class="nav-number">4.5.1.</span> <span class="nav-text">Learner Read 和 commit_ts</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#Learner-Read-和乱序-apply"><span class="nav-number">4.5.1.1.</span> <span class="nav-text">Learner Read 和乱序 apply</span></a></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Read-index"><span class="nav-number">4.6.</span> <span class="nav-text">Read index</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Batch-read-index"><span class="nav-number">4.6.1.</span> <span class="nav-text">Batch read index</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Remote-Read-机制"><span class="nav-number">4.7.</span> <span class="nav-text">Remote Read 机制</span></a></li></ol></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Learner-的总体作用"><span class="nav-number">1.</span> <span class="nav-text">Learner 的总体作用</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Learner-peer"><span class="nav-number">2.</span> <span class="nav-text">Learner peer</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#活性"><span class="nav-number">2.1.</span> <span class="nav-text">活性</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Add-Learner"><span class="nav-number">2.1.1.</span> <span class="nav-text">Add Learner</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Orphan-Learner"><span class="nav-number">2.1.2.</span> <span class="nav-text">Orphan Learner</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Snapshot"><span class="nav-number">2.2.</span> <span class="nav-text">Snapshot</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Follower-Replication-和-Follower-Snapshot"><span class="nav-number">2.2.1.</span> <span class="nav-text">Follower Replication 和 Follower Snapshot</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Lease-read"><span class="nav-number">3.</span> <span class="nav-text">Lease read</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Why-Lease？"><span class="nav-number">3.1.</span> <span class="nav-text">Why Lease？</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#是否有单独的-Lease-Leader？"><span class="nav-number">3.2.</span> <span class="nav-text">是否有单独的 Lease Leader？</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Lease-绑定-node-还是-raft-group？"><span class="nav-number">3.3.</span> <span class="nav-text">Lease 绑定 node 还是 raft group？</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Learner-read"><span class="nav-number">4.</span> <span class="nav-text">Learner read</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#关于读"><span class="nav-number">4.1.</span> <span class="nav-text">关于读</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Follower-Read"><span class="nav-number">4.2.</span> <span class="nav-text">Follower Read</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Follower-Read-的流程"><span class="nav-number">4.2.1.</span> <span class="nav-text">Follower Read 的流程</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Follower-Read-是一种特殊的-Leader-Read"><span class="nav-number">4.2.2.</span> <span class="nav-text">Follower Read 是一种特殊的 Leader Read</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Follower-Read-真的线性一致么？"><span class="nav-number">4.2.3.</span> <span class="nav-text">Follower Read 真的线性一致么？</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Non-stale-Read"><span class="nav-number">4.3.</span> <span class="nav-text">Non-stale Read</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Stale-Read"><span class="nav-number">4.4.</span> <span class="nav-text">Stale Read</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Learner-Read"><span class="nav-number">4.5.</span> <span class="nav-text">Learner Read</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Learner-Read-和-commit-ts"><span class="nav-number">4.5.1.</span> <span class="nav-text">Learner Read 和 commit_ts</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#Learner-Read-和乱序-apply"><span class="nav-number">4.5.1.1.</span> <span class="nav-text">Learner Read 和乱序 apply</span></a></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#TiFlash-对-Read-index-的实现"><span class="nav-number">4.6.</span> <span class="nav-text">TiFlash 对 Read index 的实现</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Batch-read-index"><span class="nav-number">4.6.1.</span> <span class="nav-text">Batch read index</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Remote-Read-机制"><span class="nav-number">4.7.</span> <span class="nav-text">Remote Read 机制</span></a></li></ol></li></ol></div>
             
 
           </div>

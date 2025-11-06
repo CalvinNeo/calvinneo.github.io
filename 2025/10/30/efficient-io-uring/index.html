@@ -1,0 +1,1288 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="Linux,FileSystem," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="通过 https://kernel.dk/io_uring.pdf 简单学习下 io_uring。">
+<meta name="keywords" content="Linux,FileSystem">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Efficient IO with io_uring 学习">
+<meta property="og:url" content="http://www.calvinneo.com/2025/10/30/efficient-io-uring/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="通过 https://kernel.dk/io_uring.pdf 简单学习下 io_uring。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2025-11-06T15:16:59.866Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Efficient IO with io_uring 学习">
+<meta name="twitter:description" content="通过 https://kernel.dk/io_uring.pdf 简单学习下 io_uring。">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2025/10/30/efficient-io-uring/"/>
+
+
+
+
+
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5487541356791902"
+     crossorigin="anonymous"></script>
+  <title>Efficient IO with io_uring 学习 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2025/10/30/efficient-io-uring/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                Efficient IO with io_uring 学习
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2025-10-30T22:20:13+08:00">
+                2025-10-30
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>通过 <a href="https://kernel.dk/io_uring.pdf" target="_blank" rel="noopener">https://kernel.dk/io_uring.pdf</a> 简单学习下 io_uring。</p>
+<a id="more"></a>
+
+<h1 id="1-0-Introduction"><a href="#1-0-Introduction" class="headerlink" title="1.0 Introduction"></a>1.0 Introduction</h1><p>Linux 的读写 API 经历了：</p>
+<ul>
+<li><p>read</p>
+</li>
+<li><p>pread：增加了 offset</p>
+</li>
+<li><p>preadv：offset 是 iovec 的形式，就是支持分散读</p>
+  <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">iovec</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">    <span class="keyword">void</span> __user *iov_base;</span><br><span class="line">    <span class="keyword">__kernel_size_t</span> iov_len;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure></li>
+<li><p>preadv2：加了 flags<br>  可以参考 <a href="https://www.man7.org/linux/man-pages/man2/preadv2.2.html" target="_blank" rel="noopener">https://www.man7.org/linux/man-pages/man2/preadv2.2.html</a></p>
+</li>
+</ul>
+<p>但上述的 API 都是同步的。posix 有 <code>aio_</code> 系列的 API 标准，但是没啥人用，性能也不好。</p>
+<p>Linux 有个 libaio，它和 POSIX 的 <code>aio_</code> 系列不是一个东西。但它也有问题：</p>
+<ul>
+<li><p>它要求 O_DIRECT，不然就和同步调用没啥区别。而 O_DIRECT 会 bypass cache，并且有严格的对齐要求，所以用途受限制。</p>
+</li>
+<li><p>即使满足 async 的所有条件，最终也不一定是 async 的。比如：</p>
+<ul>
+<li>如果要修改元数据，可能会 block</li>
+<li>storage device 的 request slots 的数量是固定的<br>  这里的 request slots 表示 storage device 同时可以处理的并发数。<br>  传统存储协议如 SATA、SAS 中，只有一个命令队列，存放未完成的 io，它的长度就是 io depth。如果下层 storage device 的 request slots 数量小于 io depth，那么 io 请求就可能在 io 队列中等待。<br>  NVMe SSD 支持多个 Submission Queues (SQ) 和 Completion Queues (CQ)，每个 SQ 条目可对应一个正在执行的 I/O 命令。比如有 64 个 queue，每个 queue 深度是 1024，那么理论上最多可并行执行 64 × 1024 = 65536 个命令。</li>
+</ul>
+</li>
+<li><p>提交一个 io 需要复制 64 + 8 bytes。完成一个 io 需要复制 32 bytes。</p>
+  <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">iocb</span> &#123;</span></span><br><span class="line">   __u64   aio_data;</span><br><span class="line">   __<span class="function">u32   <span class="title">PADDED</span><span class="params">(aio_key, aio_rw_flags)</span></span>;</span><br><span class="line">   __u16   aio_lio_opcode;</span><br><span class="line">   __s16   aio_reqprio;</span><br><span class="line">   __u32   aio_fildes;</span><br><span class="line">   __u64   aio_buf;</span><br><span class="line">   __u64   aio_nbytes;</span><br><span class="line">   __s64   aio_offset;</span><br><span class="line">   __u64   aio_reserved2;</span><br><span class="line">   __u32   aio_flags;</span><br><span class="line">   __u32   aio_resfd;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">io_event</span> &#123;</span></span><br><span class="line">    __u64   data;</span><br><span class="line">    __u64   obj;</span><br><span class="line">    __s64   res;</span><br><span class="line">    __s64   res2;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>  Depending on your IO size, this can definitely be noticeable.<br>  IO always requires at least two system calls (submit + wait-for-completion), which in these post spectre/meltdown days is a serious slowdown.</p>
+</li>
+</ul>
+<h1 id="2-0-Improving-the-status-quo"><a href="#2-0-Improving-the-status-quo" class="headerlink" title="2.0 Improving the status quo"></a>2.0 Improving the status quo</h1><p>一开始有一些改良 libaio 的工作：</p>
+<ul>
+<li>If you can extend and improve an existing interface, that’s preferable to providing a new one.</li>
+<li>It’s a lot less work in general.</li>
+</ul>
+<p>libaio 主要有三个接口：</p>
+<ul>
+<li>io_setup</li>
+<li>io_submit 用来提交一个 io</li>
+<li>io_getevents 用来等待完成，并收获结果</li>
+</ul>
+<p>后面觉得，这种改良会把接口改得非常复杂，而且只能解决上面列出的一个问题。</p>
+<h1 id="3-0-New-interface-design-goals"><a href="#3-0-New-interface-design-goals" class="headerlink" title="3.0 New interface design goals"></a>3.0 New interface design goals</h1><ul>
+<li>Easy to use, hard to misuse.</li>
+<li>Extendable. 希望这个接口不止支持 block oriented IO。对于网络，和非块存储设备，它都能适用。</li>
+<li>Feature rich. Linux aio caters to a subset (of a subset) of applications. I did not want to create yet another<br>interface that only covered some of what applications need, or that required applications to reinvent the same<br>functionality over and over again (like IO thread pools).</li>
+<li>Efficiency. While storage IO is mostly still block based and hence at least 512b or 4kb in size, efficiency at those<br>sizes is still critical for certain applications. Additionally, some requests may not even be carrying a data payload.<br>It was important that the new interface was efficient in terms of per-request overhead.</li>
+<li>Scalability. While efficiency and low latencies are important, it’s also critical to provide the best performance<br>possible at the peak end. For storage in particular, we’ve worked very hard to deliver a scalable infrastructure. A<br>new interface should allow us to expose that scalability all the way back to applications.</li>
+</ul>
+<h1 id="4-0-Enter-io-uring"><a href="#4-0-Enter-io-uring" class="headerlink" title="4.0 Enter io_uring"></a>4.0 Enter io_uring</h1><p>首先是摘录作者的感言，性能必须从一开始，在<strong>设计接口</strong>的时候就考虑。</p>
+<blockquote>
+<p>Despite the ranked list of design goals, the initial design was centered around efficiency. Efficiency isn’t something that can be an afterthought, it has to be designed in from the start - you can’t wring it out of something later on once the interface is fixed.</p>
+</blockquote>
+<p>作者认为，新的设计要避免 submission 和 completion 事件在内核和用户空间之间的复制，也要避免 indirection，所以他由浅及深得出了下面几点：</p>
+<ol>
+<li>内核和用户空间需要 share 这些结构</li>
+<li>因此，这些结构应该在内核和用户的共享内存中</li>
+<li>因此，必须要去维护这里面的同步关系</li>
+<li>如果要用锁，那么就肯定会有系统调用，系统调用肯定 overhead 就大了</li>
+<li>因此，single producer single consumer ring buffer 是适合的</li>
+</ol>
+<p>考虑到对于 submission 事件，用户是生产者，内核是消费者；而 completion 事件则相反。所以需要两个队列：SQ 和 CQ。</p>
+<h2 id="4-1-DATA-STRUCTURES"><a href="#4-1-DATA-STRUCTURES" class="headerlink" title="4.1 DATA STRUCTURES"></a>4.1 DATA STRUCTURES</h2><p>cqe 的后缀表示 Completion Queue Event。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">io_uring_cqe</span> &#123;</span></span><br><span class="line">   <span class="comment">// 从 submission 中透传过来</span></span><br><span class="line">   __u64 user_data;</span><br><span class="line">   __s32 res;</span><br><span class="line">   __u32 flags;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>sqe 则复杂很多</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">io_uring_sqe</span> &#123;</span></span><br><span class="line">   <span class="comment">// 操作类型，例如 IORING_OP_READV 表示向量读</span></span><br><span class="line">   __u8 opcode;</span><br><span class="line">   __u8 flags;</span><br><span class="line">   __u16 ioprio;</span><br><span class="line">   __s32 fd;</span><br><span class="line">   __u64 off;</span><br><span class="line">   <span class="comment">// 指向内存地址，如果是向量读写，则指向一个 iovec array 的地址</span></span><br><span class="line">   __u64 addr;</span><br><span class="line">   <span class="comment">// 表示长度，或者 iovec array 的长度</span></span><br><span class="line">   __u32 len;</span><br><span class="line">   <span class="keyword">union</span> &#123;</span><br><span class="line">      <span class="keyword">__kernel_rwf_t</span> rw_flags;</span><br><span class="line">      __u32 fsync_flags;</span><br><span class="line">      __u16 poll_events;</span><br><span class="line">      __u32 sync_range_flags;</span><br><span class="line">      __u32 msg_flags;   </span><br><span class="line">   &#125;;</span><br><span class="line">   __u64 user_data;</span><br><span class="line">   <span class="keyword">union</span> &#123;</span><br><span class="line">      __u16 buf_index;</span><br><span class="line">      <span class="comment">// 64 bytes 对齐</span></span><br><span class="line">      __u64 __pad2[<span class="number">3</span>];</span><br><span class="line">   &#125;;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<h2 id="4-2-COMMUNICATION-CHANNEL"><a href="#4-2-COMMUNICATION-CHANNEL" class="headerlink" title="4.2 COMMUNICATION CHANNEL"></a>4.2 COMMUNICATION CHANNEL</h2><p>SQ 和 CQ 的 indexing 是不太一样的，先从简单的 CQ 开始。</p>
+<p>cqe 是一个内核和用户共享的 ring buffer，内核写会更新 tail，用户读会更新 head。ring buffer 的大小是 2 的幂，它的好处我在 <a href="/2018/07/23/redis_learn_object/">Redis底层对象实现原理分析</a>中有所解析。</p>
+<p>如下所示，head 是可以自然溢出的。当然，正如我在 <a href="/2017/12/05/libutp%E6%BA%90%E7%A0%81%E7%AE%80%E6%9E%90/">libutp源码简析</a>或者<a href="https://github.com/calvinneo/atp" target="_blank" rel="noopener">ATP</a>中的实现那样，当 tail 比 head 小的时候，我们也可以认为发生了溢出。<br><code>cqring-&gt;cqes</code> 是被共享的结构。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">unsigned</span> head;</span><br><span class="line">head = cqring-&gt;head;</span><br><span class="line">read_barrier();</span><br><span class="line"><span class="keyword">if</span> (head != cqring-&gt;tail) &#123;</span><br><span class="line">   <span class="class"><span class="keyword">struct</span> <span class="title">io_uring_cqe</span> *<span class="title">cqe</span>;</span></span><br><span class="line">   <span class="keyword">unsigned</span> index;</span><br><span class="line">   index = head &amp; (cqring-&gt;mask);</span><br><span class="line">   cqe = &amp;cqring-&gt;cqes[index];</span><br><span class="line">   <span class="comment">/* process completed cqe here */</span></span><br><span class="line">   ...</span><br><span class="line">   <span class="comment">/* we've now consumed this entry */</span></span><br><span class="line">   head++;</span><br><span class="line">&#125;</span><br><span class="line">cqring-&gt;head = head;</span><br><span class="line">write_barrier();</span><br></pre></td></tr></table></figure>
+
+<p>SQ 这边，就是用户生产，内核消费了。之前说到，SQ 的 indexing 不一样，它是有个 indirection 的。submission 的 ring buffer 中存放了 index，索引到 sqe 中的位置。例如下面的例子中，提交顺序是：sqe5 → sqe2 → sqe3。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">SQ array: [5, 2, 3]</span><br><span class="line">SQEs:     [sqe0, sqe1, sqe2, sqe3, sqe4, sqe5]</span><br></pre></td></tr></table></figure>
+
+<p>在文章中，作者提出一个好处是可以将 request units 放到 internal structure 中，我理解就是后面看到的自定义的 <code>app_sq_ring</code>。另外，也能允许在一个操作中提交多个 sqe。我理解就是如下代码所示，先 fill sqe，再写 array 的操作。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">io_uring_sqe</span> *<span class="title">sqe</span>;</span></span><br><span class="line"><span class="keyword">unsigned</span> tail, index;</span><br><span class="line">tail = sqring-&gt;tail;</span><br><span class="line">index = tail &amp; (*sqring-&gt;ring_mask);</span><br><span class="line">sqe = &amp;sqring-&gt;sqes[index];</span><br><span class="line"><span class="comment">/* this call fills in the sqe entries for this IO */</span></span><br><span class="line">init_io(sqe);</span><br><span class="line"><span class="comment">/* fill the sqe index into the SQ ring array */</span></span><br><span class="line">sqring-&gt;<span class="built_in">array</span>[index] = index;</span><br><span class="line">tail++;</span><br><span class="line">write_barrier();</span><br><span class="line">sqring-&gt;tail = tail;</span><br><span class="line">write_barrier();</span><br></pre></td></tr></table></figure>
+
+<p>只要 sqe 被内核消费了，application 就可以复用 sqe entry，即使内核还没有完全处理完毕，内核会在需要的时候复制这个结构。</p>
+<p>这样，sqe 的生命周期就比较短，而 application 可能会发送更多的 submission，从而导致 CQ ring 可能溢出。所以默认下的 CQ ring 的大小是 SQ ring 的两倍。</p>
+<p>Completion events 可能以任意顺序到达，它和 submission 的顺序是没有关系的。SQ 和 CQ 两个 ring 是独立运行的。但是每个 submission 事件和每个 completion 事件都能一一对应。</p>
+<h1 id="5-0-io-uring-interface"><a href="#5-0-io-uring-interface" class="headerlink" title="5.0 io_uring interface"></a>5.0 io_uring interface</h1><p>下面介绍的是 io_uring 的“裸”接口，即 system call。</p>
+<h2 id="io-uring-setup"><a href="#io-uring-setup" class="headerlink" title="io_uring_setup"></a>io_uring_setup</h2><p>entries 的取值是 1..=4096，表示 sqe 的数量，必须是 2 的幂。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">io_uring_setup</span><span class="params">(<span class="keyword">unsigned</span> entries, struct io_uring_params *params)</span></span>;</span><br></pre></td></tr></table></figure>
+
+<p>params 如下</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">io_uring_params</span> &#123;</span></span><br><span class="line">   <span class="comment">// 由内核填写，表示支持多少个 sqe</span></span><br><span class="line">   __u32 sq_entries;</span><br><span class="line">   <span class="comment">// 由内核填写，表示支持多少个 cqe</span></span><br><span class="line">   __u32 cq_entries;</span><br><span class="line">   __u32 flags;</span><br><span class="line">   __u32 sq_thread_cpu;</span><br><span class="line">   __u32 sq_thread_idle;</span><br><span class="line">   __u32 resv[<span class="number">5</span>];</span><br><span class="line">   <span class="class"><span class="keyword">struct</span> <span class="title">io_sqring_offsets</span> <span class="title">sq_off</span>;</span></span><br><span class="line">   <span class="class"><span class="keyword">struct</span> <span class="title">io_cqring_offsets</span> <span class="title">cq_off</span>;</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">io_sqring_offsets</span> &#123;</span></span><br><span class="line">   __u32 head; <span class="comment">/* offset of ring head */</span></span><br><span class="line">   __u32 tail; <span class="comment">/* offset of ring tail */</span></span><br><span class="line">   __u32 ring_mask; <span class="comment">/* ring mask value */</span></span><br><span class="line">   __u32 ring_entries; <span class="comment">/* entries in ring */</span></span><br><span class="line">   __u32 flags; <span class="comment">/* ring flags */</span></span><br><span class="line">   __u32 dropped; <span class="comment">/* number of sqes not submitted */</span></span><br><span class="line">   __u32 <span class="built_in">array</span>; <span class="comment">/* sqe index array */</span></span><br><span class="line">   __u32 resv1;</span><br><span class="line">   __u64 resv2;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>io_uring_setup 返回的 int，实际上是一个 fd。如之前所说，这个 fd 是被内核和用户共享的。而 sq_off 和 cq_off 就表示了这共享内存中，SQ 和 CQ 的位置。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> IORING_OFF_SQ_RING          0ULL</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> IORING_OFF_CQ_RING  0x8000000ULL <span class="comment">// 128MB，指的那个 index 数组</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> IORING_OFF_SQES    0x10000000ULL</span></span><br></pre></td></tr></table></figure>
+
+<p>用户可以自定义 sq ring 的结构，这个结构中的每个字段都是一个指向到共享内存中位置的指针</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">app_sq_ring</span> &#123;</span></span><br><span class="line">   <span class="keyword">unsigned</span> *head;</span><br><span class="line">   <span class="keyword">unsigned</span> *tail;</span><br><span class="line">   <span class="keyword">unsigned</span> *ring_mask;</span><br><span class="line">   <span class="keyword">unsigned</span> *ring_entries;</span><br><span class="line">   <span class="keyword">unsigned</span> *flags;</span><br><span class="line">   <span class="keyword">unsigned</span> *dropped;</span><br><span class="line">   <span class="keyword">unsigned</span> *<span class="built_in">array</span>;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>如下面的 setup 所示，可以看到自定义的 sring 是如何通过 ptr 和 sq_off 组装起来的。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">struct app_sq_ring <span class="title">app_setup_sq_ring</span><span class="params">(<span class="keyword">int</span> ring_fd, struct io_uring_params *p)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">   <span class="class"><span class="keyword">struct</span> <span class="title">app_sq_ring</span> <span class="title">sqring</span>;</span></span><br><span class="line">   <span class="keyword">void</span> *ptr;</span><br><span class="line">   ptr = mmap(<span class="literal">NULL</span>, p-&gt;sq_off.<span class="built_in">array</span> + p-&gt;sq_entries * <span class="keyword">sizeof</span>(__u32), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE,</span><br><span class="line">   ring_fd, IORING_OFF_SQ_RING);</span><br><span class="line">   sring-&gt;head = ptr + p-&gt;sq_off.head;</span><br><span class="line">   sring-&gt;tail = ptr + p-&gt;sq_off.tail;</span><br><span class="line">   sring-&gt;ring_mask = ptr + p-&gt;sq_off.ring_mask;</span><br><span class="line">   sring-&gt;ring_entries = ptr + p-&gt;sq_off.ring_entries;</span><br><span class="line">   sring-&gt;flags = ptr + p-&gt;sq_off.flags;</span><br><span class="line">   sring-&gt;dropped = ptr + p-&gt;sq_off.dropped;</span><br><span class="line">   sring-&gt;<span class="built_in">array</span> = ptr + p-&gt;sq_off.<span class="built_in">array</span>;</span><br><span class="line">   <span class="keyword">return</span> sring;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="io-uring-enter"><a href="#io-uring-enter" class="headerlink" title="io_uring_enter"></a>io_uring_enter</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">io_uring_enter</span><span class="params">(</span></span></span><br><span class="line"><span class="function"><span class="params">   <span class="keyword">unsigned</span> <span class="keyword">int</span> fd, <span class="comment">// io_uring_setup 返回的那个 fd</span></span></span></span><br><span class="line"><span class="function"><span class="params">   <span class="keyword">unsigned</span> <span class="keyword">int</span> to_submit, <span class="comment">// tells the kernel that there are up to that amount of sqes ready to be consumed and submitted</span></span></span></span><br><span class="line"><span class="function"><span class="params">   <span class="keyword">unsigned</span> <span class="keyword">int</span> min_complete, <span class="comment">// asks the kernel to wait for completion of that amount of requests.</span></span></span></span><br><span class="line"><span class="function"><span class="params">   <span class="keyword">unsigned</span> <span class="keyword">int</span> flags, </span></span></span><br><span class="line"><span class="function"><span class="params">   <span class="keyword">sigset_t</span> sig)</span></span>;</span><br></pre></td></tr></table></figure>
+
+<p>可以发现，这个 syscall 可以同时 submit 和 wait for completion，这个也对应了本文作者之前提到的对 aio 的批评之一。</p>
+<p>flags 中有一个参数，设置它，则内核会 actively wait for min_complete events to be available。简单来说，如果希望 wait for completion，则必须设置这个 flag。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> IORING_ENTER_GETEVENTS (1U &lt;&lt; 0)</span></span><br></pre></td></tr></table></figure>
+
+<h2 id="5-1-SQE-ORDERING"><a href="#5-1-SQE-ORDERING" class="headerlink" title="5.1 SQE ORDERING"></a>5.1 SQE ORDERING</h2><p>这一节主要讲了如何实现 fsync/fdatasync。</p>
+<p>因为之前提到 SQ 和 CQ 是完全独立的，所以这样的机制需要额外的设计。并且因为写入是乱序的，所以我们在乎的是确定所有的写入已经完成。</p>
+<p>io_uring 的机制是，支持 draining the submission side queue，直到之前的 completion 事件都已经结束。在这之前，application 会将后续写入入队。</p>
+<p>通过 IOSQE_IO_DRAIN 这个 flag 来实现这个特性，它会 stall 住整个 SQ。因此，application 可以考虑使用多个 io_uring context，来保证不相关的写是并行的。</p>
+<blockquote>
+<p>io_uring supports draining the submission side queue until all previous completions have finished. This allows the application queue the above mentioned sync operation and know that it will not start before all previous commandshave completed.</p>
+</blockquote>
+<h2 id="5-2-LINKED-SQES"><a href="#5-2-LINKED-SQES" class="headerlink" title="5.2 LINKED SQES"></a>5.2 LINKED SQES</h2><p>所有连续的指定了 IOSQE_IO_LINK 的 io 请求会被串联起来执行，这些请求一定是按照顺序执行的。但是它们和没有指定 IOSQE_IO_LINK 这个 flag 的请求之间的关系是不确定的。</p>
+<h2 id="5-3-TIMEOUT-COMMANDS"><a href="#5-3-TIMEOUT-COMMANDS" class="headerlink" title="5.3 TIMEOUT COMMANDS"></a>5.3 TIMEOUT COMMANDS</h2><h1 id="6-0-Memory-ordering"><a href="#6-0-Memory-ordering" class="headerlink" title="6.0 Memory ordering"></a>6.0 Memory ordering</h1><p>在 <a href="/2017/12/28/Concurrency-Programming-Compare/">并发编程重要概念及比较</a> 中，我们知道 memory order 主要是考虑读-写和写-写问题，如下所示：</p>
+<blockquote>
+<p>read_barrier(): Ensure previous writes are visible before doing subsequent memory reads.<br>write_barrier(): Order this write after previous writes.</p>
+</blockquote>
+<p>我们也知道，不同的 CPU 架构的乱序执行逻辑是不一样的，所以这里只是讨论概念。</p>
+<p>考虑用户侧写入一个 seq，并且通知 kernel 可以去消费了。这就包含了两个过程：</p>
+<ul>
+<li>填写 sqe 中的字段，并且将 sqe index 写入 SQ ring array</li>
+<li>更新 SQ ring 队列的 tail</li>
+</ul>
+<p>这个操作可以简化成下面的伪代码，每一行代表一个内存操作。如果没有合适的 memory order，CPU 是有理由进行乱序执行的。也就是说，无法保证 write 7 是在最后执行的。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">1: sqe→opcode = IORING_OP_READV;</span><br><span class="line">2: sqe→fd = fd;</span><br><span class="line">3: sqe→off = 0;</span><br><span class="line">4: sqe→addr = &amp;iovec;</span><br><span class="line">5: sqe→len = 1;</span><br><span class="line">6: sqe→user_data = some_value;</span><br><span class="line">7: sqring→tail = sqring→tail + 1;</span><br></pre></td></tr></table></figure>
+
+<p>所以，需要添加如下的 write barrier</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">1: sqe→opcode = IORING_OP_READV;</span><br><span class="line">2: sqe→fd = fd;</span><br><span class="line">3: sqe→off = 0;</span><br><span class="line">4: sqe→addr = &amp;iovec;</span><br><span class="line">5: sqe→len = 1;</span><br><span class="line">6: sqe→user_data = some_value;</span><br><span class="line"> write_barrier(); /* ensure previous writes are seen before tail write */</span><br><span class="line">7: sqring→tail = sqring→tail + 1;</span><br><span class="line"> write_barrier(); /* ensure tail write is seen */</span><br></pre></td></tr></table></figure>
+
+<h1 id="7-0-liburing-library"><a href="#7-0-liburing-library" class="headerlink" title="7.0 liburing library"></a>7.0 liburing library</h1><p>通过这个库，可以：</p>
+<ul>
+<li>不需要写一堆 boiler plate code</li>
+<li>不需要考虑 memory ordering 的问题</li>
+<li>不需要考虑自己维护 ring buffer 的问题</li>
+</ul>
+<h2 id="7-1-LIBURING-IO-URING-SETUP"><a href="#7-1-LIBURING-IO-URING-SETUP" class="headerlink" title="7.1 LIBURING IO_URING SETUP"></a>7.1 LIBURING IO_URING SETUP</h2><h1 id="8-0-Advanced-use-cases-and-features"><a href="#8-0-Advanced-use-cases-and-features" class="headerlink" title="8.0 Advanced use cases and features"></a>8.0 Advanced use cases and features</h1><h2 id="8-1-FIXED-FILES-AND-BUFFERS"><a href="#8-1-FIXED-FILES-AND-BUFFERS" class="headerlink" title="8.1 FIXED FILES AND BUFFERS"></a>8.1 FIXED FILES AND BUFFERS</h2><h2 id="8-2-POLLED-IO"><a href="#8-2-POLLED-IO" class="headerlink" title="8.2 POLLED IO"></a>8.2 POLLED IO</h2><h2 id="8-3-KERNEL-SIDE-POLLING"><a href="#8-3-KERNEL-SIDE-POLLING" class="headerlink" title="8.3 KERNEL SIDE POLLING"></a>8.3 KERNEL SIDE POLLING</h2><h1 id="9-0-Performance"><a href="#9-0-Performance" class="headerlink" title="9.0 Performance"></a>9.0 Performance</h1><h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ul>
+<li><a href="https://man7.org/linux/man-pages/man2/io_submit.2.html" target="_blank" rel="noopener">https://man7.org/linux/man-pages/man2/io_submit.2.html</a></li>
+</ul>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/Linux/" rel="tag"># Linux</a>
+          
+            <a href="/tags/FileSystem/" rel="tag"># FileSystem</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2025/10/25/on-llm/" rel="next" title="LLM 基础概念和核心问题整理">
+                <i class="fa fa-chevron-left"></i> LLM 基础概念和核心问题整理
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">254</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">157</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#1-0-Introduction"><span class="nav-number">1.</span> <span class="nav-text">1.0 Introduction</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#2-0-Improving-the-status-quo"><span class="nav-number">2.</span> <span class="nav-text">2.0 Improving the status quo</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#3-0-New-interface-design-goals"><span class="nav-number">3.</span> <span class="nav-text">3.0 New interface design goals</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#4-0-Enter-io-uring"><span class="nav-number">4.</span> <span class="nav-text">4.0 Enter io_uring</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#4-1-DATA-STRUCTURES"><span class="nav-number">4.1.</span> <span class="nav-text">4.1 DATA STRUCTURES</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#4-2-COMMUNICATION-CHANNEL"><span class="nav-number">4.2.</span> <span class="nav-text">4.2 COMMUNICATION CHANNEL</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#5-0-io-uring-interface"><span class="nav-number">5.</span> <span class="nav-text">5.0 io_uring interface</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#io-uring-setup"><span class="nav-number">5.1.</span> <span class="nav-text">io_uring_setup</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#io-uring-enter"><span class="nav-number">5.2.</span> <span class="nav-text">io_uring_enter</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#5-1-SQE-ORDERING"><span class="nav-number">5.3.</span> <span class="nav-text">5.1 SQE ORDERING</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#5-2-LINKED-SQES"><span class="nav-number">5.4.</span> <span class="nav-text">5.2 LINKED SQES</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#5-3-TIMEOUT-COMMANDS"><span class="nav-number">5.5.</span> <span class="nav-text">5.3 TIMEOUT COMMANDS</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#6-0-Memory-ordering"><span class="nav-number">6.</span> <span class="nav-text">6.0 Memory ordering</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#7-0-liburing-library"><span class="nav-number">7.</span> <span class="nav-text">7.0 liburing library</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#7-1-LIBURING-IO-URING-SETUP"><span class="nav-number">7.1.</span> <span class="nav-text">7.1 LIBURING IO_URING SETUP</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#8-0-Advanced-use-cases-and-features"><span class="nav-number">8.</span> <span class="nav-text">8.0 Advanced use cases and features</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#8-1-FIXED-FILES-AND-BUFFERS"><span class="nav-number">8.1.</span> <span class="nav-text">8.1 FIXED FILES AND BUFFERS</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#8-2-POLLED-IO"><span class="nav-number">8.2.</span> <span class="nav-text">8.2 POLLED IO</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#8-3-KERNEL-SIDE-POLLING"><span class="nav-number">8.3.</span> <span class="nav-text">8.3 KERNEL SIDE POLLING</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#9-0-Performance"><span class="nav-number">9.</span> <span class="nav-text">9.0 Performance</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">10.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2025</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2025/10/30/efficient-io-uring/';
+          this.page.identifier = '2025/10/30/efficient-io-uring/';
+          this.page.title = 'Efficient IO with io_uring 学习';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>

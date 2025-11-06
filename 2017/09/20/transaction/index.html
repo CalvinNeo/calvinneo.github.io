@@ -114,7 +114,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/dirtyreadtime2.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/occp1.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/occp2.png">
-<meta property="og:updated_time" content="2025-10-25T17:37:39.724Z">
+<meta property="og:updated_time" content="2025-10-27T11:08:53.831Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="数据库系统中的事务">
 <meta name="twitter:description" content="本文主要讲述数据库中事务的控制模型、事务隔离等级和事务并发控制。 本文从分布式一致性和分布式共识协议一文中分离。主要以 DDIA 和 A Critique of ANSI SQL Isolation Levels 这篇论文为脉络。">
@@ -624,7 +624,7 @@
 <li>RU、RC<br> 读到的是20</li>
 <li>RR、S<br> 读到的是10</li>
 </ol>
-<p>再考虑下面的代码Case2</p>
+<p>再考虑下面的代码 Case2</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">Ta                                  Tb</span><br><span class="line">begin</span><br><span class="line">select x from table, x=10</span><br><span class="line">                                    begin</span><br><span class="line">                                    update table set x = 20</span><br><span class="line">select x from table, x=?</span><br><span class="line">                                    commit</span><br></pre></td></tr></table></figure>
 
 <p>对于：</p>
@@ -668,8 +668,8 @@
 <p>考虑这一组图。图1就是一个冲突可串行化的调度。交换 T1 的 <code>read(B)</code> 和 T2 的 <code>write(A)</code> 可以得到如图2所示的调度。进一步，如果交换 T1 的 <code>read(B)-&gt;write(B)</code> 和 T2 的 <code>read(A)-&gt;write(A)</code>，就可以得到如图3的调度。</p>
 <p>但是图4就不是一个可串行化调度，因为<code>read(Q)</code>和两个<code>write(Q)</code>都是冲突操作。<br><img src="/img/dbtrans/cser2.png"></p>
 <p>下图展示了通过交换相邻操作(下换线)将冲突可串行化调度转为串行调度的过程。<br><img src="/img/dbtrans/cstrans.png"></p>
-<h3 id="冲突可串行化是一个更强的条件"><a href="#冲突可串行化是一个更强的条件" class="headerlink" title="冲突可串行化是一个更强的条件"></a>冲突可串行化是一个更强的条件</h3><p>冲突可串行化是一个比较强的条件。一个可串行化调度未必是冲突可串行化的，原因是可串行化调度可能交换冲突操作。例如事务<code>w1(A)</code>作用是A+2，事务<code>w2(A)</code>的作用是A+3。那么两个事务还是可串行化的。</p>
-<p>考虑下面的例子，S1是串行的，S2通过交换<code>w2(Y) w2(X)</code>和<code>w1(X)</code>可以得到S1。明显，冲突操作之间发生了交换，这不是冲突可串行化的。但S1却是S2的串行调度。这是因为两种调度最终都使得X的值为w3(X)而Y的值为w2(Y)。</p>
+<h3 id="冲突可串行化是一个更强的条件"><a href="#冲突可串行化是一个更强的条件" class="headerlink" title="冲突可串行化是一个更强的条件"></a>冲突可串行化是一个更强的条件</h3><p>冲突可串行化是一个比较强的条件。一个可串行化调度未必是冲突可串行化的，原因是可串行化调度可能交换冲突操作。例如事务 <code>w1(A)</code> 作用是 <code>A+2</code>，事务 <code>w2(A)</code> 的作用是 <code>A+3</code>。那么两个事务还是可串行化的。</p>
+<p>考虑下面的例子，S1 是串行的，S2 通过交换 <code>w2(Y) w2(X)</code> 和 <code>w1(X)</code> 可以得到 S1。明显，冲突操作之间发生了交换，这不是冲突可串行化的。但 S1 却是 S2 的串行调度。这是因为两种调度最终都使得 X 的值为 <code>w3(X)</code> 而 Y 的值为 <code>w2(Y)</code>。</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">S1: w1(Y) w1(X) w2(Y) w2(X) w3(X)</span><br><span class="line">S2: w1(Y) w2(Y) w2(X) w1(X) w3(X)</span><br></pre></td></tr></table></figure>
 
 <h3 id="优先图"><a href="#优先图" class="headerlink" title="优先图"></a>优先图</h3><p>可以通过构造优先图，并判断其中是否有环来判断事务是否是冲突可串行化的。构造方式，对于 T1 中的 A1，和 T2 中的 A2，如果满足：</p>
@@ -698,7 +698,7 @@
 <li>如果先读后写，需要将共享锁升级为排它锁，升级过程如同重新获得排它锁</li>
 <li>获得锁之后，必须持有锁到事务提交或者中止<br> 这应该是 S2PL 和 SS2PL 的规定。</li>
 </ol>
-<p>其中做最重要的过程是，2PL 将加解锁过程分为两个阶段，在第一阶段只能加锁或者操作数据，不能解锁；在第二阶段只能解锁或者操作数据，不能加锁。<br>我们认为在解开第一个锁时，事务成功。【Q】这是在《数据库系统实现里面的措辞》，但在解锁之后，还是可以操作数据的啊，这些数据还没操作，为什么这个事务就算成功了？其实这个涉及级联回滚的细节，我们还真有 S2PL 和 SS2PL 来要求在 Commit 之后再释放锁。</p>
+<p>其中做最重要的过程是，2PL 将加解锁过程分为两个阶段，在第一阶段只能加锁或者操作数据，不能解锁；在第二阶段只能解锁或者操作数据，不能加锁。<br>我们认为在解开第一个锁时，事务成功。【Q】这是在《数据库系统实现》里面的措辞，但在解锁之后，还是可以操作数据的啊。这些数据还没操作，为什么这个事务就算成功了？其实这个涉及级联回滚的细节，我们还真有 S2PL 和 SS2PL 来要求在 Commit 之后再释放锁。</p>
 <p>数据库实现了死锁检测和死锁超时机制。以 InnoDB 为例，如果启动死锁检测(<code>innodb_lock_wait_timeout</code>)，那么会在死锁发生时会选择将持有最少行级 X 锁的事务进行回滚。当然也可以选择等待(<code>innodb_lock_wait_timeout</code>)超时。</p>
 <h3 id="2PL可串行性的证明"><a href="#2PL可串行性的证明" class="headerlink" title="2PL可串行性的证明"></a>2PL可串行性的证明</h3><p>假设在 2PL 条件下，Ti 在 S 中有第一个解锁动作 <code>ui(x)</code>，则可以断言我们能将 Ti 的动作不经过任何有冲突的读和写移动到开始。</p>
 <p>我们不妨假设 Ti 的某个动作 <code>wi(Y)</code> 前有 Tj 的动作 <code>wj(Y)</code>。那么根据事务一致性原则，在调度 S 中，<code>uj(Y)</code> 和 <code>li(Y)</code> 必然出现在下面的序列中。</p>
@@ -1059,7 +1059,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">253</span>
+                <span class="site-state-item-count">254</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -1072,7 +1072,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">156</span>
+                <span class="site-state-item-count">157</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
