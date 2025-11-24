@@ -99,7 +99,6 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="本文被拆分自分布式一致性和分布式共识协议。拆分的目的是：  上一篇文章更贴近于 DDIA 的架构 本篇文章理论性较强，可以单独被拆出">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:image" content="http://www.calvinneo.com/img/fbs/yzxdj.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/fbs/ddia/read-after-write.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/fbs/ddia/mono-read.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/fbs/ddia/ddiaf5.5.png">
@@ -122,11 +121,11 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/fbs/lamport_snapshot/f4.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/fbs/lamport_snapshot/algo.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/fbs/fzztj.jpg">
-<meta property="og:updated_time" content="2025-10-30T17:22:04.436Z">
+<meta property="og:updated_time" content="2025-11-21T17:28:56.856Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="分布式一致性详解">
 <meta name="twitter:description" content="本文被拆分自分布式一致性和分布式共识协议。拆分的目的是：  上一篇文章更贴近于 DDIA 的架构 本篇文章理论性较强，可以单独被拆出">
-<meta name="twitter:image" content="http://www.calvinneo.com/img/fbs/yzxdj.png">
+<meta name="twitter:image" content="http://www.calvinneo.com/img/fbs/ddia/read-after-write.png">
 
 
 
@@ -420,7 +419,10 @@
 <li>分布式中的一致性指的是 CAP 中的 C<br> 从外部看来，要求多副本的系统的行为表现得像单系统一样，并且对这个系统的修改是原子的。</li>
 <li>事务一致性指的是 ACID 的 C<br> 强调事务前后不变量不能改变。</li>
 </ol>
-<p><img src="/img/fbs/yzxdj.png" alt="一致性的等级"></p>
+<div style="display:none">
+![一致性的等级](/img/fbs/yzxdj.png)
+</div>
+
 <p>本章节中会涉及到一些复制的内容，但详细有关复制的会在<a href="/2017/09/20/distributed-system-consistency-and-consensus/">分布式一致性和分布式共识协议</a>中论述，也是部分基于 DDIA 的。</p>
 <h2 id="最终一致系统"><a href="#最终一致系统" class="headerlink" title="最终一致系统"></a>最终一致系统</h2><p>为什么需要 Replicate？</p>
 <ol>
@@ -431,7 +433,10 @@
 <p>显然，同步复制很难实现，因为这样单个节点的宕机，或者网络分区就会导致这个系统不可用。</p>
 <p>但是，如果使用异步复制，则一个异步的 Follower 节点可能落后。如果从这个节点读，就可能读到旧数据。例如，如果在 Leader 和 Follower 上跑相同的查询，就可能读到不同的结果，尽管这个过程是暂时的。这样就是最终一致的状态。这里的最终是很模糊的，因为它并没有一个明确的 deadline，也就是说是 Boundless 的。</p>
 <p>下面，介绍最终一致系统中可能存在的一些问题，并引入一些“弱一致性”来解决对应的问题。</p>
-<p>系统保证在更新操作后一段时间内能达到一致性状态，则称为弱一致性。弱一致性和强一致性的区别是弱一致性存在“不一致窗口”，在不一致窗口内系统不一定保证用户总能看到最新的值。弱一致性可以分为最终一致性、因果一致性、单调读一致性、单调写一致性、有界旧一致性、前缀一致性等。<br><a href="https://docs.microsoft.com/en-us/azure/cosmos-db/consistency-levels" target="_blank" rel="noopener">在Azure Cosmos中将一致性的强弱程度建立以下的关系</a>。Strong–Bounded staleness–Session–Consistent prefix–Eventual。从前向后的延迟。可用性和扩展性越好，但一致性会差一点。</p>
+<p>系统保证在更新操作后一段时间内能达到一致性状态，则称为弱一致性。弱一致性和强一致性的区别是弱一致性存在“不一致窗口”，在不一致窗口内系统不一定保证用户总能看到最新的值。弱一致性可以分为最终一致性、因果一致性、单调读一致性、单调写一致性、有界旧一致性、前缀一致性等。<br><a href="https://docs.microsoft.com/en-us/azure/cosmos-db/consistency-levels" target="_blank" rel="noopener">在Azure Cosmos中将一致性的强弱程度建立以下的关系</a>:</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Strong -- Bounded staleness -- Session -- Consistent prefix -- Eventual。</span><br></pre></td></tr></table></figure>
+
+<p>从前向后的延迟。可用性和扩展性越好，但一致性会差一点。</p>
 <h3 id="最终一致性"><a href="#最终一致性" class="headerlink" title="最终一致性"></a>最终一致性</h3><p>最终一致性也被称为乐观复制(optimistic replication)，要求当没有新的对 X 的提交发生时，最终所有对 X 的访问都返回最后一次更新的值。<br>常见的异步复制的主从架构实现的是<strong>最终一致性</strong>。它的一个典型常见是用户读取异步从库时，可能读取到较旧的信息，因为该从库尚未完全与主库同步。注意，同步复制的主从架构会出现<strong>任一节点</strong>宕机导致的单点问题。</p>
 <p>最终一致性通常用来提供 BASE 语义。</p>
 <p>最终一致性是一种<a href="https://en.wikipedia.org/wiki/Eventual_consistency" target="_blank" rel="noopener">获得 HA 的常见方式</a>。</p>
@@ -461,11 +466,11 @@
 <p>RWN 一致性存在不少问题，在<a href="/2017/09/20/distributed-system-consistency-and-consensus/">另一篇文章中讲解</a>。</p>
 <h3 id="会话一致性"><a href="#会话一致性" class="headerlink" title="会话一致性"></a>会话一致性</h3><p>会话一致性<a href="https://docs.microsoft.com/en-us/azure/cosmos-db/consistency-levels" target="_blank" rel="noopener">能够保证在该会话内</a>一致前缀读、单调读、单调写、读己所写、write-follows-reads 一致性。</p>
 <h3 id="有界旧一致性"><a href="#有界旧一致性" class="headerlink" title="有界旧一致性"></a>有界旧一致性</h3><p>有界旧一致性(Bounded staleness)保证了读到的数据和最新版本最多差 K 个版本。</p>
-<h2 id="强一致性"><a href="#强一致性" class="headerlink" title="强一致性"></a>强一致性</h2><p>根据 DDIA，线性一致性(Linearizability)常常也被称作强一致性(Strong consistency)、外部一致性(External consistency)、原子一致性(atomic consistency)，所以这让线性一致性的定义很微妙。不妨看一下定义：</p>
+<h2 id="强一致性"><a href="#强一致性" class="headerlink" title="强一致性"></a>强一致性</h2><p>根据 DDIA，线性一致性(Linearizability)常常也被称作强一致性(Strong consistency)、外部一致性(External consistency)、原子一致性(atomic consistency)，所以这让线性一致性的定义很微妙。不妨看一下定义，btw，我觉得 DDIA 的定义是最容易从实践角度理解的：</p>
 <ol>
 <li>CAP 理论的定义是 all nodes see the same data at the same time。</li>
 <li><a href="https://cs.brown.edu/~mph/Herlihy91/p124-herlihy.pdf" target="_blank" rel="noopener">Wait-Free Synchronization</a> 的定义是 each operation appears to execute instantaneously, exactly once, at some point between its invocation and its response。</li>
-<li>DDIA 的定义是 the basic idea is to make a system appear as if there were only one copy of the data,<br>and all operations on it are atomic。</li>
+<li>DDIA 的定义是 the basic idea is to make a system appear as if there were <strong>only one copy</strong> of the data,<br>and all operations on it are <strong>atomic</strong>。</li>
 </ol>
 <p>在下图中比赛结果由 Referee 写入 Leader 主库，并向两个 Follower 同步复制。<strong>当任何一个读取返回新值后，所有后续读取都必须返回新值</strong>。但简单的读写分离主从复制，就会出现当 Leader 只同步了 Follower1 而没有同步到 Follower2 时，对两个副本的读取结果分别返回新值和旧值的现象。</p>
 <p><img src="/img/fbs/ddia/lin.png"></p>
@@ -1004,7 +1009,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">254</span>
+                <span class="site-state-item-count">255</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -1017,7 +1022,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">157</span>
+                <span class="site-state-item-count">158</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

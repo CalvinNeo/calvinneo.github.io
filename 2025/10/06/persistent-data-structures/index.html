@@ -91,18 +91,18 @@
 
 
 
-<meta name="description" content="在 rust 中，不可变数据结构的性质是非常好的。 如果要在不可变数据结构上进行修改，就需要 clone 一份出来。因此：  对于一些较大的结构，希望能够尽量复用 如果此时只有一份引用，则可以直接获取 mut 引用就地修改">
+<meta name="description" content="在 rust 中，immutable 的数据结构的性质是非常好的。在大部分函数式语言中，都不允许存在 mutable 的数据。 如果要在不可变数据结构上进行修改，就需要 clone 一份出来。因此：  对于一些较大的结构，希望能够尽量复用 如果此时只有一份引用，则可以直接获取 mut 引用就地修改  所以有了 Persistent data structures 的概念：  每一次修改该结构，都会">
 <meta name="keywords" content="Rust,数据结构">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Persistent data structures">
 <meta property="og:url" content="http://www.calvinneo.com/2025/10/06/persistent-data-structures/index.html">
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
-<meta property="og:description" content="在 rust 中，不可变数据结构的性质是非常好的。 如果要在不可变数据结构上进行修改，就需要 clone 一份出来。因此：  对于一些较大的结构，希望能够尽量复用 如果此时只有一份引用，则可以直接获取 mut 引用就地修改">
+<meta property="og:description" content="在 rust 中，immutable 的数据结构的性质是非常好的。在大部分函数式语言中，都不允许存在 mutable 的数据。 如果要在不可变数据结构上进行修改，就需要 clone 一份出来。因此：  对于一些较大的结构，希望能够尽量复用 如果此时只有一份引用，则可以直接获取 mut 引用就地修改  所以有了 Persistent data structures 的概念：  每一次修改该结构，都会">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2025-10-06T15:15:06.505Z">
+<meta property="og:updated_time" content="2025-11-21T17:13:07.931Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Persistent data structures">
-<meta name="twitter:description" content="在 rust 中，不可变数据结构的性质是非常好的。 如果要在不可变数据结构上进行修改，就需要 clone 一份出来。因此：  对于一些较大的结构，希望能够尽量复用 如果此时只有一份引用，则可以直接获取 mut 引用就地修改">
+<meta name="twitter:description" content="在 rust 中，immutable 的数据结构的性质是非常好的。在大部分函数式语言中，都不允许存在 mutable 的数据。 如果要在不可变数据结构上进行修改，就需要 clone 一份出来。因此：  对于一些较大的结构，希望能够尽量复用 如果此时只有一份引用，则可以直接获取 mut 引用就地修改  所以有了 Persistent data structures 的概念：  每一次修改该结构，都会">
 
 
 
@@ -377,15 +377,45 @@
       
 
       
-        <p>在 rust 中，不可变数据结构的性质是非常好的。</p>
+        <p>在 rust 中，immutable 的数据结构的性质是非常好的。在大部分函数式语言中，都不允许存在 mutable 的数据。</p>
 <p>如果要在不可变数据结构上进行修改，就需要 clone 一份出来。因此：</p>
 <ul>
 <li>对于一些较大的结构，希望能够尽量复用</li>
 <li>如果此时只有一份引用，则可以直接获取 mut 引用就地修改</li>
 </ul>
+<p>所以有了 Persistent data structures 的概念：</p>
+<ul>
+<li>每一次修改该结构，都会保留之前的版本</li>
+<li>历史的版本可以被查询</li>
+<li>如果历史版本的数据也支持修改，则称为 Full persistence，否则称为 Partial persistence</li>
+</ul>
 <a id="more"></a>
 
-<h1 id="List"><a href="#List" class="headerlink" title="List"></a>List</h1><h1 id="Vec"><a href="#Vec" class="headerlink" title="Vec"></a>Vec</h1>
+<h1 id="实现方案"><a href="#实现方案" class="headerlink" title="实现方案"></a>实现方案</h1><h2 id="Copy-on-Write"><a href="#Copy-on-Write" class="headerlink" title="Copy on Write"></a>Copy on Write</h2><p>用一个数组存放所有的历史版本，非常 bruteforce。</p>
+<h2 id="Fat-node"><a href="#Fat-node" class="headerlink" title="Fat node"></a>Fat node</h2><p>为每一个 field 维护历史记录。例如</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">Node</span> &#123;</span></span><br><span class="line">    <span class="keyword">int</span> value;</span><br><span class="line">    Node* left;</span><br><span class="line">    Node* right;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>会变成</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">FatNode</span> &#123;</span></span><br><span class="line">    <span class="built_in">vector</span>&lt;Pair&lt;version, value&gt;&gt; value_history;</span><br><span class="line">    <span class="built_in">vector</span>&lt;Pair&lt;version, Node*&gt;&gt; left_history;</span><br><span class="line">    <span class="built_in">vector</span>&lt;Pair&lt;version, Node*&gt;&gt; right_history;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>查询的过程就有点像是 MVCC 了。给定一个 version，去 lower_bound 找到最大的小于 version 的修改。</p>
+<p>容易看到，Fat node 不支持 Full persistence。</p>
+<h2 id="Split"><a href="#Split" class="headerlink" title="Split"></a>Split</h2><p>Fat Node 不能无限制增长，否则：</p>
+<ul>
+<li>历史太长</li>
+<li>查询复杂度上升</li>
+<li>节点缓存局部性变差</li>
+</ul>
+<p>因此，需要将节点 split 为两个节点：</p>
+<ul>
+<li>新节点记录最新版本的值</li>
+<li>老节点保留早期历史</li>
+<li>结构中指向该节点的指针，也在相应版本中被更新为指向新的节点</li>
+</ul>
+<h2 id="Path-copying"><a href="#Path-copying" class="headerlink" title="Path copying"></a>Path copying</h2><h1 id="常见的结构实现"><a href="#常见的结构实现" class="headerlink" title="常见的结构实现"></a>常见的结构实现</h1><h2 id="List"><a href="#List" class="headerlink" title="List"></a>List</h2><h2 id="Vec"><a href="#Vec" class="headerlink" title="Vec"></a>Vec</h2><h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ul>
+<li><a href="https://github.com/orium/rpds" target="_blank" rel="noopener">https://github.com/orium/rpds</a></li>
+</ul>
+
       
     </div>
 
@@ -541,7 +571,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">254</span>
+                <span class="site-state-item-count">255</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -554,7 +584,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">157</span>
+                <span class="site-state-item-count">158</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -647,7 +677,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#List"><span class="nav-number">1.</span> <span class="nav-text">List</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Vec"><span class="nav-number">2.</span> <span class="nav-text">Vec</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#实现方案"><span class="nav-number">1.</span> <span class="nav-text">实现方案</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Copy-on-Write"><span class="nav-number">1.1.</span> <span class="nav-text">Copy on Write</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Fat-node"><span class="nav-number">1.2.</span> <span class="nav-text">Fat node</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Split"><span class="nav-number">1.3.</span> <span class="nav-text">Split</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Path-copying"><span class="nav-number">1.4.</span> <span class="nav-text">Path copying</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#常见的结构实现"><span class="nav-number">2.</span> <span class="nav-text">常见的结构实现</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#List"><span class="nav-number">2.1.</span> <span class="nav-text">List</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Vec"><span class="nav-number">2.2.</span> <span class="nav-text">Vec</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">3.</span> <span class="nav-text">Reference</span></a></li></ol></div>
             
 
           </div>

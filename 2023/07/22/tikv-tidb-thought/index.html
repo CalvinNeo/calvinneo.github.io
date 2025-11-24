@@ -99,7 +99,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="一些常见问题的思考，只代表个人见解。对于一些已经沉淀下来的知识，会被挪到专门的文章中讨论。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2025-10-26T05:31:08.846Z">
+<meta property="og:updated_time" content="2025-11-21T10:51:02.153Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="关于 TiKV、TiDB、TiFlash 的一些思考">
 <meta name="twitter:description" content="一些常见问题的思考，只代表个人见解。对于一些已经沉淀下来的知识，会被挪到专门的文章中讨论。">
@@ -565,12 +565,14 @@
 <li>保存未提交的数据，并实现 Percolator 事务的部分功能<br> 因为只有已提交的数据才会写入行存，为了和 Apply 状态机一致，所以未提交的数据同样需要持久化，因此引入 KVStore。</li>
 <li>KVStore 管控 Apply 进度，对 DM 屏蔽了上游。DM 可以异步落盘。日志复制的架构下，上游的落盘进度不能比下游更新，因为下游更新，重放是幂等的；而上游更新，会丢数据。</li>
 </ol>
+<p>这个设计在很多其他数据库中也有使用，称为行存辅助表的技术。</p>
 <h3 id="为什么不将未提交的数据直接写在列存中呢？"><a href="#为什么不将未提交的数据直接写在列存中呢？" class="headerlink" title="为什么不将未提交的数据直接写在列存中呢？"></a>为什么不将未提交的数据直接写在列存中呢？</h3><ol>
 <li>KVStore 需要负责维护 apply 状态机<br> 当然我们可以将这一部分作为单独的 Raft 模块，所以这不是很 solid 的理由。</li>
 <li>KVStore 不仅是一个容器，还是 Percolator 事务的执行器<br> 例如，它需要维护当前 Region 上的所有 Lock。在一个查询过来时，需要检查该查询是否和 Lock 冲突，并尝试 resolve lock。而在列存中维护 lock cf 会很奇怪。</li>
 <li>这意味着要执行近乎实时的行转列<br> 首先，如果存一些未提交数据在 KVStore 中，然后在提交时 batch 执行行转列，有可能可以只读取一次 schema 结构，减少开销。<br> 其次，TiDB 中存在乐观事务和悲观事务。如果使用乐观事务，并且冲突比较大，那么很可能 TiFlash 要花费大量时间在多余的行转列上。</li>
 </ol>
-<p>实际上，在后续支持大事务的实践中，我们确实会进行一部分提前的行转列。但这是处于内存的优化，并且也存在很大的局限，例如暂时无法做到跨 Region Spill。</p>
+<p>实际上，在后续支持大事务的实践中，TiFlash 确实会进行一部分提前的行转列。但这是处于内存的优化，并且也存在很大的局限，例如暂时无法做到跨 Region Spill，其原因可以参考<a href="/2025/01/18/percolator-2/">跨 Region 提交事务</a>。</p>
+<p>此外，我们也有相关设计，是将这些 Key 拆出来，存到 TiFlash Proxy 自带的 RocksDB 中。但一方面，这个结构相对简单，拆开来存，未必性能很好。另一方面，在云原生的 TiFlash 实现中，我们彻底抛弃了 RockDB，改用 PageStorage 提供一套 consistent 的快照读取组件。所以，这个工作最终没有被执行。</p>
 <h3 id="KVStore-的落盘模式相关问题"><a href="#KVStore-的落盘模式相关问题" class="headerlink" title="KVStore 的落盘模式相关问题"></a>KVStore 的落盘模式相关问题</h3><p>理论上 KVStore 也可以做到独立写盘，从而使得 DM 的落盘进度不会阻塞 Raft Log 的回收。缺点是会使 KVStore 完全变成上游，写链路更长。虽然我们底层用的 PS，Compaction 相对较少，但同样有写放大。但这目前也无法实现，因为：</p>
 <ol>
 <li>KVStore 落盘是全量的，KVStore 和 DM 的内存操作又绑在一块。<br> 这导致在落盘 KVStore 前必须先落盘 DM。并且整个过程还需要加自己的锁，否则会导致数据丢失，而加锁导致阻塞 Apply。特别在一些场景下，少量的 Raft Log 就会导致 KVStore 和 DM 的落盘，严重影响读取延迟。</li>
@@ -731,7 +733,6 @@
 <h4 id="Milvus-的-Segment-level-Bitmap-Filter"><a href="#Milvus-的-Segment-level-Bitmap-Filter" class="headerlink" title="Milvus 的 Segment-level Bitmap Filter"></a>Milvus 的 Segment-level Bitmap Filter</h4><p>Segment 是 Milvus 的最小检索单元（通常几万～几十万条向量）。Milvus 通过 segment-level bitmap filtering，在每个 segment 内做到 “向量搜索时只在过滤通过的对象上遍历”。</p>
 <ul>
 <li>Milvus 中，每个 segment 内部维护一个 bitmap，记录 delmark</li>
-<li></li>
 </ul>
 <h3 id="向量构建"><a href="#向量构建" class="headerlink" title="向量构建"></a>向量构建</h3><h1 id="副本管理"><a href="#副本管理" class="headerlink" title="副本管理"></a>副本管理</h1><h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
 <li><a href="https://docs.pingcap.com/zh/tidb/stable/troubleshoot-hot-spot-issues" target="_blank" rel="noopener">https://docs.pingcap.com/zh/tidb/stable/troubleshoot-hot-spot-issues</a></li>
@@ -899,7 +900,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">254</span>
+                <span class="site-state-item-count">255</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -912,7 +913,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">157</span>
+                <span class="site-state-item-count">158</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

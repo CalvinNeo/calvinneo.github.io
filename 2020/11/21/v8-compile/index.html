@@ -73,7 +73,7 @@
 <link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="C++,编译器,GCC,GLIBC," />
+  <meta name="keywords" content="C++,GCC,编译器," />
 
 
 
@@ -91,18 +91,18 @@
 
 
 
-<meta name="description" content="本文介绍在一个较老的环境下编译V8引擎，并全静态地链接到既有的游戏服务上。原因是我们必需一个很新的JS引擎，从而能支持WebAssembly。经过调研，我们认为使用V8是最好的。我们的游戏服务使用GCC4.4.6，这是一个非常老的版本，甚至不能完整支持C++11标准，而即使是很老版本的V8都需要完整的C++11支持(GCC 4.8+)；进一步地最新版本的V8需要C++14标准的支持，这不仅体现在v">
-<meta name="keywords" content="C++,编译器,GCC,GLIBC">
+<meta name="description" content="本文介绍在一个较老的环境下编译 V8 引擎，并全静态地链接到既有的游戏服务上。原因是我们需要一个很新的能支持 WebAssembly 的 JS 引擎。经过调研，我们认为使用 V8 是最好的。 游戏服务使用 GCC4.4.6，这是一个非常老的版本，甚至不能完整支持 C++11 标准。而即使是很老版本的 V8 都需要完整的 C++11 支持(GCC 4.8+)。进一步地，最新版本的 V8 需要 C++">
+<meta name="keywords" content="C++,GCC,编译器">
 <meta property="og:type" content="article">
 <meta property="og:title" content="V8引擎编译">
 <meta property="og:url" content="http://www.calvinneo.com/2020/11/21/v8-compile/index.html">
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
-<meta property="og:description" content="本文介绍在一个较老的环境下编译V8引擎，并全静态地链接到既有的游戏服务上。原因是我们必需一个很新的JS引擎，从而能支持WebAssembly。经过调研，我们认为使用V8是最好的。我们的游戏服务使用GCC4.4.6，这是一个非常老的版本，甚至不能完整支持C++11标准，而即使是很老版本的V8都需要完整的C++11支持(GCC 4.8+)；进一步地最新版本的V8需要C++14标准的支持，这不仅体现在v">
+<meta property="og:description" content="本文介绍在一个较老的环境下编译 V8 引擎，并全静态地链接到既有的游戏服务上。原因是我们需要一个很新的能支持 WebAssembly 的 JS 引擎。经过调研，我们认为使用 V8 是最好的。 游戏服务使用 GCC4.4.6，这是一个非常老的版本，甚至不能完整支持 C++11 标准。而即使是很老版本的 V8 都需要完整的 C++11 支持(GCC 4.8+)。进一步地，最新版本的 V8 需要 C++">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2023-05-21T06:24:36.545Z">
+<meta property="og:updated_time" content="2025-11-21T17:17:28.069Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="V8引擎编译">
-<meta name="twitter:description" content="本文介绍在一个较老的环境下编译V8引擎，并全静态地链接到既有的游戏服务上。原因是我们必需一个很新的JS引擎，从而能支持WebAssembly。经过调研，我们认为使用V8是最好的。我们的游戏服务使用GCC4.4.6，这是一个非常老的版本，甚至不能完整支持C++11标准，而即使是很老版本的V8都需要完整的C++11支持(GCC 4.8+)；进一步地最新版本的V8需要C++14标准的支持，这不仅体现在v">
+<meta name="twitter:description" content="本文介绍在一个较老的环境下编译 V8 引擎，并全静态地链接到既有的游戏服务上。原因是我们需要一个很新的能支持 WebAssembly 的 JS 引擎。经过调研，我们认为使用 V8 是最好的。 游戏服务使用 GCC4.4.6，这是一个非常老的版本，甚至不能完整支持 C++11 标准。而即使是很老版本的 V8 都需要完整的 C++11 支持(GCC 4.8+)。进一步地，最新版本的 V8 需要 C++">
 
 
 
@@ -377,44 +377,50 @@
       
 
       
-        <p>本文介绍在一个较老的环境下编译V8引擎，并全静态地链接到既有的游戏服务上。原因是我们必需一个很新的JS引擎，从而能支持WebAssembly。经过调研，我们认为使用V8是最好的。<br>我们的游戏服务使用GCC4.4.6，这是一个非常老的版本，甚至不能完整支持C++11标准，而即使是很老版本的V8都需要完整的C++11支持(GCC 4.8+)；进一步地最新版本的V8需要C++14标准的支持，这不仅体现在v8.h中出现了诸如<code>std::remove_cv_t</code>的C++14的标准库函数，还体现在C++14标准编译出来的库也没办法直接和原游戏的目标文件进行链接。因此我们的方案是将游戏中对V8强依赖的模块升级成C++14标准，主要步骤如下：</p>
+        <p>本文介绍在一个较老的环境下编译 V8 引擎，并全静态地链接到既有的游戏服务上。原因是我们需要一个很新的能支持 WebAssembly 的 JS 引擎。经过调研，我们认为使用 V8 是最好的。</p>
+<p>游戏服务使用 GCC4.4.6，这是一个非常老的版本，甚至不能完整支持 C++11 标准。而即使是很老版本的 V8 都需要完整的 C++11 支持(GCC 4.8+)。进一步地，最新版本的 V8 需要 C++14 标准的支持：</p>
+<ul>
+<li>v8.h 中出现了诸如 <code>std::remove_cv_t</code> 的 C++14 的标准库函数</li>
+<li>C++14标准编译出来的库也没办法直接和原游戏的目标文件进行链接</li>
+</ul>
+<p>因此我们的方案是将游戏中对 V8 强依赖的模块升级成 C++14 标准，主要步骤如下：</p>
 <ol>
-<li>从源码构建GCC和GLIBC</li>
-<li>从源码构建V8静态库v8_monolith.a</li>
-<li>将V8静态库、libc++、GLIBC和游戏模块全静态链接</li>
+<li>从源码构建 GCC 和 GLIBC</li>
+<li>从源码构建 V8 静态库 v8_monolith.a</li>
+<li>将 V8 静态库、libc++、GLIBC 和游戏模块全静态链接</li>
 </ol>
 <a id="more"></a>
 
 <h1 id="编译GCC和GLIBC"><a href="#编译GCC和GLIBC" class="headerlink" title="编译GCC和GLIBC"></a>编译GCC和GLIBC</h1><p>见<a href="/2020/12/13/gcc-glibc-compile/">文章</a></p>
-<h1 id="代码拉取"><a href="#代码拉取" class="headerlink" title="代码拉取"></a>代码拉取</h1><p>代码拉取值得单独开一节，因为虽然V8代码使用Git来管理的，但它却并不是传统的git clone的路数，而是需要借助gclient这个工具。<br>gclient，包括gn等工具都在<code>depot_tools</code>这个包里面，我们可以通过下面的链接得到这个包</p>
+<h1 id="代码拉取"><a href="#代码拉取" class="headerlink" title="代码拉取"></a>代码拉取</h1><p>代码拉取值得单独开一节，因为虽然 V8 代码使用 Git 来管理的，但它却并不是传统的 git clone 的路数，而是需要借助 gclient 这个工具。<br>gclient，包括 gn 等工具都在 <code>depot_tools</code> 这个包里面，可以通过下面的链接得到这个包</p>
 <figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git <span class="built_in">clone</span> https://chromium.googlesource.com/chromium/tools/depot_tools.git</span><br></pre></td></tr></table></figure>
 
-<p>在得到这个包后，我们还需要将它加到环境路径里面以方便访问</p>
-<figure class="highlight xml"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">export PATH=`pwd`/depot_tools:"$PATH"</span><br></pre></td></tr></table></figure>
+<p>在得到这个包后，还需要将它加到环境路径里面以方便访问</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">export</span> PATH=`<span class="built_in">pwd</span>`/depot_tools:<span class="string">"<span class="variable">$PATH</span>"</span></span><br></pre></td></tr></table></figure>
 
 <p>然后，使用下面的命令拉取</p>
-<figure class="highlight xml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">fetch v8</span><br><span class="line">glient sync</span><br></pre></td></tr></table></figure>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">fetch v8</span><br><span class="line">glient sync</span><br></pre></td></tr></table></figure>
 
-<p>如果出现gclient拉取问题，可以尝试修改.gclient文件如下所示</p>
+<p>如果出现 gclient 拉取问题，可以尝试修改 .gclient 文件如下所示</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">solutions = [</span><br><span class="line">  &#123;</span><br><span class="line">    &quot;managed&quot;: False,</span><br><span class="line">    &quot;name&quot;: &quot;src&quot;,</span><br><span class="line">    &quot;url&quot;: &quot;https://chromium.googlesource.com/v8/v8.git&quot;,</span><br><span class="line">    &quot;custom_deps&quot;: &#123;&#125;,</span><br><span class="line">    &quot;deps_file&quot;: &quot;.DEPS.git&quot;,</span><br><span class="line">    &quot;safesync_url&quot;: &quot;&quot;,</span><br><span class="line">  &#125;,</span><br><span class="line">]</span><br></pre></td></tr></table></figure>
 
-<p>此外，url还可以尝试取github上的地址</p>
+<p>此外，url 还可以尝试取 github 上的地址</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">https://github.com/chromium/chromium.git</span><br></pre></td></tr></table></figure>
 
 <h1 id="编译V8"><a href="#编译V8" class="headerlink" title="编译V8"></a>编译V8</h1><p>目前V8默认是使用Clang编译的，确实比GCC快很多，但由于我们最后还要和游戏进行链接，所以需要把工具链换成GCC。在<a href="https://chromium.googlesource.com/external/github.com/v8/v8.wiki/+/8c0be5e888bda68437f15e2ea9e317fd6229a5e3/Building-with-GN.md" target="_blank" rel="noopener">这篇wiki</a>中给出了从简单到复杂的不同的编译的流程。我试验下来直接用<code>gn</code>是最为方便的。</p>
-<h2 id="修改编译器"><a href="#修改编译器" class="headerlink" title="修改编译器"></a>修改编译器</h2><p>V8默认的编译工具链是clang，我们要将它变成GCC。首先我们需要设置<code>use_custom_libcxx</code>，这个项目如果为true，就会走v8自带的编译工具，这样编译出来如果是d8还好，但我们需要静态库，这样肯定不行。</p>
+<h2 id="修改编译器"><a href="#修改编译器" class="headerlink" title="修改编译器"></a>修改编译器</h2><p>V8 默认的编译工具链是 clang，需要将它变成 GCC。首先需要设置 <code>use_custom_libcxx</code>，这个项目如果为 true，就会走 v8 自带的编译工具，这样编译出来如果是 d8 还好，但需要静态库，这样肯定不行。</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">use_custom_libcxx = false</span><br></pre></td></tr></table></figure>
 
-<p>然后我们需要修改<code>gn args</code>，添加下面的项目，目的是禁用clang相关的宏。</p>
+<p>然后需要修改 <code>gn args</code>，添加下面的项目，目的是禁用 clang 相关的宏。</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">is_clang = false</span><br><span class="line">use_sysroot = false</span><br></pre></td></tr></table></figure>
 
-<p>为了防止<code>ld.gold</code>报错，还需要开启下面的选项。</p>
+<p>为了防止 <code>ld.gold</code> 报错，还需要开启下面的选项。</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">fatal_linker_warnings = false</span><br></pre></td></tr></table></figure>
 
-<p>但这么做还不够，需要在入口<code>build/config/BUILDCONFIG.gn</code>中，修改Linux下，<code>is_clang</code>为true的情况下，<code>toolchain</code>为GCC。否则，还是有一些代码会把<code>is_clang</code>的值变回true。</p>
+<p>但这么做还不够，需要在入口 <code>build/config/BUILDCONFIG.gn</code> 中，修改 Linux 下，<code>is_clang</code> 为 true 的情况下，<code>toolchain</code>为 GCC。否则，还是有一些代码会把 <code>is_clang</code> 的值变回 true。</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">_default_toolchain = &quot;//build/toolchain/linux:$target_cpu&quot;</span><br></pre></td></tr></table></figure>
 
-<p>紧接着，我们就要修改原来的gcc toolchain，将里面的配置替换成我们刚编译得到的GCC9，具体涉及下面的修改</p>
+<p>紧接着，就要修改原来的gcc toolchain，将里面的配置替换成我们刚编译得到的GCC9，具体涉及下面的修改</p>
 <ol>
 <li><code>toolchain\gcc_toolchain.gni</code><br> 这是一个模板文件，我们需要修改GCC的<code>cc</code>、<code>cxx</code>、<code>alink</code>和<code>link_command</code>这几个项目。具体说来，包括：<ol>
 <li>设置<code>cc</code>、<code>cxx</code>和<code>ld</code>到GCC9的bin目录下的对应程序；<br> 这里，ld就指定为g++即可</li>
@@ -499,11 +505,9 @@
           
             <a href="/tags/C/" rel="tag"># C++</a>
           
-            <a href="/tags/编译器/" rel="tag"># 编译器</a>
-          
             <a href="/tags/GCC/" rel="tag"># GCC</a>
           
-            <a href="/tags/GLIBC/" rel="tag"># GLIBC</a>
+            <a href="/tags/编译器/" rel="tag"># 编译器</a>
           
         </div>
       
@@ -607,7 +611,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">254</span>
+                <span class="site-state-item-count">255</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -620,7 +624,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">157</span>
+                <span class="site-state-item-count">158</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

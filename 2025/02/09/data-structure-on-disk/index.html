@@ -91,19 +91,21 @@
 
 
 
-<meta name="description" content="如题。">
+<meta name="description" content="本文主要介绍在设计需要序列化到磁盘上的数据结构时，需要考虑的点。">
 <meta name="keywords" content="数据库,Parquet">
 <meta property="og:type" content="article">
 <meta property="og:title" content="磁盘上的数据结构">
 <meta property="og:url" content="http://www.calvinneo.com/2025/02/09/data-structure-on-disk/index.html">
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
-<meta property="og:description" content="如题。">
+<meta property="og:description" content="本文主要介绍在设计需要序列化到磁盘上的数据结构时，需要考虑的点。">
 <meta property="og:locale" content="zh-Hans">
 <meta property="og:image" content="http://www.calvinneo.com/img/disk-struct/parquet.gif">
-<meta property="og:updated_time" content="2025-03-08T02:25:36.452Z">
+<meta property="og:image" content="http://www.calvinneo.com/img/disk-struct/dremel_column_representation.jpg">
+<meta property="og:image" content="http://www.calvinneo.com/img/disk-struct/schema.png">
+<meta property="og:updated_time" content="2025-11-21T06:39:33.174Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="磁盘上的数据结构">
-<meta name="twitter:description" content="如题。">
+<meta name="twitter:description" content="本文主要介绍在设计需要序列化到磁盘上的数据结构时，需要考虑的点。">
 <meta name="twitter:image" content="http://www.calvinneo.com/img/disk-struct/parquet.gif">
 
 
@@ -379,7 +381,7 @@
       
 
       
-        <p>如题。</p>
+        <p>本文主要介绍在设计需要序列化到磁盘上的数据结构时，需要考虑的点。</p>
 <a id="more"></a>
 
 <h1 id="设计要点"><a href="#设计要点" class="headerlink" title="设计要点"></a>设计要点</h1><h2 id="序列化和反序列化-serde"><a href="#序列化和反序列化-serde" class="headerlink" title="序列化和反序列化(serde)"></a>序列化和反序列化(serde)</h2><p>这里的要点，并不只局限在类似于 protobuf 的库上，而是在设计存储格式的时候，都会考虑的问题。</p>
@@ -415,7 +417,7 @@
 <p>从下面的图片中可以看到，Parquet 文件实际上是自包含的，也就是说单个 Parquet 文件已经包含完整的数据和元数据，无需依赖外部元数据文件。像 Spark 之类的系统确实会创建一个全局的 metadata 文件，但它的作用就是方便快速的索引。</p>
 </blockquote>
 <p><img src="/img/disk-struct/parquet.gif"></p>
-<p>因为 metadata 在 parquet 文件的 Footer 处，所以需要先读取文件的倒数第5到8字节，得到它的大小，然后再往前 seek 这个大小解析出 metadata 部分。</p>
+<p>因为 metadata 在 parquet 文件的 Footer 处，所以需要先读取文件的倒数第 5 到 8 字节，得到它的大小，然后再往前 seek 这个大小解析出 metadata 部分。</p>
 <p>Parquet 是使用 Thrift 协议解析序列化的。它和 protobuf 其实差不多，不过 Thrift 自带了 RPC。</p>
 <h3 id="Types"><a href="#Types" class="headerlink" title="Types"></a>Types</h3><p>Parquet 会在 Column Chunk 层面保存 min max 值。</p>
 <h3 id="Nested-Encoding"><a href="#Nested-Encoding" class="headerlink" title="Nested Encoding"></a>Nested Encoding</h3><p>关于 Dremel 格式，可以看 <a href="https://paper-notes.zhjwpku.com/datalayout/dremel.html%E3%80%82" target="_blank" rel="noopener">https://paper-notes.zhjwpku.com/datalayout/dremel.html。</a></p>
@@ -429,8 +431,117 @@
 <p>Combining this with the strategy used for rc or avro files using sync markers, a reader could recover partially written files.</p>
 </blockquote>
 <h2 id="Avro"><a href="#Avro" class="headerlink" title="Avro"></a>Avro</h2><h2 id="LevelDB-RocksDB-的-WAL"><a href="#LevelDB-RocksDB-的-WAL" class="headerlink" title="LevelDB/RocksDB 的 WAL"></a>LevelDB/RocksDB 的 WAL</h2><p>见 <a href="/2021/04/23/leveldb-wal/">LevelDB 之 WAL</a></p>
-<h2 id="Dremel"><a href="#Dremel" class="headerlink" title="Dremel"></a>Dremel</h2><h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
+<h2 id="Dremel"><a href="#Dremel" class="headerlink" title="Dremel"></a>Dremel</h2><p>如下图所示，dremel 可以将 nesting 的格式，例如 protobuf 或者 json 拍平成适合列式存储的格式。那么多个 doc 就会被转换成一定数量的列。如下图所示，2 个 doc 被用 6 个列存储。我们不需要记录“内部节点”，只需要记录“叶子节点”就行。</p>
+<p><img src="/img/disk-struct/dremel_column_representation.jpg"></p>
+<p>容易看到，每个列的长度是不一样的。这是因为 nesting 格式主要的复杂点是存在 option 和 repeated 的情况。</p>
+<p>如果没有上述的情况，就可以理解为一个只包含基础类型的 struct。那么：</p>
+<ul>
+<li>如上图所示，每个 fullpath 作为一列。对于每个 doc，按照 fullpath 拍平，将值对应存储到各列就行。这个过程称为 strip。</li>
+<li>读取的时候，可以直接按照顺序从各个列中还原成原来的文档，不同列相同的 offset 肯定属于同一个文档。</li>
+<li>所有列的长度是一样的。</li>
+</ul>
+<p>但是如果有了 option 和 repeated，就不是这样了。</p>
+<p>解决方案是引入两个计数：</p>
+<ul>
+<li><p>Repetiton Level<br>  表示这个值在 full path 的哪一级进行重复。如果为 0，说明这是一个新的 doc。<br>  在下面的例子中，考虑 <code>Name.Language</code> 这个列的 Repetiton Level 值：</p>
+<ul>
+<li><p>如果为 1，就表示在当前这个 doc 中，还有一个 Name 字段。</p>
+  <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Doc 1</span><br><span class="line">    Name 1</span><br><span class="line">        Language 1</span><br><span class="line">    Name 2</span><br><span class="line">        Language 2  &lt;====== 属于 Name 2</span><br></pre></td></tr></table></figure></li>
+<li><p>如果为 2，就表示在当前这个 doc 中，当前这个 Name 字段中，还有一个 Language 字段。</p>
+  <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">Doc 1</span><br><span class="line">    Name 1</span><br><span class="line">        Language 1</span><br><span class="line">        Language 2  &lt;====== 属于 Name 1</span><br></pre></td></tr></table></figure></li>
+</ul>
+</li>
+<li><p>Definition Level<br>  用来解决 option 字段的问题。只有 option 和 repeated 字段才需要 definition level，required 的字段不需要。</p>
+</li>
+</ul>
+<p>下图中是一个概括性的示例：</p>
+<ul>
+<li>required 字段的 R level 和 D level 和父亲一样</li>
+<li>option 字段的 R level 不变，D level 递增</li>
+<li>repeated 字段的 R level 和 D level 都递增</li>
+</ul>
+<p><img src="/img/disk-struct/schema.png"></p>
+<p>下面是个 demo，几个关键点：</p>
+<ul>
+<li><code>Links.Backward: NULL, R:0, D:1</code><br>  如果一个 repeated 或者 optional 字段为空，需要写一个 NULL。这里 D 为 1 是因为 Links 是有值的，它的 level 是 1。</li>
+<li><code>Name.Language.Code: en-us, R:0, D:2</code><br>  尽管在同一个 doc 里面，但这里 R 是 0 而不是 1，因为这里的 Name 没有重复。<br>  其实这也很好理解，因为 <code>Links.*</code> 和 <code>Name.*</code> 是两个列了，所以它们的 R 也不相关。</li>
+</ul>
+<table style="margin-left: auto; margin-right: auto">
+<tr>
+    <td>
+    <pre>
+    message Document {
+        required int64 DocId;
+        optional group Links {
+            repeated int64 Backward;
+            repeated int64 Forward;
+        }
+        repeated group Name {
+            repeated group Language {
+                required string Code;
+                optional string Country;
+            }
+            optional string Url;
+        }
+    }
+    </pre>
+    </td>
+    <td>
+    <pre>
+    DocId: 10
+    Links
+      Forward: 20
+      Forward: 40
+      Forward: 60
+    Name
+      Language
+        Code: 'en-us'
+        Country: 'us'
+      Language
+        Code: 'en'
+      Url: 'http://A'
+    Name
+      Url: 'http://B'
+    Name
+      Language
+        Code: 'en-gb'
+        Country: 'gb'
+    </pre>
+    </td>
+    <td>
+    <pre>
+    R = 0 (current repetition level)
+    DocId: 10, R:0, D:0
+    Links.Backward: NULL, R:0, D:1 (no value defined so D < 2)
+    Links.Forward: 20, R:0, D:2
+    R = 1 (we are repeating 'Links.Forward' of level 1)
+    Links.Forward: 40, R:1, D:2
+    R = 1 (we are repeating 'Links.Forward' again of level 1)
+    Links.Forward: 60, R:1, D:2
+    Back to the root level: R=0
+    Name.Language.Code: en-us, R:0, D:2
+    Name.Language.Country: us, R:0, D:3
+    R = 2 (we are repeating 'Name.Language' of level 2)
+    Name.Language.Code: en, R:2, D:2
+    Name.Language.Country: NULL, R:2, D:2 (no value defined so D < 3)
+    Name.Url: http://A, R:0, D:2
+    R = 1 (we are repeating 'Name' of level 1)
+    Name.Language.Code: NULL, R:1, D:1 (Only Name is defined so D = 1)
+    Name.Language.Country: NULL, R:1, D:1
+    Name.Url: http://B, R:1, D:2
+    R = 1 (we are repeating 'Name' again of level 1)
+    Name.Language.Code: en-gb, R:1, D:2
+    Name.Language.Country: gb, R:1, D:3
+    Name.Url: NULL, R:1, D:1
+    </pre>
+    </td>
+</tr><tr>
+</tr></table>
+
+<h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
 <li><a href="https://parquet.apache.org/docs/file-format/" target="_blank" rel="noopener">https://parquet.apache.org/docs/file-format/</a></li>
+<li><a href="https://paper-notes.zhjwpku.com/datalayout/dremel.html" target="_blank" rel="noopener">https://paper-notes.zhjwpku.com/datalayout/dremel.html</a></li>
+<li><a href="https://github.com/julienledem/redelm/wiki/The-striping-and-assembly-algorithms-from-the-Dremel-paper" target="_blank" rel="noopener">https://github.com/julienledem/redelm/wiki/The-striping-and-assembly-algorithms-from-the-Dremel-paper</a></li>
 </ol>
 
       
@@ -588,7 +699,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">254</span>
+                <span class="site-state-item-count">255</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -601,7 +712,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">157</span>
+                <span class="site-state-item-count">158</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

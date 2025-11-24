@@ -99,7 +99,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="主要介绍 TiCI 的一些实现。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2025-10-26T05:17:27.868Z">
+<meta property="og:updated_time" content="2025-11-24T09:58:23.226Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="TiCI 的设计考量">
 <meta name="twitter:description" content="主要介绍 TiCI 的一些实现。">
@@ -394,15 +394,28 @@
 <li>Compaction vs Split</li>
 <li>S3 的 SlowDown</li>
 </ul>
-<h2 id="数据源"><a href="#数据源" class="headerlink" title="数据源"></a>数据源</h2><h3 id="Push-or-Pull"><a href="#Push-or-Pull" class="headerlink" title="Push or Pull"></a>Push or Pull</h3><p>TiCI 设计主要以 TiCDC 作为数据源。所以一开始是每个 Shard 会不停 Poll S3 上的某个 prefix，复杂度是 <code>O(shard_count*log_count)</code>。为了减小 LIST 的读放大，我们对 CDC 的日志进行了编号，这样只需要不停 GET 就行。</p>
-<h3 id="延迟"><a href="#延迟" class="headerlink" title="延迟"></a>延迟</h3><p>根据 <a href="/2025/01/18/percolator-2/">TiCDC 的原理</a>，基于 TiCDC 为数据源，很难将延迟降低到秒以内。</p>
-<h1 id="MetaService"><a href="#MetaService" class="headerlink" title="MetaService"></a>MetaService</h1><h2 id="Outline"><a href="#Outline" class="headerlink" title="Outline"></a>Outline</h2><h2 id="Shard"><a href="#Shard" class="headerlink" title="Shard"></a>Shard</h2><p>在 shard 的大小默认设置为 4 GiB，这样对于 80 TiB 的集群规模，会有 20k+ 个 shard。一个 shard 中有多个 fragment，fragment 之间是可以 overlap 的，我们也按照传统方法引入了 leveled compaction。</p>
+<h2 id="有状态还是无状态的-Worker"><a href="#有状态还是无状态的-Worker" class="headerlink" title="有状态还是无状态的 Worker"></a>有状态还是无状态的 Worker</h2><p>使用无状态的 worker，则：</p>
+<ul>
+<li>不需要挂载 EBS，成本低</li>
+<li>如果要支持高频写入，则对 S3 的 QPS 有要求。后续对 Compaction 的速度也有要求</li>
+<li>如果不支持高频写入，则数据的 freshness 就会比较差</li>
+</ul>
+<p>使用有状态的 worker，则：</p>
+<ul>
+<li>需要挂载一个小容量的 EBS，定期 flush 到 S3</li>
+<li>查询的时候，需要从 EBS 上 merge<br>  类似 TiFlash 的方案</li>
+</ul>
+<h2 id="数据源"><a href="#数据源" class="headerlink" title="数据源"></a>数据源</h2><h3 id="Push-or-Pull"><a href="#Push-or-Pull" class="headerlink" title="Push or Pull"></a>Push or Pull</h3><p>TiCI 设计主要以 TiCDC 作为数据源。所以一开始是每个 Shard 会不停 Poll S3 上的某个 prefix，复杂度是 <code>O(shard_count*log_count)</code>。为了减小 LIST 的读放大，对 CDC 的日志进行了编号，这样只需要不停 GET 就行。</p>
+<p>但是如果 Shard 很多，那么每个 Shard 的 Poll 依然开销很大。所以，引入了一个 per node 的 Poller，去代理这个 poll 的过程。</p>
+<h3 id="延迟"><a href="#延迟" class="headerlink" title="延迟"></a>延迟</h3><p>根据 <a href="/2025/01/18/percolator-2/">TiCDC 的原理</a>，以 TiCDC 为数据源，很难将延迟降低到秒以内。</p>
+<h1 id="Meta-Service"><a href="#Meta-Service" class="headerlink" title="Meta Service"></a>Meta Service</h1><h2 id="Outline"><a href="#Outline" class="headerlink" title="Outline"></a>Outline</h2><h2 id="Shard"><a href="#Shard" class="headerlink" title="Shard"></a>Shard</h2><p>在 shard 的大小默认设置为 4 GiB，这样对于 80 TiB 的集群规模，会有 20k+ 个 shard。一个 shard 中有多个 fragment，fragment 之间是可以 overlap 的，我们也按照传统方法引入了 leveled compaction。</p>
 <p>过多的 shard/fragment 意味更小的 shard/fragment 的 size，这对于查询是不利的：</p>
 <ul>
 <li>过多的 fragment，会导致每个 fragment 中的词典会很小，压缩率不高</li>
 <li>此外，一个查询如果覆盖多个 fragment，就需要按照每个 fragment 的词典都过滤一遍，再 merge，这样并发上不去</li>
 </ul>
 <h3 id="Split-amp-Compaction"><a href="#Split-amp-Compaction" class="headerlink" title="Split &amp; Compaction"></a>Split &amp; Compaction</h3><p>Split 和 Compaction 存在冲突。</p>
+<h3 id="大量小表"><a href="#大量小表" class="headerlink" title="大量小表"></a>大量小表</h3><p>考虑大量小表的场景，Shard 就会很多。因为这些 Shard 的写入带宽都不会很大，所以在我们的无状态架构下，基本定时都会上传一个小文件到 S3 上。</p>
 <h1 id="tantivy"><a href="#tantivy" class="headerlink" title="tantivy"></a>tantivy</h1><h2 id="保序"><a href="#保序" class="headerlink" title="保序"></a>保序</h2><h3 id="如果要支持逆向？"><a href="#如果要支持逆向？" class="headerlink" title="如果要支持逆向？"></a>如果要支持逆向？</h3><p>Tantivy 的倒排表文件是顺序压缩存储的，例如：</p>
 <ul>
 <li>doc_id 列表经过 delta-encoded<br>  如果要支持逆向，则需要保存两个方向的差值，十分麻烦</li>
@@ -575,7 +588,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">254</span>
+                <span class="site-state-item-count">255</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -588,7 +601,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">157</span>
+                <span class="site-state-item-count">158</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -681,7 +694,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#TiCI-要解决什么问题？"><span class="nav-number">1.</span> <span class="nav-text">TiCI 要解决什么问题？</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#写入路径"><span class="nav-number">2.</span> <span class="nav-text">写入路径</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#涉及到的问题"><span class="nav-number">2.1.</span> <span class="nav-text">涉及到的问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#数据源"><span class="nav-number">2.2.</span> <span class="nav-text">数据源</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Push-or-Pull"><span class="nav-number">2.2.1.</span> <span class="nav-text">Push or Pull</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#延迟"><span class="nav-number">2.2.2.</span> <span class="nav-text">延迟</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#MetaService"><span class="nav-number">3.</span> <span class="nav-text">MetaService</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Outline"><span class="nav-number">3.1.</span> <span class="nav-text">Outline</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Shard"><span class="nav-number">3.2.</span> <span class="nav-text">Shard</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Split-amp-Compaction"><span class="nav-number">3.2.1.</span> <span class="nav-text">Split &amp; Compaction</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#tantivy"><span class="nav-number">4.</span> <span class="nav-text">tantivy</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#保序"><span class="nav-number">4.1.</span> <span class="nav-text">保序</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#如果要支持逆向？"><span class="nav-number">4.1.1.</span> <span class="nav-text">如果要支持逆向？</span></a></li></ol></li></ol></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#TiCI-要解决什么问题？"><span class="nav-number">1.</span> <span class="nav-text">TiCI 要解决什么问题？</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#写入路径"><span class="nav-number">2.</span> <span class="nav-text">写入路径</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#涉及到的问题"><span class="nav-number">2.1.</span> <span class="nav-text">涉及到的问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#有状态还是无状态的-Worker"><span class="nav-number">2.2.</span> <span class="nav-text">有状态还是无状态的 Worker</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#数据源"><span class="nav-number">2.3.</span> <span class="nav-text">数据源</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Push-or-Pull"><span class="nav-number">2.3.1.</span> <span class="nav-text">Push or Pull</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#延迟"><span class="nav-number">2.3.2.</span> <span class="nav-text">延迟</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Meta-Service"><span class="nav-number">3.</span> <span class="nav-text">Meta Service</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Outline"><span class="nav-number">3.1.</span> <span class="nav-text">Outline</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Shard"><span class="nav-number">3.2.</span> <span class="nav-text">Shard</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Split-amp-Compaction"><span class="nav-number">3.2.1.</span> <span class="nav-text">Split &amp; Compaction</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#大量小表"><span class="nav-number">3.2.2.</span> <span class="nav-text">大量小表</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#tantivy"><span class="nav-number">4.</span> <span class="nav-text">tantivy</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#保序"><span class="nav-number">4.1.</span> <span class="nav-text">保序</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#如果要支持逆向？"><span class="nav-number">4.1.1.</span> <span class="nav-text">如果要支持逆向？</span></a></li></ol></li></ol></li></ol></div>
             
 
           </div>

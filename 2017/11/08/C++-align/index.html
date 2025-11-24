@@ -99,7 +99,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="最近在看Inside the C++ Object Model，一种日经面试题，求sizeof(A) 12345678910struct A&amp;#123;    char c;    int i;    long long ll;    int j;    virtual void f()&amp;#123;&amp;#125;;&amp;#125;;struct B&amp;#123;&amp;#125;;  这种题目其实考的知识点很多">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2023-01-22T08:06:10.388Z">
+<meta property="og:updated_time" content="2025-11-20T17:40:07.824Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="C++内存对齐与多态">
 <meta name="twitter:description" content="最近在看Inside the C++ Object Model，一种日经面试题，求sizeof(A) 12345678910struct A&amp;#123;    char c;    int i;    long long ll;    int j;    virtual void f()&amp;#123;&amp;#125;;&amp;#125;;struct B&amp;#123;&amp;#125;;  这种题目其实考的知识点很多">
@@ -388,10 +388,25 @@
 <li>整个struct按最大成员大小进行对齐<br>在对齐的情况下，对象的大小也会改变。根据Inside the C++ Object Model Ch1.3中的注解，一个class object的大小包括其non-static data members的总大小，加上保持alignment时需要padding上去的空间（在members之间以及在objects之间），以及维持虚函数等的开销。因此上面的结构等价于<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">void</span> * vftable; <span class="comment">// 4</span></span><br><span class="line"><span class="keyword">char</span> c; <span class="comment">// 5</span></span><br><span class="line"><span class="keyword">char</span> gap[<span class="number">3</span>]; <span class="comment">// 8</span></span><br><span class="line"><span class="keyword">int</span> i; <span class="comment">// 12</span></span><br><span class="line"><span class="keyword">char</span> gap[<span class="number">4</span>]; <span class="comment">// 16</span></span><br><span class="line"><span class="keyword">long</span> <span class="keyword">long</span> ll; <span class="comment">// 24</span></span><br><span class="line"><span class="keyword">int</span> j; <span class="comment">// 28</span></span><br><span class="line"><span class="keyword">char</span> gap[<span class="number">4</span>]; <span class="comment">// 32</span></span><br></pre></td></tr></table></figure></li>
 </ol>
 <p>根据Inside the C++ Object Model Ch3.1，一个空的struct仍有1字节，这是为了保证其实例化得到的所有对象能在内存上拥有自己独有的地址，我们发现这里没有为这个空的struct加上padding。但正如下面即将看到的一样，这个1字节在使用虚继承时可以被去掉。</p>
-<h1 id="虚继承下的align和padding"><a href="#虚继承下的align和padding" class="headerlink" title="虚继承下的align和padding"></a>虚继承下的align和padding</h1><p>下面我们看看复杂一点的虚继承。为了避免在菱形继承中<code>A</code>出现两份的<code>X</code>拷贝，进而出现二义性的问题，可以使用虚继承。虚继承中对于给定的虚基类，无论该类在继承体系中作为虚基类出现了多少次，只继承一个共享的基类子对象，这样<strong>菱形继承</strong>中的二义性问题也能够解决了（但普通多继承并没有解决）。<br>下面看看Inside the C++ Object Model上的这段菱形继承代码，它的大小如何？</p>
+<h1 id="虚继承下的-align-和-padding"><a href="#虚继承下的-align-和-padding" class="headerlink" title="虚继承下的 align 和 padding"></a>虚继承下的 align 和 padding</h1><p>下面看看复杂一点的虚继承。使用虚继承，避免在菱形继承中 <code>A</code> 出现两份的 <code>X</code> 拷贝，进而出现二义性的问题。对于给定的虚基类，无论它在继承体系中作为虚基类出现了多少次，只继承一个共享的基类子对象，这样<strong>菱形继承</strong>中的二义性问题也能够解决了（但普通多继承并没有解决）。<br>下面看看 Inside the C++ Object Model 上的这段菱形继承代码，它的大小如何？</p>
 <figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">X</span>&#123;</span>&#125;;</span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Y</span>:</span> <span class="keyword">public</span> <span class="keyword">virtual</span> X&#123;&#125;;</span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Z</span>:</span> <span class="keyword">public</span> <span class="keyword">virtual</span> X&#123;&#125;;</span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">A</span>:</span> <span class="keyword">public</span> Y, <span class="keyword">public</span> Z&#123;&#125;;</span><br></pre></td></tr></table></figure>
 
-<p>作者指出应当为<code>1 8 8 12</code>，但也同时指出有些编译器（译者指出例如MSVC）会产生<code>1 4 4 8</code>。<br>首先<code>X</code>有1的开销这是毫无疑问的。下面的<code>Y</code>大小为8。首先<code>Y</code>虚继承了<code>X</code>，所以还需要一个4字节的指针，指向虚基类的<code>X</code>大小为1字节的子对象。这是类似于vftable指针的机制，称为vbtable指针。然后<code>X</code>的1字节的占位符也被继承下来到了<code>Y</code>对象中，这里译者的图应该错了，不然没有办法解释后面<code>A</code>也能算空类，为啥不给<code>A</code>加上1字节。最后，我们为已有的5字节加上3字节的padding，总共有8字节。<br>考虑<code>A</code>，它拥有12字节，这包括<code>Y</code>和<code>Z</code>的子对象中除<code>X</code>以外的部分，各4字节（注意不是8字节，由于<code>X</code>被共享了，这也是虚继承的核心思想）。现在在加上被共享的<code>X</code>的1字节，共9字节，加上padding共12字节。Inside the C++ Object Model指出此时<code>A</code>自己的大小是0字节。<br>MSVC优化掉了空类<code>X</code>占用的1字节开销，这样<code>Y</code>最后的3字节的padding也不需要了，因此只保留了一个指针。</p>
+<p>作者指出应当为 <code>1 8 8 12</code>，但也同时指出有些编译器（译者指出例如MSVC）会产生 <code>1 4 4 8</code>。</p>
+<ul>
+<li>首先 <code>X</code> 有 1 的开销这是毫无疑问的。</li>
+<li><code>Y</code> 大小为 8。<ul>
+<li>首先 <code>Y</code> 虚继承了 <code>X</code>，所以还需要一个4字节的指针，指向虚基类的 <code>X</code> 大小为1字节的子对象。这是类似于 vftable 指针的机制，称为 vbtable 指针。</li>
+<li>然后 <code>X</code> 的1字节的占位符也被继承下来到了 <code>Y</code> 对象中。这里译者的图应该错了，不然没有办法解释后面 <code>A</code> 也能算空类，为啥不给 <code>A</code> 加上1字节。</li>
+<li>最后为已有的 5 字节加上 3 字节的 padding，总共有8字节。</li>
+</ul>
+</li>
+<li><code>A</code> 拥有 12 字节，这包括<ul>
+<li><code>Y</code> 和 <code>Z</code> 的子对象中除 <code>X</code> 以外的部分，各4字节。注意不是8字节，由于<code>X</code>被共享了，这也是虚继承的核心思想。</li>
+<li>再加上被共享的 <code>X</code> 的1字节，共9字节，加上 padding 共 12 字节。Inside the C++ Object Model 指出此时 <code>A</code> 自己的大小是 0 字节。</li>
+</ul>
+</li>
+</ul>
+<p>MSVC 优化掉了空类 <code>X</code> 占用的1字节开销，这样 <code>Y</code> 最后的3字节的 padding 也不需要了，因此只保留了一个指针。</p>
 <h1 id="虚函数-虚继承"><a href="#虚函数-虚继承" class="headerlink" title="虚函数+虚继承"></a>虚函数+虚继承</h1><p>虚函数和虚继承可能同时出现。</p>
 <h1 id="控制对象对齐方式"><a href="#控制对象对齐方式" class="headerlink" title="控制对象对齐方式"></a>控制对象对齐方式</h1><p>对齐要求源自CPU的一些指令需要传入的地址满足能整除某个值。</p>
 <h2 id="C语言中的规定"><a href="#C语言中的规定" class="headerlink" title="C语言中的规定"></a>C语言中的规定</h2><p>有的时候我们需要禁用对齐功能，例如我们需要将某个<code>struct</code>按照二进制格式进行传输或者存储，这时候我们需要严格的、紧缩的大小，而不是加上一个和具体对齐方式有关的padding占用空间。在g++中可以通过<code>__attribute__((__packed__))</code>来禁止编译器进行优化对齐。packed属性可能是不安全的，因为它会导致非对齐访问。注意这里要区分packed和aligned，<code>aligned(x)</code>强调的是我对象所在的地址应当至少以<code>x</code>字节对齐，为了对齐会导致padding的加入，从而改变内存布局。packed会禁用padding。因此<a href="https://stackoverflow.com/questions/11770451/what-is-the-meaning-of-attribute-packed-aligned4" target="_blank" rel="noopener">会产生<code>__attribute__((packed, aligned(4)))</code></a>这样的奇怪用法。</p>
@@ -557,7 +572,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">254</span>
+                <span class="site-state-item-count">255</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -570,7 +585,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">157</span>
+                <span class="site-state-item-count">158</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -663,7 +678,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#普通情况和继承条件下的align和padding"><span class="nav-number">1.</span> <span class="nav-text">普通情况和继承条件下的align和padding</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#虚继承下的align和padding"><span class="nav-number">2.</span> <span class="nav-text">虚继承下的align和padding</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#虚函数-虚继承"><span class="nav-number">3.</span> <span class="nav-text">虚函数+虚继承</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#控制对象对齐方式"><span class="nav-number">4.</span> <span class="nav-text">控制对象对齐方式</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#C语言中的规定"><span class="nav-number">4.1.</span> <span class="nav-text">C语言中的规定</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#C-11标准中的规定"><span class="nav-number">4.2.</span> <span class="nav-text">C++11标准中的规定</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#指针与对齐"><span class="nav-number">5.</span> <span class="nav-text">指针与对齐</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#普通情况和继承条件下的align和padding"><span class="nav-number">1.</span> <span class="nav-text">普通情况和继承条件下的align和padding</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#虚继承下的-align-和-padding"><span class="nav-number">2.</span> <span class="nav-text">虚继承下的 align 和 padding</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#虚函数-虚继承"><span class="nav-number">3.</span> <span class="nav-text">虚函数+虚继承</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#控制对象对齐方式"><span class="nav-number">4.</span> <span class="nav-text">控制对象对齐方式</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#C语言中的规定"><span class="nav-number">4.1.</span> <span class="nav-text">C语言中的规定</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#C-11标准中的规定"><span class="nav-number">4.2.</span> <span class="nav-text">C++11标准中的规定</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#指针与对齐"><span class="nav-number">5.</span> <span class="nav-text">指针与对齐</span></a></li></ol></div>
             
 
           </div>
