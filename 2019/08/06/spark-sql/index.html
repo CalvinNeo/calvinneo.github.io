@@ -73,7 +73,7 @@
 <link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="并行计算,数据挖掘,数据库,Spark,Scala," />
+  <meta name="keywords" content="并行计算,数据库,数据挖掘,Scala,Spark," />
 
 
 
@@ -92,7 +92,7 @@
 
 
 <meta name="description" content="Spark是MapReduce的下一代的分布式计算框架。相比更早期的MapReduce的Job和Task的两层，Spark更为灵活，其执行粒度分为Application、Job、Stage和Task四个层次。本文写作基于Spark 2.4.4版本的源码。 【TLDR】本来写文章确实是简练清楚为最佳，不过我发现Spark架构实在是很庞大，其中涉及到的一些架构知识我觉得都很有启发意义，因此这篇文章就被">
-<meta name="keywords" content="并行计算,数据挖掘,数据库,Spark,Scala">
+<meta name="keywords" content="并行计算,数据库,数据挖掘,Scala,Spark">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Spark和SparkSQL">
 <meta property="og:url" content="http://www.calvinneo.com/2019/08/06/spark-sql/index.html">
@@ -1221,7 +1221,7 @@ LolLegsTsFeature.scala
 <figure class="highlight scala"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment"> * [performance] Spark's internal mapPartitionsWithIndex method that skips closure cleaning.</span></span><br><span class="line"><span class="comment"> * It is a performance API to be used carefully only if we are sure that the RDD elements are</span></span><br><span class="line"><span class="comment"> * serializable and don't require closure cleaning.</span></span><br><span class="line"><span class="comment"> *</span></span><br><span class="line"><span class="comment"> * @param preservesPartitioning indicates whether the input function preserves the partitioner,</span></span><br><span class="line"><span class="comment"> *                              which should be `false` unless this is a pair RDD and the input</span></span><br><span class="line"><span class="comment"> *                              function doesn't modify the keys.</span></span><br><span class="line"><span class="comment"> * @param isOrderSensitive whether or not the function is order-sensitive. If it's order</span></span><br><span class="line"><span class="comment"> *                         sensitive, it may return totally different result when the input order</span></span><br><span class="line"><span class="comment"> *                         is changed. Mostly stateful functions are order-sensitive.</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="keyword">private</span>[spark] <span class="function"><span class="keyword">def</span> <span class="title">mapPartitionsWithIndexInternal</span></span>[<span class="type">U</span>: <span class="type">ClassTag</span>](</span><br><span class="line">    f: (<span class="type">Int</span>, <span class="type">Iterator</span>[<span class="type">T</span>]) =&gt; <span class="type">Iterator</span>[<span class="type">U</span>],</span><br><span class="line">    preservesPartitioning: <span class="type">Boolean</span> = <span class="literal">false</span>,</span><br><span class="line">    isOrderSensitive: <span class="type">Boolean</span> = <span class="literal">false</span>): <span class="type">RDD</span>[<span class="type">U</span>] = withScope &#123;</span><br><span class="line">  <span class="keyword">new</span> <span class="type">MapPartitionsRDD</span>(</span><br><span class="line">    <span class="keyword">this</span>,</span><br><span class="line">    (_: <span class="type">TaskContext</span>, index: <span class="type">Int</span>, iter: <span class="type">Iterator</span>[<span class="type">T</span>]) =&gt; f(index, iter),</span><br><span class="line">    preservesPartitioning = preservesPartitioning,</span><br><span class="line">    isOrderSensitive = isOrderSensitive)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
 <p>其中<code>withScope</code>的实现是</p>
-<figure class="highlight scala"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment"> * Execute a block of code in a scope such that all new RDDs created in this body will</span></span><br><span class="line"><span class="comment"> * be part of the same scope. For more detail, see &#123;&#123;org.apache.spark.rdd.RDDOperationScope&#125;&#125;.</span></span><br><span class="line"><span class="comment"> *</span></span><br><span class="line"><span class="comment"> * <span class="doctag">Note:</span> Return statements are NOT allowed in the given body.</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="keyword">private</span>[spark] <span class="function"><span class="keyword">def</span> <span class="title">withScope</span></span>[<span class="type">U</span>](body: =&gt; <span class="type">U</span>): <span class="type">U</span> = <span class="type">RDDOperationScope</span>.withScope[<span class="type">U</span>](sc)(body)</span><br></pre></td></tr></table></figure>
+<figure class="highlight scala"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment"> * Execute a block of code in a scope such that all new RDDs created in this body will</span></span><br><span class="line"><span class="comment"> * be part of the same scope. For more detail, see &#123;&#123;org.apache.spark.rdd.RDDOperationScope&#125;&#125;.</span></span><br><span class="line"><span class="comment"> *</span></span><br><span class="line"><span class="comment"> * Note: Return statements are NOT allowed in the given body.</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="keyword">private</span>[spark] <span class="function"><span class="keyword">def</span> <span class="title">withScope</span></span>[<span class="type">U</span>](body: =&gt; <span class="type">U</span>): <span class="type">U</span> = <span class="type">RDDOperationScope</span>.withScope[<span class="type">U</span>](sc)(body)</span><br></pre></td></tr></table></figure>
 
 <p><a href="https://stackoverflow.com/questions/37691391/spark-source-code-how-to-understand-withscope-method" target="_blank" rel="noopener">它的作用是在给定代码块中创建的RDD具有相同的RDDOperationScope</a>。<a href="https://zhuanlan.zhihu.com/p/24616237" target="_blank" rel="noopener">withScope就像是一个 AOP（面向切面编程），嵌入到所有RDD 的转换和操作的函数中，RDDOperationScope会把调用栈记录下来，用于绘制Spark UI的 DAG（有向无环图，可以理解为 Spark 的执行计划）</a>。<br>实际上<code>withScope</code>就类似一个代理，为什么要做代理，是因为<code>RDDOpertionScope</code>需要输出一些调试信息。这有点类似于Haskell的<code>Debug.trace</code>一样。</p>
 <h2 id="Persist相关"><a href="#Persist相关" class="headerlink" title="Persist相关"></a>Persist相关</h2><h3 id="unpersist流程"><a href="#unpersist流程" class="headerlink" title="unpersist流程"></a>unpersist流程</h3><p>可以看到，同样是向BlockManagerMaster要求<code>removeRdd</code>。</p>
@@ -1304,13 +1304,13 @@ LolLegsTsFeature.scala
           
             <a href="/tags/并行计算/" rel="tag"># 并行计算</a>
           
-            <a href="/tags/数据挖掘/" rel="tag"># 数据挖掘</a>
-          
             <a href="/tags/数据库/" rel="tag"># 数据库</a>
           
-            <a href="/tags/Spark/" rel="tag"># Spark</a>
+            <a href="/tags/数据挖掘/" rel="tag"># 数据挖掘</a>
           
             <a href="/tags/Scala/" rel="tag"># Scala</a>
+          
+            <a href="/tags/Spark/" rel="tag"># Spark</a>
           
         </div>
       
@@ -1414,7 +1414,7 @@ LolLegsTsFeature.scala
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">255</span>
+                <span class="site-state-item-count">258</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -1427,7 +1427,7 @@ LolLegsTsFeature.scala
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">158</span>
+                <span class="site-state-item-count">153</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
