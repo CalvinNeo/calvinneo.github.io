@@ -99,7 +99,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="记录了 TiCI 上线过程中遇到的一些问题：  针对这些问题的技术性解法和运维性的解法  涉及到某些内部知识的将不予公开。 对于问题严重程度应该如何判断 如何为了达成上线的既定目标，设计临时性的缓解措施">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2025-12-02T02:33:11.626Z">
+<meta property="og:updated_time" content="2025-12-12T14:50:06.185Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="TiCI 上线过程">
 <meta name="twitter:description" content="记录了 TiCI 上线过程中遇到的一些问题：  针对这些问题的技术性解法和运维性的解法  涉及到某些内部知识的将不予公开。 对于问题严重程度应该如何判断 如何为了达成上线的既定目标，设计临时性的缓解措施">
@@ -394,6 +394,58 @@
 <li>上线后出现的影响可用性的 bug</li>
 <li>上线后出现的影响性能的 bug</li>
 </ol>
+<h2 id="Nov-21"><a href="#Nov-21" class="headerlink" title="Nov 21"></a>Nov 21</h2><p>讨论 import into 场景下，如果某个 worker 因为 OOM 重启，则因为目前缺少 Heartbeat 机制和 reschedule 机制，整个任务会因为这个小任务失败而停止。</p>
+<p>另外，也提到了和 import into 流控相关的问题。</p>
+<h2 id="Nov-23"><a href="#Nov-23" class="headerlink" title="Nov 23"></a>Nov 23</h2><p>遇到了 tokio Sender 报错 channel closed 问题。当时没有空查。</p>
+<p>这个问题实际上就是协程因为哪里 unwrap 而 panic 了，而因为协程池是跑的消息循环，所以 panic 了不 join 也不知道。一直没找到是哪里，后来我加了点 panic hook，才在 Nov 30 定位到是服务发现的问题。</p>
+<h2 id="Nov-26"><a href="#Nov-26" class="headerlink" title="Nov 26"></a>Nov 26</h2><ol>
+<li>TLS options are only supported with HTTPS URLs<br> 这个错误很 plain</li>
+<li>Client had asked for TLS connection but TLS support is disabled. Please enable one of the following features: [“native-tls-tls”, “rusttls-tls”]<br> 我们不能用 native，只能用内置的 rusttls</li>
+<li>undefined symbol: pthread_atfork<br> ARM 上的编译问题，有专门<a href="/2025/11/25/pthread_atfork/">文章</a>介绍</li>
+<li>TLS error error:0A000086<br> 这个就是要启动的时候指定下用 ring 还是 aws_lc_rs</li>
+</ol>
+<h2 id="Nov-27"><a href="#Nov-27" class="headerlink" title="Nov 27"></a>Nov 27</h2><ol>
+<li>排查 ARM 上的问题，这里做了两套方案，先设法用 x86 跑起来。这证明也是正确的，白天我们发现了更多的问题，最终因为 TLS 的问题也没有跑起来。但是晚上我们把 ARM 验证了下，发现不报原先的错了。</li>
+<li>遇到一个新问题是我们的云上 operator 机制不支持改参数，我们挂的又是 ro 文件系统，导致很难验证</li>
+<li>etcd client unavailable or unhealthy, attempting reconnect<br> 这个是 <code>kebab-case</code> 的锅，Rust 和 C++ 的格式不一样，写配置的同学把 ca-path 写成 ca_path 了。</li>
+<li>后来发现，TiFlash CN 还是绕不开 TLS 的问题。所以还是得兼容。</li>
+</ol>
+<h2 id="Nov-28"><a href="#Nov-28" class="headerlink" title="Nov 28"></a>Nov 28</h2><ol>
+<li>get meta channel failed times<br> 这个错误还是 etcd client 的 ca-path 没传对</li>
+<li>到这里为止，整体看上去能跑了，但是查询报错，看日志感觉核心服务没起来<br> 首先 lsof 看了一下，发现服务器都没起来。<br> 因为没有 panic，直觉是哪里有个报错死在协程里面没传播出去。进而发现是 rust 的 grpc server 不能在 dns 格式的 url 上启动。不得不说我几天前的 advertise_addr 的改动很有先见之明 <a href="https://github.com/pingcap-inc/tici/pull/515" target="_blank" rel="noopener">https://github.com/pingcap-inc/tici/pull/515</a></li>
+</ol>
+<h2 id="Nov-29"><a href="#Nov-29" class="headerlink" title="Nov 29"></a>Nov 29</h2><ol>
+<li>白天是在 import into 导入数据，晚上出现了一堆问题</li>
+<li>首先，是之前的那个 panic 导致协程退出的阴魂不散又来了。我紧急去掉了一堆 unwrap，并且加了 panic hook 打印错误日志</li>
+<li>然后，是 writer 那边没有对 meta 返回的错误码进行处理，但是加上了处理之后，一个集成测试不通过了。大家觉得要不就把这个测试禁用了吧，但是我很反对，因为这个测试是唯一一个带上真实的 worker 和 reader 跑完 e2e 的测试。并且我看了日志发现一个 writer node 被超时移出了，所以尽管 pr owner 认为他并没有改动到这一块的逻辑，我仍然认为他的修改导致一个严重问题暴露了。因此，我们应该先查问题。原因是即使我们强行合并了，也不能拿这个 commit 去跑生产。后来，确实发现了是在处理 heartbeat 的时候会等待一个异步任务结束，所以导致后面 heartbeat 消息循环直接卡死了。</li>
+</ol>
+<h2 id="Nov-30"><a href="#Nov-30" class="headerlink" title="Nov 30"></a>Nov 30</h2><p>今天主要切换到性能方面的支持上：</p>
+<ul>
+<li>warmup 的速度太慢了，所以想把这一块改成并发执行<br>  在这个处理之后，8 个节点，24 个并发，大概是不到两个小时就处理完毕了。</li>
+<li>因为 worker 出现了异常重启，导致重启后 meta 向它发送了大量的 add shard message，导致触发了 grpc 的消息大小上限。临时通过增加上限来 workaround 了。实际上是可以通过拆成多个 heartbeat response 来解决。另外同事也提到，可以只发部分信息，其他的后续让主动请求，但这个可能会产生很多的 grpc 调用。</li>
+</ul>
+<h2 id="Dec-1"><a href="#Dec-1" class="headerlink" title="Dec 1"></a>Dec 1</h2><ul>
+<li>发现查询速度比较低，原因是串行访问的所有 shard</li>
+</ul>
+<h2 id="Dec-2"><a href="#Dec-2" class="headerlink" title="Dec 2"></a>Dec 2</h2><ul>
+<li>发现查询并发比较低，原因是查询的 filter 不能通过主键进行过滤，所以导致每次查询需要访问所有的 shard</li>
+</ul>
+<h2 id="Dec-3"><a href="#Dec-3" class="headerlink" title="Dec 3"></a>Dec 3</h2><ul>
+<li>关于昨天的并发问题，认为一个 shard 中有多个 fragment，并且一个 fragment 中又有多个 segment，因此会影响查询的速度。通过 Manual compaction 和调大内存的方式，使得 fragment 和 segment 都变少。</li>
+<li>因为目前没有自动 balance 机制，所以还需要 Manual reschedule。</li>
+</ul>
+<h2 id="Dec-5"><a href="#Dec-5" class="headerlink" title="Dec 5"></a>Dec 5</h2><p>功能侧：</p>
+<ul>
+<li>主要处理 duplicate fragment 的问题。我认为因为 apply compaction 需要根据 frag path 来定位，重名的 frag 会导致问题，所以应该由 meta 来禁用。</li>
+</ul>
+<p>测试侧：</p>
+<ul>
+<li>执行了 Compaction，并且后续自动执行了 Merge，发现查询 QPS 提高了 50%，但依然是比较差的</li>
+<li>因此决定用 (token0_address, ts) 作为新的主键，和 TiKV 解耦</li>
+</ul>
+<h2 id="Dec-6"><a href="#Dec-6" class="headerlink" title="Dec 6"></a>Dec 6</h2><ul>
+<li>静态数据 QPS 2.6k+，P999 61.6 ms，且仍有弹性。其中 TiFlash CPU 是 2300%，内存是 8 * 91G。<br>  <a href="https://github.com/CalvinNeo/ue-bench/blob/master/src/main.rs" target="_blank" rel="noopener">https://github.com/CalvinNeo/ue-bench/blob/master/src/main.rs</a>  <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">SELECT</span> * <span class="keyword">FROM</span> ... <span class="keyword">WHERE</span> token0_address = ? <span class="keyword">AND</span> platform = ? <span class="keyword">AND</span> ts &lt; ? <span class="keyword">LIMIT</span> <span class="number">5</span></span><br></pre></td></tr></table></figure></li>
+</ul>
 
       
     </div>
@@ -652,7 +704,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#POC-on-TiDB-X-for-Customer-U-late-Nov-2025"><span class="nav-number">1.</span> <span class="nav-text">POC on TiDB-X for Customer U, late Nov 2025</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#主要问题"><span class="nav-number">1.1.</span> <span class="nav-text">主要问题</span></a></li></ol></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#POC-on-TiDB-X-for-Customer-U-late-Nov-2025"><span class="nav-number">1.</span> <span class="nav-text">POC on TiDB-X for Customer U, late Nov 2025</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#主要问题"><span class="nav-number">1.1.</span> <span class="nav-text">主要问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Nov-21"><span class="nav-number">1.2.</span> <span class="nav-text">Nov 21</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Nov-23"><span class="nav-number">1.3.</span> <span class="nav-text">Nov 23</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Nov-26"><span class="nav-number">1.4.</span> <span class="nav-text">Nov 26</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Nov-27"><span class="nav-number">1.5.</span> <span class="nav-text">Nov 27</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Nov-28"><span class="nav-number">1.6.</span> <span class="nav-text">Nov 28</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Nov-29"><span class="nav-number">1.7.</span> <span class="nav-text">Nov 29</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Nov-30"><span class="nav-number">1.8.</span> <span class="nav-text">Nov 30</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Dec-1"><span class="nav-number">1.9.</span> <span class="nav-text">Dec 1</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Dec-2"><span class="nav-number">1.10.</span> <span class="nav-text">Dec 2</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Dec-3"><span class="nav-number">1.11.</span> <span class="nav-text">Dec 3</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Dec-5"><span class="nav-number">1.12.</span> <span class="nav-text">Dec 5</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Dec-6"><span class="nav-number">1.13.</span> <span class="nav-text">Dec 6</span></a></li></ol></li></ol></div>
             
 
           </div>
