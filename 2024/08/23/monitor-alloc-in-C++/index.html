@@ -101,7 +101,7 @@
 <meta property="og:locale" content="zh-Hans">
 <meta property="og:image" content="http://www.calvinneo.com/img/monitor-memory/11.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/monitor-memory/heap-hire.png">
-<meta property="og:updated_time" content="2025-12-03T08:35:44.465Z">
+<meta property="og:updated_time" content="2025-12-13T14:10:33.061Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="C++ 内存监控方案">
 <meta name="twitter:description" content="介绍 C++ 上的内存监控方案。 默认使用 jemalloc。">
@@ -470,17 +470,19 @@
 </ul>
 </li>
 <li>在 AWS 的 arm + ubuntu 下，profiling 正常</li>
-<li>在 Kunpeng + Rocky9 Linux 下，会在 libunwind 中报错 panic</li>
+<li>在 Kunpeng + Rocky9 Linux 下，会在 libunwind 中报错 panic<br>  <a href="https://github.com/pingcap/tiflash/issues/10152" target="_blank" rel="noopener">https://github.com/pingcap/tiflash/issues/10152</a></li>
 </ul>
-<p>上⾯提到过有的时候⽣成的不详细，如下所⽰。这是因为 addr2line 版本的问题，有条件的可以通过传参的⽅式把 jeprof.in 使⽤的 addr2line ⾃⾏魔改为 llvm-addr2line。注意，llvm-addr2line 的版本，也需要和 tiflash ⼀样，不然</p>
+<h3 id="addr2line-的版本问题"><a href="#addr2line-的版本问题" class="headerlink" title="addr2line 的版本问题"></a>addr2line 的版本问题</h3><p>上⾯提到过有的时候⽣成的不详细，如下所⽰。这是因为 addr2line 版本的问题，有条件的可以通过传参的⽅式把 jeprof.in 使⽤的 addr2line ⾃⾏魔改为 llvm-addr2line。注意，llvm-addr2line 的版本，也需要和 tiflash ⼀样，不然</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">addr2line: DWARF error: could not find variable specification at offset</span><br></pre></td></tr></table></figure>
 
-<p>报错 DWARF error:section.debug_info is larger than its file size. 这个问题需要连同 nm、objdump 等全部换成 llvm 的版本。</p>
-<p>另外，一些情况会生成不了 Cpp 或者 Rust 的栈，此时需要检查：</p>
+<h3 id="DWARF-error-section-debug-info-is-larger-than-its-file-size"><a href="#DWARF-error-section-debug-info-is-larger-than-its-file-size" class="headerlink" title="DWARF error:section.debug_info is larger than its file size."></a>DWARF error:section.debug_info is larger than its file size.</h3><p>报错 DWARF error:section.debug_info is larger than its file size. 这个问题需要连同 nm、objdump 等全部换成 llvm 的版本。</p>
+<h3 id="生成不了-Cpp-或者-Rust-的栈"><a href="#生成不了-Cpp-或者-Rust-的栈" class="headerlink" title="生成不了 Cpp 或者 Rust 的栈"></a>生成不了 Cpp 或者 Rust 的栈</h3><p>另外，一些情况会生成不了 Cpp 或者 Rust 的栈，例如只有其中某个语言的栈。此时需要检查：</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">pprof = &#123; version = &quot;0.14&quot;, default-features = false, features = [</span><br><span class="line">  &quot;flamegraph&quot;,</span><br><span class="line">  &quot;protobuf-codec&quot;,</span><br><span class="line">  &quot;cpp&quot;,</span><br><span class="line">] &#125;</span><br></pre></td></tr></table></figure>
 
 <p>并且还需要检查 jeprof.in 的参数</p>
 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">Command::new(<span class="string">"perl"</span>)</span><br><span class="line">    .args([</span><br><span class="line">        <span class="string">"/dev/stdin"</span>,</span><br><span class="line">        <span class="string">"--show_bytes"</span>,</span><br><span class="line">        bin_str,</span><br><span class="line">        path,</span><br><span class="line">        &amp;output_format,</span><br><span class="line">        &amp;<span class="built_in">format!</span>(<span class="string">"--add_lib=&#123;&#125;"</span>, bin_proxy_str),</span><br><span class="line">    ])</span><br></pre></td></tr></table></figure>
+
+<h3 id="heap-火焰图的调参"><a href="#heap-火焰图的调参" class="headerlink" title="heap 火焰图的调参"></a>heap 火焰图的调参</h3><figure class="highlight perl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">-  $main::opt_nodecount = <span class="number">80</span>;</span><br><span class="line">-  $main::opt_nodefraction = <span class="number">0</span>.<span class="number">005</span>;</span><br><span class="line">-  $main::opt_edgefraction = <span class="number">0</span>.<span class="number">001</span>;</span><br><span class="line">-  $main::opt_maxdegree = <span class="number">8</span>;</span><br><span class="line">+  $main::opt_nodecount = <span class="number">300</span>;</span><br><span class="line">+  $main::opt_nodefraction = <span class="number">0</span>;</span><br><span class="line">+  $main::opt_edgefraction = <span class="number">0</span>;</span><br><span class="line">+  $main::opt_maxdegree = <span class="number">32</span>;</span><br></pre></td></tr></table></figure>
 
 <h2 id="需要的工具"><a href="#需要的工具" class="headerlink" title="需要的工具"></a>需要的工具</h2><p>如果使⽤宿主机 tiflash 上的 jeprof.in，则必须宿主机上有下列⼯具：</p>
 <ul>
@@ -500,7 +502,8 @@
 <li><a href="https://github.com/pingcap/tiflash/issues/6228" target="_blank" rel="noopener">https://github.com/pingcap/tiflash/issues/6228</a><br>  修复在 <a href="https://github.com/pingcap/tidb-engine-ext/pull/213" target="_blank" rel="noopener">https://github.com/pingcap/tidb-engine-ext/pull/213</a></li>
 <li><a href="https://github.com/pingcap/tiflash/issues/3236" target="_blank" rel="noopener">https://github.com/pingcap/tiflash/issues/3236</a><br>  修复在 <a href="https://github.com/pingcap/tiflash/pull/9240%EF%BC%8C%E5%B0%B1%E6%98%AF%E4%B8%8A%E9%9D%A2%E6%8F%90%E5%88%B0%E7%9A%84" target="_blank" rel="noopener">https://github.com/pingcap/tiflash/pull/9240，就是上面提到的</a> dl_iterate_phdr 死锁问题</li>
 </ul>
-<h1 id="使用-eBPF-进行-heap-profiling"><a href="#使用-eBPF-进行-heap-profiling" class="headerlink" title="使用 eBPF 进行 heap profiling"></a>使用 eBPF 进行 heap profiling</h1>
+<h1 id="使用-eBPF-进行-heap-profiling"><a href="#使用-eBPF-进行-heap-profiling" class="headerlink" title="使用 eBPF 进行 heap profiling"></a>使用 eBPF 进行 heap profiling</h1><p>见 <a href="/2024/08/23/use-ebpf-to-monitor-memory/">使用 eBPF 监控内存分配</a>。</p>
+
       
     </div>
 
@@ -567,8 +570,8 @@
         <div class="post-nav">
           <div class="post-nav-next post-nav-item">
             
-              <a href="/2024/06/17/ugears-rockr-etc/" rel="next" title="系列拼装模型攻略">
-                <i class="fa fa-chevron-left"></i> 系列拼装模型攻略
+              <a href="/2024/08/23/use-ebpf-to-monitor-memory/" rel="next" title="使用 eBPF 监控内存分配">
+                <i class="fa fa-chevron-left"></i> 使用 eBPF 监控内存分配
               </a>
             
           </div>
@@ -658,7 +661,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">258</span>
+                <span class="site-state-item-count">260</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -671,7 +674,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">153</span>
+                <span class="site-state-item-count">152</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -764,7 +767,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#MemoryTracker"><span class="nav-number">1.</span> <span class="nav-text">MemoryTracker</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#prof-dump"><span class="nav-number">2.</span> <span class="nav-text">prof.dump</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#有关-dl-iterate-phdr-的死锁"><span class="nav-number">2.1.</span> <span class="nav-text">有关 dl_iterate_phdr 的死锁</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#有关-dwarf-下-prof-变慢"><span class="nav-number">2.2.</span> <span class="nav-text">有关 dwarf 下 prof 变慢</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Jemalloc-allocatedptr"><span class="nav-number">3.</span> <span class="nav-text">Jemalloc allocatedptr</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Jemalloc-Arena"><span class="nav-number">4.</span> <span class="nav-text">Jemalloc Arena</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#thread-local-memory-tracker"><span class="nav-number">5.</span> <span class="nav-text">thread_local memory tracker</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Jemalloc-mallocx"><span class="nav-number">6.</span> <span class="nav-text">Jemalloc mallocx</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-的堆内存管理层级"><span class="nav-number">7.</span> <span class="nav-text">C++ 的堆内存管理层级</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-Custom-Allocator"><span class="nav-number">8.</span> <span class="nav-text">C++ Custom Allocator</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#pmr"><span class="nav-number">8.1.</span> <span class="nav-text">pmr</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-Custom-global-operator-new"><span class="nav-number">9.</span> <span class="nav-text">C++ Custom global operator new</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-Custom-class-operator-new"><span class="nav-number">10.</span> <span class="nav-text">C++ Custom class operator new</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#我的一些实践"><span class="nav-number">11.</span> <span class="nav-text">我的一些实践</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#TiFlash-的-heap-profiling"><span class="nav-number">11.1.</span> <span class="nav-text">TiFlash 的 heap profiling</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#遇到的一些问题"><span class="nav-number">11.2.</span> <span class="nav-text">遇到的一些问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#需要的工具"><span class="nav-number">11.3.</span> <span class="nav-text">需要的工具</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#TiFlash-的-continuous-profiling"><span class="nav-number">11.4.</span> <span class="nav-text">TiFlash 的 continuous profiling</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#使用-eBPF-进行-heap-profiling"><span class="nav-number">12.</span> <span class="nav-text">使用 eBPF 进行 heap profiling</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#MemoryTracker"><span class="nav-number">1.</span> <span class="nav-text">MemoryTracker</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#prof-dump"><span class="nav-number">2.</span> <span class="nav-text">prof.dump</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#有关-dl-iterate-phdr-的死锁"><span class="nav-number">2.1.</span> <span class="nav-text">有关 dl_iterate_phdr 的死锁</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#有关-dwarf-下-prof-变慢"><span class="nav-number">2.2.</span> <span class="nav-text">有关 dwarf 下 prof 变慢</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Jemalloc-allocatedptr"><span class="nav-number">3.</span> <span class="nav-text">Jemalloc allocatedptr</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Jemalloc-Arena"><span class="nav-number">4.</span> <span class="nav-text">Jemalloc Arena</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#thread-local-memory-tracker"><span class="nav-number">5.</span> <span class="nav-text">thread_local memory tracker</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Jemalloc-mallocx"><span class="nav-number">6.</span> <span class="nav-text">Jemalloc mallocx</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-的堆内存管理层级"><span class="nav-number">7.</span> <span class="nav-text">C++ 的堆内存管理层级</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-Custom-Allocator"><span class="nav-number">8.</span> <span class="nav-text">C++ Custom Allocator</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#pmr"><span class="nav-number">8.1.</span> <span class="nav-text">pmr</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-Custom-global-operator-new"><span class="nav-number">9.</span> <span class="nav-text">C++ Custom global operator new</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-Custom-class-operator-new"><span class="nav-number">10.</span> <span class="nav-text">C++ Custom class operator new</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#我的一些实践"><span class="nav-number">11.</span> <span class="nav-text">我的一些实践</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#TiFlash-的-heap-profiling"><span class="nav-number">11.1.</span> <span class="nav-text">TiFlash 的 heap profiling</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#遇到的一些问题"><span class="nav-number">11.2.</span> <span class="nav-text">遇到的一些问题</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#addr2line-的版本问题"><span class="nav-number">11.2.1.</span> <span class="nav-text">addr2line 的版本问题</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#DWARF-error-section-debug-info-is-larger-than-its-file-size"><span class="nav-number">11.2.2.</span> <span class="nav-text">DWARF error:section.debug_info is larger than its file size.</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#生成不了-Cpp-或者-Rust-的栈"><span class="nav-number">11.2.3.</span> <span class="nav-text">生成不了 Cpp 或者 Rust 的栈</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#heap-火焰图的调参"><span class="nav-number">11.2.4.</span> <span class="nav-text">heap 火焰图的调参</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#需要的工具"><span class="nav-number">11.3.</span> <span class="nav-text">需要的工具</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#TiFlash-的-continuous-profiling"><span class="nav-number">11.4.</span> <span class="nav-text">TiFlash 的 continuous profiling</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#使用-eBPF-进行-heap-profiling"><span class="nav-number">12.</span> <span class="nav-text">使用 eBPF 进行 heap profiling</span></a></li></ol></div>
             
 
           </div>
@@ -787,7 +790,7 @@
         <div class="copyright">
   
   &copy;  2015 - 
-  <span itemprop="copyrightYear">2025</span>
+  <span itemprop="copyrightYear">2026</span>
   <span class="with-love">
     <i class="fa fa-heart"></i>
   </span>

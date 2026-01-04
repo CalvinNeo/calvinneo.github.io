@@ -99,7 +99,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="一些常见问题的思考，只代表个人见解。对于一些已经沉淀下来的知识，会被挪到专门的文章中讨论。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2025-12-12T15:20:13.990Z">
+<meta property="og:updated_time" content="2025-12-12T19:05:20.686Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="关于 TiKV、TiDB、TiFlash 的一些思考">
 <meta name="twitter:description" content="一些常见问题的思考，只代表个人见解。对于一些已经沉淀下来的知识，会被挪到专门的文章中讨论。">
@@ -652,7 +652,7 @@
 <li>迁移结束意味着 Proxy 特有逻辑被彻底被移出 TiKV。最终我们得到了 tests/proxy 用于测试 Proxy 特有逻辑，而 tests/tikv 用于测试 TiKV 原始逻辑。</li>
 </ol>
 <p>Proxy + TiFlash 的 mixed mode 测试方案：这个比较简单，主要就是选择一个 TiFlash 为旧版本，另一个为新版本，测试两个 TiFlash 是否行为一致。特别地，因为 TiFlash 的查询会轮询可用的存储，所以新老节点只要有不一致，就会被发现。</p>
-<h2 id="存储-–-列存"><a href="#存储-–-列存" class="headerlink" title="存储 – 列存"></a>存储 – 列存</h2><h3 id="为什么-TiFlash-使用-DeltaTree-作为存储"><a href="#为什么-TiFlash-使用-DeltaTree-作为存储" class="headerlink" title="为什么 TiFlash 使用 DeltaTree 作为存储"></a>为什么 TiFlash 使用 DeltaTree 作为存储</h3><p>目的是为了适应频繁的更新。TiFlash 采用类似 <a href="https://gogim1.github.io/posts/c_store" target="_blank" rel="noopener">CStore</a>的思路，引入了 PageStorage 这个对象存储。其中针对写优化的部分称为 Delta 层，类似于 RocksDB 的 L0，存储在 PageStorage 中。针对读优化的部分称为 Stable 层，以 DTFile 文件的形式存储，但文件路径在 PageStorage 作为 External Page 的形式维护。</p>
+<h2 id="存储-–-列存"><a href="#存储-–-列存" class="headerlink" title="存储 – 列存"></a>存储 – 列存</h2><h3 id="为什么-TiFlash-使用-DeltaTree-作为存储"><a href="#为什么-TiFlash-使用-DeltaTree-作为存储" class="headerlink" title="为什么 TiFlash 使用 DeltaTree 作为存储"></a>为什么 TiFlash 使用 DeltaTree 作为存储</h3><p>目的是为了适应频繁的更新。TiFlash 采用类似 <a href="https://gogim1.github.io/posts/c_store" target="_blank" rel="noopener">CStore</a>的思路，引入了 PageStorage 这个 KV 对象存储。其中针对写优化的部分称为 Delta 层，类似于 RocksDB 的 L0，存储在 PageStorage 中。针对读优化的部分称为 Stable 层，以 DTFile 文件的形式存储，但文件路径在 PageStorage 作为 External Page 的形式维护。</p>
 <h3 id="存储模型的进一步讨论"><a href="#存储模型的进一步讨论" class="headerlink" title="存储模型的进一步讨论"></a>存储模型的进一步讨论</h3><h4 id="和-StarRocks-的比较"><a href="#和-StarRocks-的比较" class="headerlink" title="和 StarRocks 的比较"></a>和 StarRocks 的比较</h4><p>例如可以将 update 操作分为 delete 和 insert 操作。查询时，同时查询 delete 和 insert，并决定最终的输出。StarRocks 使用这样的方式，他们指出 Delete+Insert 这样的模式<a href="https://zhuanlan.zhihu.com/p/566219916" target="_blank" rel="noopener">有利于下推 Filter</a>。StarRocks 据此实现了<a href="https://docs.starrocks.io/zh/docs/table_design/table_types/primary_key_table/" target="_blank" rel="noopener">主键模型</a>。<br>这里需要区分他们的<a href="https://docs.starrocks.io/zh/docs/table_design/table_types/unique_key_table/" target="_blank" rel="noopener">更新模型</a>，也就是一种不支持 MVCC，始终返回最新数据的模型。这种模型应该就是一种类似 LSM 的方案，在 Compaction 的时候只保留一个版本。但是在查询的时候仍然需要 merge 多个版本，并且不支持下推 filter。<br>主键模型的优势就是查询时不需要 merge，并且支持下推 filter 和索引。这种方式主要是将主键索引加载到内存中，对于 Update 操作，通过主键索引找到记录的位置，写一个 Delete，然后再写一个 Insert。可以发现这种方案仍然是不支持 MVCC 的，我理解如果要支持 MVCC 那么 merge 可能是必然的。<br>此外，主键模型对内存是有开销的，我理解这个应该不是关键问题。首先，如果数据有冷热之分，可以持久化一部分主键索引到磁盘上。其次，这个场景在大宽表有优势。</p>
 <h4 id="来自-TiKV-的约束"><a href="#来自-TiKV-的约束" class="headerlink" title="来自 TiKV 的约束"></a>来自 TiKV 的约束</h4><p>从 Raft 层接入数据导致 TiFlash 的存储层的分区会收到 TiKV Key Format 的影响。例如尽管 TiFlash 的 Segment 和 TiKV 的 Region 并不对应，Segment 远大于 Region。但它们都被映射到同一个 Key Range 上。</p>
 <p>这就导致 TiFlash 数据的物理排列一定是根据 TiKV 的主键有序的，TiFlash 无法自行指定主键。另外 TiFlash 本身也没有二级索引。</p>
@@ -921,7 +921,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">258</span>
+                <span class="site-state-item-count">260</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -934,7 +934,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">153</span>
+                <span class="site-state-item-count">152</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -1050,7 +1050,7 @@
         <div class="copyright">
   
   &copy;  2015 - 
-  <span itemprop="copyrightYear">2025</span>
+  <span itemprop="copyrightYear">2026</span>
   <span class="with-love">
     <i class="fa fa-heart"></i>
   </span>
