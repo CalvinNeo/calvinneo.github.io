@@ -102,7 +102,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/disk-struct/parquet.gif">
 <meta property="og:image" content="http://www.calvinneo.com/img/disk-struct/dremel_column_representation.jpg">
 <meta property="og:image" content="http://www.calvinneo.com/img/disk-struct/schema.png">
-<meta property="og:updated_time" content="2025-12-12T15:20:29.223Z">
+<meta property="og:updated_time" content="2026-01-11T18:52:38.194Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="磁盘上的数据结构">
 <meta name="twitter:description" content="本文主要介绍在设计需要序列化到磁盘上的数据结构时，需要考虑的点。">
@@ -395,13 +395,13 @@
 </ul>
 </li>
 <li>类型的 cast<br>  例如支持从 bool 升级为 enum 或者 int。</li>
-<li>压缩性能</li>
-<li>编码和解码的速度、CPU 开销、内存开销<br>  这一点很重要，例如 json 的编解码性能就比较差。</li>
-<li>是否可以自描述？一般出于空间考虑，这都是不包含的</li>
+<li>磁盘 IO 的单位</li>
+<li>压缩和解压缩的速度，以及 CPU 开销、内存开销<br>  需要注意，磁盘 IO 的单位并不一定要和解压缩的单位对应。完全可以从磁盘取一批数据到内存，以最大化利用磁盘带宽。但内存中的数据如何解压缩则纯粹是 CPU bound 的问题了。<br>  如果预期只需要读一两条的数据，那么就希望有更多的索引能够帮助我们快速 seek 到指定的位置，并解压足够小的 block。但如果预期需要读取所有数据，那么每次解压的单位就可以大很多，从而索引的大小就能做到更小。</li>
+<li>编码和解码的速度，以及 CPU 开销、内存开销<br>  这一点很重要，例如 json 的编解码性能就比较差。</li>
+<li>是否可以自描述？<br>  出于空间考虑，就不会包含，但这就会导致像 Parquet 一样的问题。因为解析库是由不同的语言和库来实现的，因此编码库会担心自己的编码用了新特性，从而导致别人解析不了。</li>
 <li>是否有足够的容错</li>
 </ul>
 <h2 id="磁盘上的数据结构"><a href="#磁盘上的数据结构" class="headerlink" title="磁盘上的数据结构"></a>磁盘上的数据结构</h2><ul>
-<li>磁盘 IO 的单位</li>
 <li>完整性校验</li>
 <li>尽可能减少 IO 次数</li>
 <li>是否多个文件或者多级文件？</li>
@@ -445,13 +445,30 @@
 <ul>
 <li><p>Repetiton Level<br>  表示这个值在 full path 的哪一级进行重复。如果为 0，说明这是一个新的 doc。<br>  在下面的例子中，考虑 <code>Name.Language</code> 这个列的 Repetiton Level 值：</p>
 <ul>
-<li><p>如果为 1，就表示在当前这个 doc 中，还有一个 Name 字段。</p>
+<li><p>如果为 R = 1，就表示在当前这个 doc 中，还有一个 Name 字段。对应如下的情况：</p>
   <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Doc 1</span><br><span class="line">    Name 1</span><br><span class="line">        Language 1</span><br><span class="line">    Name 2</span><br><span class="line">        Language 2  &lt;====== 属于 Name 2</span><br></pre></td></tr></table></figure></li>
-<li><p>如果为 2，就表示在当前这个 doc 中，当前这个 Name 字段中，还有一个 Language 字段。</p>
+<li><p>如果为 R = 2，就表示在当前这个 doc 中，当前这个 Name 字段中，还有一个 Language 字段。对应如下的情况：</p>
   <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">Doc 1</span><br><span class="line">    Name 1</span><br><span class="line">        Language 1</span><br><span class="line">        Language 2  &lt;====== 属于 Name 1</span><br></pre></td></tr></table></figure></li>
 </ul>
+<p>  容易看出，如果没有 Repetition Level，我们无法分清上面两种情况。</p>
 </li>
-<li><p>Definition Level<br>  用来解决 option 字段的问题。只有 option 和 repeated 字段才需要 definition level，required 的字段不需要。</p>
+<li><p>Definition Level<br>  用来解决 option 字段的问题。只有 option 和 repeated 字段才需要 definition level，required 的字段不需要。<br>  如果没有 Definition Level 会怎么样呢？考虑下面的 Schema</p>
+  <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">message M &#123;</span><br><span class="line">  repeated group A &#123;</span><br><span class="line">    optional int32 B;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>  然后在列存中是</p>
+  <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">B = 1</span><br><span class="line">B = NULL</span><br><span class="line">B = NULL</span><br><span class="line">B = 2</span><br></pre></td></tr></table></figure>
+
+<p>  那么它对应的真实数据可能是</p>
+  <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">Doc 1</span><br><span class="line">    A</span><br><span class="line">        B   1</span><br><span class="line">        B   NULL</span><br><span class="line">Doc 2</span><br><span class="line">    A   NULL</span><br><span class="line">Doc 3</span><br><span class="line">    A</span><br><span class="line">        B   2</span><br></pre></td></tr></table></figure>
+
+<p>  这种情况对应的 Repetiton Level 是 <code>[0, 1, 0, 0]</code>。但是，它有可能是</p>
+  <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">Doc 1</span><br><span class="line">    A</span><br><span class="line">        B   1</span><br><span class="line">        B   NULL</span><br><span class="line">Doc 2</span><br><span class="line">    A</span><br><span class="line">        B   NULL</span><br><span class="line">Doc 3</span><br><span class="line">    A</span><br><span class="line">        B   2</span><br></pre></td></tr></table></figure>
+
+<p>  也就是我们无法分辨 Doc 2 中究竟是：</p>
+<ul>
+<li>A 是空列表</li>
+<li>A 不是空列表，但是它的唯一元素中的 B 为 NULL</li>
+</ul>
 </li>
 </ul>
 <p>下图中是一个概括性的示例：</p>
@@ -463,10 +480,16 @@
 <p><img src="/img/disk-struct/schema.png"></p>
 <p>下面是个 demo，几个关键点：</p>
 <ul>
-<li><code>Links.Backward: NULL, R:0, D:1</code><br>  如果一个 repeated 或者 optional 字段为空，需要写一个 NULL。这里 D 为 1 是因为 Links 是有值的，它的 level 是 1。</li>
-<li><code>Name.Language.Code: en-us, R:0, D:2</code><br>  尽管在同一个 doc 里面，但这里 R 是 0 而不是 1，因为这里的 Name 没有重复。<br>  其实这也很好理解，因为 <code>Links.*</code> 和 <code>Name.*</code> 是两个列了，所以它们的 R 也不相关。</li>
+<li><code>Links.Backward: NULL, R:0, D:1</code><br>  如果一个 repeated 或者 optional 字段为空，需要写一个 NULL。<br>  这里 D 为 1 是因为 Links 是有值的，它的 level 是 1。</li>
+<li><code>Name.Language.Code: en-us, R:0, D:2</code><br>  尽管在同一个 doc 里面，但这里 R 是 0 而不是 1，因为这里的 Name 没有重复。<br>  其实这也很好理解，因为 <code>Links.*</code> 和 <code>Name.*</code> 是两个列了，所以不能因为觉得这里的 Name 和上面的 Links 同属一个文档，这个文档就是重复的。<br>  这里 D 为 2 是因为 Name 和 Language 都是 repeated 字段，所以都自增 1，但是 Code 是 required 的字段，就不需要自增，结果为 2。</li>
+<li><code>Name.Language.Country: us, R:0, D:3</code><br>  和上面唯一的区别就是 Country 为 optional，所以 D 还要自增 1，所以为 3。</li>
 </ul>
 <table style="margin-left: auto; margin-right: auto">
+<tr>
+    <td><a>Schema</a></td>
+    <td><a>Document</a></td>
+    <td>Dremel format</td>
+</tr>
 <tr>
     <td>
     <pre>
@@ -535,8 +558,8 @@
     Name.Url: NULL, R:1, D:1
     </pre>
     </td>
-</tr><tr>
-</tr></table>
+</tr>
+</table>
 
 <h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
 <li><a href="https://parquet.apache.org/docs/file-format/" target="_blank" rel="noopener">https://parquet.apache.org/docs/file-format/</a></li>
@@ -699,7 +722,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">260</span>
+                <span class="site-state-item-count">262</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -712,7 +735,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">152</span>
+                <span class="site-state-item-count">154</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>

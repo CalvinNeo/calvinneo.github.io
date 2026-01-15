@@ -99,7 +99,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="主要关注：  LLM 的基础原理 KVCache">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2026-01-09T17:55:45.386Z">
+<meta property="og:updated_time" content="2026-01-09T18:08:41.278Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="LLM 基础概念和核心问题整理">
 <meta name="twitter:description" content="主要关注：  LLM 的基础原理 KVCache">
@@ -393,7 +393,13 @@
 <li><p>Attention</p>
 </li>
 </ul>
-<h2 id="Q、K、V"><a href="#Q、K、V" class="headerlink" title="Q、K、V"></a>Q、K、V</h2><p>考虑下面的句子</p>
+<h2 id="Q、K、V"><a href="#Q、K、V" class="headerlink" title="Q、K、V"></a>Q、K、V</h2><p>从定义上看，对于 token 流</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">x1, x2, x3, ... xn</span><br></pre></td></tr></table></figure>
+
+<p>每个 xi 通过三组线性变换生成：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">Qi = xi * Wq</span><br><span class="line">Ki = xi * Wk</span><br><span class="line">Vi = xi * Wv</span><br></pre></td></tr></table></figure>
+
+<p>考虑下面的句子</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">The animal didn’t cross the street because it was too tired.</span><br></pre></td></tr></table></figure>
 
 <p>句子中的每一个 token，都有一个自己的 Q。用 <code>Wq</code> 可以提取出这个 Q，如下：</p>
@@ -417,6 +423,34 @@
 <li>street → 街道的概念</li>
 <li>tired → 疲劳的状态语义</li>
 <li>cross → 穿越动作</li>
+</ul>
+<h2 id="Self-Attention"><a href="#Self-Attention" class="headerlink" title="Self-Attention"></a>Self-Attention</h2><p>Self-Attention 指的是 Q、K、V 都来自同一组 token 的 attention。即</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">X → Q = XWq</span><br><span class="line">X → K = XWk</span><br><span class="line">X → V = XWv</span><br></pre></td></tr></table></figure>
+
+<p>然后</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Attention(Q, K, V)</span><br></pre></td></tr></table></figure>
+
+<p>为什么叫 Self？</p>
+<ul>
+<li>不是去外部文档查</li>
+<li>不是去另一段文本查</li>
+<li>而是在自己这段序列内部相互对齐</li>
+</ul>
+<p>对应的是 Cross-Attention：</p>
+<ul>
+<li>Q 来自 Decoder</li>
+<li>K/V 来自 Encoder</li>
+</ul>
+<p>容易发现，Cross-Attention 更适合翻译或者对齐另一段文本。而 Self-Attention 更适合理解一句话内部关系。</p>
+<h2 id="Multi-Head-Attention"><a href="#Multi-Head-Attention" class="headerlink" title="Multi-Head Attention"></a>Multi-Head Attention</h2><p>如果一个 token 同时想问多种不同类型的问题怎么办？引入多组问题呗。所以上面的三个矩阵会变成三组矩阵。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">Wq¹ Wk¹ Wv¹</span><br><span class="line">Wq² Wk² Wv²</span><br><span class="line">Wq³ Wk³ Wv³</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+
+<p>还是对上面的例子而言</p>
+<p>对 it 这个 token：</p>
+<ul>
+<li>Head1 问“我指代谁？”，会关注 animal（指代）</li>
+<li>Head2 问“是否有因果关系？”，会关注 because（因果）</li>
+<li>Head3 问“我与哪个动词相关？”，会关注 cross（动作）</li>
 </ul>
 <h1 id="KVCache"><a href="#KVCache" class="headerlink" title="KVCache"></a>KVCache</h1><h2 id="Why"><a href="#Why" class="headerlink" title="Why"></a>Why</h2><p>Token 是模型处理文本的最小离散单位。所以 LLM 并不是直接处理文字，而是直接处理 token。Token 是通过分词器从文本切出来的子串单位。</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">&quot;Hello world&quot; → [15496, 2159]</span><br></pre></td></tr></table></figure>
@@ -485,6 +519,7 @@
 <h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ul>
 <li><a href="https://zh.d2l.ai/chapter_attention-mechanisms/attention-cues.html" target="_blank" rel="noopener">https://zh.d2l.ai/chapter_attention-mechanisms/attention-cues.html</a></li>
 <li><a href="https://transformers.run/c1/attention/" target="_blank" rel="noopener">https://transformers.run/c1/attention/</a></li>
+<li><a href="https://zhuanlan.zhihu.com/p/338817680" target="_blank" rel="noopener">https://zhuanlan.zhihu.com/p/338817680</a></li>
 </ul>
 
       
@@ -642,7 +677,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">260</span>
+                <span class="site-state-item-count">262</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -655,7 +690,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">152</span>
+                <span class="site-state-item-count">154</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -748,7 +783,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Attention-机制"><span class="nav-number">1.</span> <span class="nav-text">Attention 机制</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Q、K、V"><span class="nav-number">1.1.</span> <span class="nav-text">Q、K、V</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#KVCache"><span class="nav-number">2.</span> <span class="nav-text">KVCache</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Why"><span class="nav-number">2.1.</span> <span class="nav-text">Why</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#相关场景"><span class="nav-number">3.</span> <span class="nav-text">相关场景</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">4.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Attention-机制"><span class="nav-number">1.</span> <span class="nav-text">Attention 机制</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Q、K、V"><span class="nav-number">1.1.</span> <span class="nav-text">Q、K、V</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Self-Attention"><span class="nav-number">1.2.</span> <span class="nav-text">Self-Attention</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Multi-Head-Attention"><span class="nav-number">1.3.</span> <span class="nav-text">Multi-Head Attention</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#KVCache"><span class="nav-number">2.</span> <span class="nav-text">KVCache</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Why"><span class="nav-number">2.1.</span> <span class="nav-text">Why</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#相关场景"><span class="nav-number">3.</span> <span class="nav-text">相关场景</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">4.</span> <span class="nav-text">Reference</span></a></li></ol></div>
             
 
           </div>

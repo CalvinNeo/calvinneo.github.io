@@ -104,7 +104,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/fuse/fuseornot/2.2.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/fuse/fuseornot/2.3.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/fuse/fuseornot/t2.2.png">
-<meta property="og:updated_time" content="2025-10-30T07:49:18.970Z">
+<meta property="og:updated_time" content="2026-01-14T19:04:38.681Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Fuse 学习">
 <meta name="twitter:description" content="看下 FUSE 的相关知识。 Filesystem In Userspace 也就是 fuse，是 linux 的一个内核模块。">
@@ -436,22 +436,26 @@
 <li>避免异步请求影响同步请求</li>
 <li>开启 multi-threaded 选项后，限制 user daemon 线程的数量</li>
 </ul>
-<h3 id="2-5-Splicing-and-FUSE-Buffers"><a href="#2-5-Splicing-and-FUSE-Buffers" class="headerlink" title="2.5 Splicing and FUSE Buffers"></a>2.5 Splicing and FUSE Buffers</h3><p>FUSE 使用了 Linux 内核的 splicing 技术，目的是为了避免 read 和 write 请求在内核和用户态之间复制大量内存。splice() 系列的系统调用可以在用户在，在两个 in-kernel memory buffer 之间传递数据，这样就不需要到用户态拷贝一次了。</p>
+<h3 id="2-5-Splicing-and-FUSE-Buffers"><a href="#2-5-Splicing-and-FUSE-Buffers" class="headerlink" title="2.5 Splicing and FUSE Buffers"></a>2.5 Splicing and FUSE Buffers</h3><p>在初始设置中，FUSE daemon 需要从 /dev/fuse 中读取请求，并且把回复也写到这个设备中。这样在内核和用户态之间复制内存，对 read 和 write 请求是有害的，因为通常它们会包含很多数据。因此，FUSE 会使用 Linux kernel 提供的 splice 技术。</p>
+<p>splice() 系列的系统调用可以在两个 in-kernel memory buffer 之间传递数据，这样就不需要到用户态拷贝一次了。</p>
 <blockquote>
 <p>例如 sendfile、mmap、splice 都是 Linux 中的零拷贝技术，主要是消除一些不需要的拷贝</p>
 </blockquote>
-<p>FUSE 将它的 buffer 表示为任意一种形式：</p>
+<p>FUSE 将它的 buffer 表示为下面两种形式之一：</p>
 <ul>
 <li>The regular memory region identified by a pointer in the user daemon’s address space, or</li>
 <li>The kernel-space memory pointed by a file descriptor of a pipe where the data resides.</li>
 </ul>
-<p>If a user-space file system implements the <code>write_buf()</code> method (in the low-level API), then FUSE first splices the data from <code>/dev/fuse</code> to a Linux pipe and then passes the data directly to this method as a buffer containing a file descriptor of the pipe. FUSE splices only WRITE requests and only the ones that contain more than a single page of data.</p>
-<blockquote>
-<p>注意，为了实现这个特性，FUSE 就需要使用普通的 read 调用去读取那个 pipe 的 fd，所以这里肯定会存在 memory copy。即</p>
-</blockquote>
-<p>However, the header of every single request needs to be examined, for example to identify the request’s type and size. This examination is not possible if the FUSE buffer has only the file descriptor of a pipe where the data resides. So, for every request the header is then read from the pipe using regular read() calls (i.e., small, at most 80 bytes, memory copying is always perfomed). FUSE then splices the requested data if its size is larger than a single page (excluding the header): therefore only big writes are spliced. For reads, replies larger than two pages are spliced.</p>
+<p>If a user-space file system implements the <code>write_buf()</code> method (in the low-level API), then FUSE first splices the data from <code>/dev/fuse</code> to a Linux pipe and then passes the data directly to this method as a buffer containing a file descriptor of the pipe. FUSE splices only <code>WRITE</code> requests and only the ones that contain <strong>more than a single page of data</strong>.</p>
 <p>Similar logic applies to the replies to READ requests if the <code>read_buf()</code> method is implemented. However, the <code>read_buf()</code> method is only present in the high-level API; for the low-level API, the file-system developer has to differentiate between splice and non-splice flows inside the read method itself.</p>
-<p>【Q】为什么这里读会让开发者自己决定要不要 splice？</p>
+<blockquote>
+<p>下面这段话讲解了为什么 header 肯定得 copy</p>
+</blockquote>
+<p>If the library is compiled with splice support, the kernel supports it, and appropriate commandline parameters are set, then splice() is always called for every request (including the request’s header). However, the header of every single request needs to be examined, for example to identify the request’s type and size. This examination is not possible if the FUSE buffer has only the file descriptor of a pipe where the data resides. So, for every request the header is then read from the pipe using regular read() calls (i.e., small, at most 80 bytes, memory copying is always perfomed). FUSE then splices the requested data if its size is larger than a single page (excluding the header): therefore only big writes are spliced. For reads, replies larger than two pages are spliced.</p>
+<h4 id="扩展"><a href="#扩展" class="headerlink" title="扩展"></a>扩展</h4><p>注意，上文中得到的那个 pipe，实际上是可以方便地把数据通过 pipe 的形式往下游传递的。应该是对应了第二种 buffer 的形式。</p>
+<p><a href="https://man7.org/linux/man-pages/man2/vmsplice.2.html" target="_blank" rel="noopener">vmsplice</a> 并不能把管道里面的数据移动到用户态内存中，所以如果需要在用户态对数据进行处理，例如需要加解密或者加解压，则得 Copy。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/** Write contents of buffer to an open file</span></span><br><span class="line"><span class="comment"> *</span></span><br><span class="line"><span class="comment"> * Similar to the write() method, but data is supplied in a</span></span><br><span class="line"><span class="comment"> * generic buffer.  Use fuse_buf_copy() to transfer data to</span></span><br><span class="line"><span class="comment"> * the destination.</span></span><br><span class="line"><span class="comment"> *</span></span><br><span class="line"><span class="comment"> * Unless FUSE_CAP_HANDLE_KILLPRIV is disabled, this method is</span></span><br><span class="line"><span class="comment"> * expected to reset the setuid and setgid bits.</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="keyword">int</span> (*write_buf) (<span class="keyword">const</span> <span class="keyword">char</span> *, struct fuse_bufvec *buf, <span class="keyword">off_t</span> off,</span><br><span class="line">          struct fuse_file_info *);</span><br></pre></td></tr></table></figure>
+
 <h3 id="2-6-Notifications"><a href="#2-6-Notifications" class="headerlink" title="2.6 Notifications"></a>2.6 Notifications</h3><p>FUSE 可以通过回复内核的 request 向内核传递消息。但有时候，它需要主动向内核传递消息，比如 poll 调用时，如果事件发生了，FUSE 需要主动通知内核。</p>
 <p><img src="/img/dbpaper/fuse/fuseornot/t2.2.png"></p>
 <h3 id="2-7-Multithreading"><a href="#2-7-Multithreading" class="headerlink" title="2.7 Multithreading"></a>2.7 Multithreading</h3><p>如果 pending queue 里面有多个请求，FUSE 会启动新的线程。<strong>每个线程处理一个请求</strong>，我理解这里是内核线程。处理完后，会检查是否有超过 10 个线程，如果是，则线程退出。</p>
@@ -529,10 +533,22 @@
 </ul>
 </li>
 </ul>
+<h1 id="一些补充"><a href="#一些补充" class="headerlink" title="一些补充"></a>一些补充</h1><h2 id="FUSE-和-zero-copy"><a href="#FUSE-和-zero-copy" class="headerlink" title="FUSE 和 zero copy"></a>FUSE 和 zero copy</h2><p>如之前的图所示，FUSE 的通信模型如下。FUSE 中的一些过程是可以被 Zero-Copy 的，具体如 Splicing and FUSE Buffers 这一章节所讲的：</p>
+<ul>
+<li>WRITE 部分有限制地给超过一个 page 的数据开启 splice 功能</li>
+<li>READ 部分也无法避免直接读取 header</li>
+</ul>
+<p>FUSE 并不能完全实现零拷贝，原因主要在需要访问 /dev/fuse。</p>
+<p>/dev/fuse 这个设备很像是一个 rpc 调用，kernel 向它写入一些命令，例如 READ、OPEN 等，而 daemon 会从这个设备读出这些命令。daemon 会往 /dev/fuse 中写 response。</p>
+<p>命令大概如下</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">[ header | payload ]</span><br></pre></td></tr></table></figure>
+
+<p>不能使用 mmap 实现 zero copy 的原因：FUSE daemon 是普通用户进程，所以在设计上就允许它 crash、被攻击、卡死等情况。而如果使用 mmap，则内核很难控制生命周期。例如当 FUSE daemon 挂掉之后，需要考虑谁来清理掉这些 mmap 的文件。</p>
 <h1 id="一些知识"><a href="#一些知识" class="headerlink" title="一些知识"></a>一些知识</h1><h2 id="零拷贝"><a href="#零拷贝" class="headerlink" title="零拷贝"></a>零拷贝</h2><p><a href="/2025/09/30/zero-copy/">见 Zero-Copy 技术</a></p>
 <h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ul>
+<li><a href="https://www.fsl.cs.sunysb.edu/docs/fuse/bharath-msthesis.pdf" target="_blank" rel="noopener">https://www.fsl.cs.sunysb.edu/docs/fuse/bharath-msthesis.pdf</a><br>  完整版论文</li>
 <li><a href="https://github.com/0voice/kernel_awsome_feature/blob/main/Fuse/FUSE.pdf" target="_blank" rel="noopener">https://github.com/0voice/kernel_awsome_feature/blob/main/Fuse/FUSE.pdf</a></li>
-<li><a href="https://github.com/libfuse/libfuse/blob/master/example/passthrough.c" target="_blank" rel="noopener">https://github.com/libfuse/libfuse/blob/master/example/passthrough.c</a></li>
+<li><a href="https://github.com/libfuse/libfuse/blob/master/example/passthrough.c" target="_blank" rel="noopener">https://github.com/libfuse/libfuse/blob/master/example/passthrough.c</a><br>  一个最简单的 demo</li>
 <li><a href="https://github.com/0voice/kernel_awsome_feature/blob/main/%E8%87%AA%E5%88%B6%E6%96%87%E4%BB%B6%E7%B3%BB%E7%BB%9F%20%E2%80%94%2003%20Go%E5%AE%9E%E6%88%98%EF%BC%9Ahello%20world%20%E7%9A%84%E6%96%87%E4%BB%B6%E7%B3%BB%E7%BB%9F.md" target="_blank" rel="noopener">https://github.com/0voice/kernel_awsome_feature/blob/main/%E8%87%AA%E5%88%B6%E6%96%87%E4%BB%B6%E7%B3%BB%E7%BB%9F%20%E2%80%94%2003%20Go%E5%AE%9E%E6%88%98%EF%BC%9Ahello%20world%20%E7%9A%84%E6%96%87%E4%BB%B6%E7%B3%BB%E7%BB%9F.md</a></li>
 </ul>
 
@@ -693,7 +709,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">260</span>
+                <span class="site-state-item-count">262</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -706,7 +722,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">152</span>
+                <span class="site-state-item-count">154</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -799,7 +815,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#To-FUSE-or-not-to-FUSE-Analysis-and-Performance-Characterization-of-the-FUSE-User-Space-File-System-Framework"><span class="nav-number">1.</span> <span class="nav-text">To FUSE or not to FUSE - Analysis and Performance Characterization of the FUSE User-Space File System Framework</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#2"><span class="nav-number">1.1.</span> <span class="nav-text">2</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#2-2-User-Kernel-Protocol"><span class="nav-number">1.1.1.</span> <span class="nav-text">2.2 User-Kernel Protocol</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-3-Library-and-API-Levels"><span class="nav-number">1.1.2.</span> <span class="nav-text">2.3 Library and API Levels</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-4-Queues"><span class="nav-number">1.1.3.</span> <span class="nav-text">2.4 Queues</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-5-Splicing-and-FUSE-Buffers"><span class="nav-number">1.1.4.</span> <span class="nav-text">2.5 Splicing and FUSE Buffers</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-6-Notifications"><span class="nav-number">1.1.5.</span> <span class="nav-text">2.6 Notifications</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-7-Multithreading"><span class="nav-number">1.1.6.</span> <span class="nav-text">2.7 Multithreading</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-8-Linux-Write-back-Cache-and-FUSE"><span class="nav-number">1.1.7.</span> <span class="nav-text">2.8 Linux Write-back Cache and FUSE</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#2-8-1-Linux-Page-Cache"><span class="nav-number">1.1.7.1.</span> <span class="nav-text">2.8.1 Linux Page Cache</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#2-8-2-Page-Cache-Parameters"><span class="nav-number">1.1.7.2.</span> <span class="nav-text">2.8.2 Page Cache Parameters</span></a></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Implementations"><span class="nav-number">1.2.</span> <span class="nav-text">Implementations</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Methodology"><span class="nav-number">1.3.</span> <span class="nav-text">Methodology</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#一些知识"><span class="nav-number">2.</span> <span class="nav-text">一些知识</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#零拷贝"><span class="nav-number">2.1.</span> <span class="nav-text">零拷贝</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">3.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#To-FUSE-or-not-to-FUSE-Analysis-and-Performance-Characterization-of-the-FUSE-User-Space-File-System-Framework"><span class="nav-number">1.</span> <span class="nav-text">To FUSE or not to FUSE - Analysis and Performance Characterization of the FUSE User-Space File System Framework</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#2"><span class="nav-number">1.1.</span> <span class="nav-text">2</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#2-2-User-Kernel-Protocol"><span class="nav-number">1.1.1.</span> <span class="nav-text">2.2 User-Kernel Protocol</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-3-Library-and-API-Levels"><span class="nav-number">1.1.2.</span> <span class="nav-text">2.3 Library and API Levels</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-4-Queues"><span class="nav-number">1.1.3.</span> <span class="nav-text">2.4 Queues</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-5-Splicing-and-FUSE-Buffers"><span class="nav-number">1.1.4.</span> <span class="nav-text">2.5 Splicing and FUSE Buffers</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#扩展"><span class="nav-number">1.1.4.1.</span> <span class="nav-text">扩展</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-6-Notifications"><span class="nav-number">1.1.5.</span> <span class="nav-text">2.6 Notifications</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-7-Multithreading"><span class="nav-number">1.1.6.</span> <span class="nav-text">2.7 Multithreading</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-8-Linux-Write-back-Cache-and-FUSE"><span class="nav-number">1.1.7.</span> <span class="nav-text">2.8 Linux Write-back Cache and FUSE</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#2-8-1-Linux-Page-Cache"><span class="nav-number">1.1.7.1.</span> <span class="nav-text">2.8.1 Linux Page Cache</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#2-8-2-Page-Cache-Parameters"><span class="nav-number">1.1.7.2.</span> <span class="nav-text">2.8.2 Page Cache Parameters</span></a></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Implementations"><span class="nav-number">1.2.</span> <span class="nav-text">Implementations</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Methodology"><span class="nav-number">1.3.</span> <span class="nav-text">Methodology</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#一些补充"><span class="nav-number">2.</span> <span class="nav-text">一些补充</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#FUSE-和-zero-copy"><span class="nav-number">2.1.</span> <span class="nav-text">FUSE 和 zero copy</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#一些知识"><span class="nav-number">3.</span> <span class="nav-text">一些知识</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#零拷贝"><span class="nav-number">3.1.</span> <span class="nav-text">零拷贝</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">4.</span> <span class="nav-text">Reference</span></a></li></ol></div>
             
 
           </div>

@@ -99,7 +99,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="主要介绍 TiCI 的一些实现。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2026-01-09T15:43:22.810Z">
+<meta property="og:updated_time" content="2026-01-11T17:01:12.671Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="TiCI 的设计考量">
 <meta name="twitter:description" content="主要介绍 TiCI 的一些实现。">
@@ -398,8 +398,8 @@
 
 <p>查询规划核心问题其实是：“哪个 predicate 能最快把 selectivity 降下来？”</p>
 <ul>
-<li>先用 低 selectivity 条件 缩小候选集<br>  如倒排索引、主键、稀疏 bitmap</li>
-<li>再用 高 selectivity 条件 做 scan + aggregate<br>  如列存、向量化</li>
+<li>先用低 selectivity 条件 缩小候选集<br>  如倒排索引、主键、稀疏 bitmap</li>
+<li>再用高 selectivity 条件 做 scan + aggregate<br>  如列存、向量化</li>
 </ul>
 <h1 id="架构"><a href="#架构" class="headerlink" title="架构"></a>架构</h1><h2 id="PK-的选择"><a href="#PK-的选择" class="headerlink" title="PK 的选择"></a>PK 的选择</h2><p>在 <a href="/2023/07/22/tikv-tidb-thought/">关于 TiKV、TiDB、TiFlash 的一些思考</a> 的“为什么 TiFlash 实现 HTAP 基于 Raft？”中介绍了在 HTAP 场景中，因为 TiFlash 使用了 Raft Group 复制，获得了一些 benefit。但是，Raft 会导致 TiFlash 和 TiKV 绑定很死，特别是 TiFlash 没办法换 PK，这就一定程度上影响了 QPS。</p>
 <p>使用 TiCI 的架构，用 CDC 同步，可以避免 Raft 那一层的影响。主要体现在可以为列存指定一个新的 PK，并按照新 PK 做 sharding。这里的问题是：</p>
@@ -481,7 +481,12 @@
 <li>高频词可能是 Stopword，不会为它生成倒排表</li>
 <li>基于布尔逻辑，或者范围过滤的短路逻辑，常常能够跳过这些高频词的 posting list 的读取</li>
 </ul>
-<h2 id="内存"><a href="#内存" class="headerlink" title="内存"></a>内存</h2><h1 id="关于-vibe-coding"><a href="#关于-vibe-coding" class="headerlink" title="关于 vibe coding"></a>关于 vibe coding</h1><h3 id="编程风格和编程理念"><a href="#编程风格和编程理念" class="headerlink" title="编程风格和编程理念"></a>编程风格和编程理念</h3><p>这里，我也想进一步探讨编程风格问题，我的想法比较复古：</p>
+<h2 id="内存"><a href="#内存" class="headerlink" title="内存"></a>内存</h2><p>tantivy 在读取的时候需要借助 MmapDirectory 结构，它实际上是把 segment 文件 mmap 读的。</p>
+<p>问题：</p>
+<ul>
+<li>如果要实现 CMEK，则难度相当大，因为 CMEK 在 S3 和本地盘上都需要加密。感觉一种做法是用 gocryptfs 糊一层。</li>
+</ul>
+<h2 id="返回流式数据"><a href="#返回流式数据" class="headerlink" title="返回流式数据"></a>返回流式数据</h2><h1 id="关于-vibe-coding"><a href="#关于-vibe-coding" class="headerlink" title="关于 vibe coding"></a>关于 vibe coding</h1><h3 id="编程风格和编程理念"><a href="#编程风格和编程理念" class="headerlink" title="编程风格和编程理念"></a>编程风格和编程理念</h3><p>这里，我也想进一步探讨编程风格问题，我的想法比较复古：</p>
 <ul>
 <li>坚持测试、可观测性<br>  特别的，对于“莽一版”，需要重视：<ul>
 <li>写测试的过程，也代表了对需求的理解，对边界情况、对性能的评估。如果不写测试，那么很难有自信说自己写的代码就是完全符合需求的。</li>
@@ -657,7 +662,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">260</span>
+                <span class="site-state-item-count">262</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -670,7 +675,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">152</span>
+                <span class="site-state-item-count">154</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -763,7 +768,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#TiCI-要解决什么问题？"><span class="nav-number">1.</span> <span class="nav-text">TiCI 要解决什么问题？</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#拓展-TiFlash-的能力"><span class="nav-number">1.1.</span> <span class="nav-text">拓展 TiFlash 的能力</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#支持-Hybrid-Index"><span class="nav-number">1.2.</span> <span class="nav-text">支持 Hybrid Index</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#架构"><span class="nav-number">2.</span> <span class="nav-text">架构</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#PK-的选择"><span class="nav-number">2.1.</span> <span class="nav-text">PK 的选择</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#数据源"><span class="nav-number">2.2.</span> <span class="nav-text">数据源</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Push-or-Pull"><span class="nav-number">2.2.1.</span> <span class="nav-text">Push or Pull</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#延迟"><span class="nav-number">2.2.2.</span> <span class="nav-text">延迟</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Meta-Service"><span class="nav-number">3.</span> <span class="nav-text">Meta Service</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Outline"><span class="nav-number">3.1.</span> <span class="nav-text">Outline</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Shard-管理"><span class="nav-number">3.2.</span> <span class="nav-text">Shard 管理</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#设计能向后兼容的初始策略"><span class="nav-number">3.2.1.</span> <span class="nav-text">设计能向后兼容的初始策略</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#大量小表"><span class="nav-number">3.2.2.</span> <span class="nav-text">大量小表</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#写入路径"><span class="nav-number">3.3.</span> <span class="nav-text">写入路径</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#S3-的-Slowdown"><span class="nav-number">3.3.1.</span> <span class="nav-text">S3 的 Slowdown</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Split-amp-Compaction"><span class="nav-number">3.3.2.</span> <span class="nav-text">Split &amp; Compaction</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#有状态还是无状态的-Worker"><span class="nav-number">3.3.3.</span> <span class="nav-text">有状态还是无状态的 Worker</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#CDC-的延迟问题"><span class="nav-number">3.3.4.</span> <span class="nav-text">CDC 的延迟问题</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#心跳"><span class="nav-number">3.4.</span> <span class="nav-text">心跳</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#tantivy"><span class="nav-number">4.</span> <span class="nav-text">tantivy</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#保序"><span class="nav-number">4.1.</span> <span class="nav-text">保序</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#同时支持-ASC-和-DESC"><span class="nav-number">4.1.1.</span> <span class="nav-text">同时支持 ASC 和 DESC</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#内存"><span class="nav-number">4.2.</span> <span class="nav-text">内存</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#关于-vibe-coding"><span class="nav-number">5.</span> <span class="nav-text">关于 vibe coding</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#编程风格和编程理念"><span class="nav-number">5.0.1.</span> <span class="nav-text">编程风格和编程理念</span></a></li></ol></li></ol></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#TiCI-要解决什么问题？"><span class="nav-number">1.</span> <span class="nav-text">TiCI 要解决什么问题？</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#拓展-TiFlash-的能力"><span class="nav-number">1.1.</span> <span class="nav-text">拓展 TiFlash 的能力</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#支持-Hybrid-Index"><span class="nav-number">1.2.</span> <span class="nav-text">支持 Hybrid Index</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#架构"><span class="nav-number">2.</span> <span class="nav-text">架构</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#PK-的选择"><span class="nav-number">2.1.</span> <span class="nav-text">PK 的选择</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#数据源"><span class="nav-number">2.2.</span> <span class="nav-text">数据源</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Push-or-Pull"><span class="nav-number">2.2.1.</span> <span class="nav-text">Push or Pull</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#延迟"><span class="nav-number">2.2.2.</span> <span class="nav-text">延迟</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Meta-Service"><span class="nav-number">3.</span> <span class="nav-text">Meta Service</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Outline"><span class="nav-number">3.1.</span> <span class="nav-text">Outline</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Shard-管理"><span class="nav-number">3.2.</span> <span class="nav-text">Shard 管理</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#设计能向后兼容的初始策略"><span class="nav-number">3.2.1.</span> <span class="nav-text">设计能向后兼容的初始策略</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#大量小表"><span class="nav-number">3.2.2.</span> <span class="nav-text">大量小表</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#写入路径"><span class="nav-number">3.3.</span> <span class="nav-text">写入路径</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#S3-的-Slowdown"><span class="nav-number">3.3.1.</span> <span class="nav-text">S3 的 Slowdown</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Split-amp-Compaction"><span class="nav-number">3.3.2.</span> <span class="nav-text">Split &amp; Compaction</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#有状态还是无状态的-Worker"><span class="nav-number">3.3.3.</span> <span class="nav-text">有状态还是无状态的 Worker</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#CDC-的延迟问题"><span class="nav-number">3.3.4.</span> <span class="nav-text">CDC 的延迟问题</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#心跳"><span class="nav-number">3.4.</span> <span class="nav-text">心跳</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#tantivy"><span class="nav-number">4.</span> <span class="nav-text">tantivy</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#保序"><span class="nav-number">4.1.</span> <span class="nav-text">保序</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#同时支持-ASC-和-DESC"><span class="nav-number">4.1.1.</span> <span class="nav-text">同时支持 ASC 和 DESC</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#内存"><span class="nav-number">4.2.</span> <span class="nav-text">内存</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#返回流式数据"><span class="nav-number">4.3.</span> <span class="nav-text">返回流式数据</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#关于-vibe-coding"><span class="nav-number">5.</span> <span class="nav-text">关于 vibe coding</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#编程风格和编程理念"><span class="nav-number">5.0.1.</span> <span class="nav-text">编程风格和编程理念</span></a></li></ol></li></ol></li></ol></div>
             
 
           </div>
