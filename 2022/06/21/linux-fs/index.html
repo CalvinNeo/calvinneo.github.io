@@ -1,0 +1,1247 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="Linux,FileSystem," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="Linux 通过 VFS 建立了一个抽象层，并在之上提供了通用的文件系统模型，使得 Linux 能够支持多种文件系统。">
+<meta name="keywords" content="Linux,FileSystem">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Linux 的文件系统">
+<meta property="og:url" content="http://www.calvinneo.com/2022/06/21/linux-fs/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="Linux 通过 VFS 建立了一个抽象层，并在之上提供了通用的文件系统模型，使得 Linux 能够支持多种文件系统。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2025-10-30T07:52:27.089Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Linux 的文件系统">
+<meta name="twitter:description" content="Linux 通过 VFS 建立了一个抽象层，并在之上提供了通用的文件系统模型，使得 Linux 能够支持多种文件系统。">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2022/06/21/linux-fs/"/>
+
+
+
+
+
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5487541356791902"
+     crossorigin="anonymous"></script>
+  <title>Linux 的文件系统 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2022/06/21/linux-fs/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                Linux 的文件系统
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2022-06-21T21:48:56+08:00">
+                2022-06-21
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>Linux 通过 VFS 建立了一个抽象层，并在之上提供了通用的文件系统模型，使得 Linux 能够支持多种文件系统。</p>
+<a id="more"></a>
+
+<h1 id="文件系统的原理"><a href="#文件系统的原理" class="headerlink" title="文件系统的原理"></a>文件系统的原理</h1><p>文件系统的管理方式，可以分为 bitmap 和 tree 两大类。</p>
+<p>在支持大容量文件系统时，bitmap 存在问题：</p>
+<ol>
+<li>bitmap 本身占用空间太大，占用内存空间，并且回写磁盘更慢，对于掉电故障更不友好。</li>
+<li>如果已分配空间较为零散，那么后续新的分配需要遍历很多的位。并且产生较多的随机写。</li>
+</ol>
+<h1 id="Linux-VFS"><a href="#Linux-VFS" class="headerlink" title="Linux VFS"></a>Linux VFS</h1><p>索引节点，即 index node, inode，存储了文件的元信息。Unix中，文件和目录其实都是文件。<br>装载点即 mount pointer，Unix 把每个文件系统 mount 到一个特定的 mount 点上，称为命名空间 namespace。</p>
+<p>VFS 为了封装这些抽象使用了四个主要的对象类型：</p>
+<ol>
+<li>超级块对象，代表一个具体的已安装文件系统</li>
+<li>索引节点对象，代表一个具体文件</li>
+<li>目录项对象，代表一个目录项<br> 注意目录项不等同于目录，Linux 中目录属于文件。<br> 这里的目录项描述了一个路径的性质，例如说在基于路径名的查找时需要访问整个路径，所以将路径名从文件中抽象出来简化了过程。</li>
+<li>文件对象，代表一个由进程打开的文件</li>
+</ol>
+<p>以 <code>write()</code> 调用为例，它首先经过了 VFS 层中的 <code>sys_write()</code> 函数，接着调用具体文件系统的实现，以写入物理介质。</p>
+<h2 id="超级块"><a href="#超级块" class="headerlink" title="超级块"></a>超级块</h2><p>Linux 中使用了 <code>struct super_block</code> 来描述超级块，使用 <code>struct super_block.super_operations</code> 来定义这个超级块中的所有行为。</p>
+<h2 id="inode"><a href="#inode" class="headerlink" title="inode"></a>inode</h2><p><code>struct inode</code> 结构体在文件被访问时在内存中创建，它可以描述一个管道、块设备或者字符设备。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">union</span> &#123;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">pipe_inode_info</span>  *<span class="title">i_pipe</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">block_device</span> *<span class="title">i_bdev</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">cdev</span>     *<span class="title">i_cdev</span>;</span></span><br><span class="line">    <span class="keyword">char</span>            *i_link;</span><br><span class="line">    <span class="keyword">unsigned</span>        i_dir_seq;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<h2 id="目录项"><a href="#目录项" class="headerlink" title="目录项"></a>目录项</h2><p>目录项有三种状态</p>
+<ol>
+<li>被使用。这个状态的目录的<code>d_inode</code>是一个有效的节点，并且<code>d_count</code>为正，表示正在被VFS访问。</li>
+<li>未被使用。这个状态的目录的<code>d_count</code>为0，表示这个对象没有被使用，但是仍然在中缓存以便将来使用。</li>
+<li>负状态。此时<code>d_inode</code>为<code>NULL</code>，表示inode已经删除，或者路径已经不再合法，缓存这样的节点可以方便查询，即使是对一个不合法的节点。</li>
+</ol>
+<h2 id="和进程相关的结构"><a href="#和进程相关的结构" class="headerlink" title="和进程相关的结构"></a>和进程相关的结构</h2><p>文件描述符 fd 在进程中以 <code>struct file_struct</code> 定义。</p>
+<h1 id="io-uring"><a href="#io-uring" class="headerlink" title="io_uring"></a>io_uring</h1><p>见 <a href="/2025/10/30/efficient-io-uring/">Efficient IO with io_uring 学习</a></p>
+<h1 id="FUSE"><a href="#FUSE" class="headerlink" title="FUSE"></a>FUSE</h1><p>见 <a href="/2025/03/09/learn-fuse/">Fuse 学习</a></p>
+<h1 id="Zero-Copy-技术"><a href="#Zero-Copy-技术" class="headerlink" title="Zero Copy 技术"></a>Zero Copy 技术</h1><p>见 <a href="/2025/09/30/zero-copy/">Zero Copy 技术</a></p>
+<h1 id="Page-Cache"><a href="#Page-Cache" class="headerlink" title="Page Cache"></a>Page Cache</h1><p>O_DIRECT 表示 IO 不使用 Buffer，<br>O_SYNC：以同步IO方式打开文件。</p>
+<h1 id="ZFS"><a href="#ZFS" class="headerlink" title="ZFS"></a>ZFS</h1><p>ZFS 支持下面的内容：</p>
+<ol>
+<li>COW</li>
+<li>Snapshot</li>
+<li>数据完整性验证和自动修复</li>
+<li>RAID-Z</li>
+<li>最大 16 EiB 的文件大小</li>
+<li>最大 256 ZiB 的存储</li>
+</ol>
+<h1 id="IO-调度"><a href="#IO-调度" class="headerlink" title="IO 调度"></a>IO 调度</h1><h2 id="Linus-电梯"><a href="#Linus-电梯" class="headerlink" title="Linus 电梯"></a>Linus 电梯</h2><ol>
+<li>合并相邻扇区的请求</li>
+<li>出现驻留时间过长的请求时插入尾部</li>
+<li>尝试插入扫描序列中的对应顺序位置</li>
+<li>如果不存在插入尾部</li>
+</ol>
+<h2 id="最终期限调度"><a href="#最终期限调度" class="headerlink" title="最终期限调度"></a>最终期限调度</h2><p>对某个磁盘扇区上的繁重操作会导致其他扇区的饥饿。<br>写-饥饿-读问题。这是因为写操作常常是异步的，在内核有空时提交，而读操作则用户进程必须阻塞等待，所以是同步的。而读写操作都涉及到访问inode，因此这里存在竞争关系，能够料想写操作的饥饿能够导致读请求的饥饿。为了解决这个问题我们引入了最后期限调度，但是如我们所想的那样，这种控制延迟在一定程度内的算法一定会降低吞吐量。</p>
+<h1 id="磁盘相关性能测试工具介绍"><a href="#磁盘相关性能测试工具介绍" class="headerlink" title="磁盘相关性能测试工具介绍"></a>磁盘相关性能测试工具介绍</h1><h2 id="proc-diskstats"><a href="#proc-diskstats" class="headerlink" title="/proc/diskstats"></a>/proc/diskstats</h2><p>诸如 iostat，node_exporter 之类的都是基于读取该指标实现的。</p>
+<ol>
+<li>Field  1 – # of reads completed<br> This is the total number of reads completed successfully.</li>
+<li>Field  2 – # of reads merged, field 6 – # of writes merged<br> 相邻的 read 和 write 会被 merge 起来读写。比如两个相邻的 4k 会被合并成一个 8k 的，然后被算作一次 io。通过这个可以了解 merge 的频率。</li>
+</ol>
+<h2 id="iostat"><a href="#iostat" class="headerlink" title="iostat"></a>iostat</h2><ol>
+<li>rareq-sz/wareq-sz/dareq-sz<br> read/write/discard 请求的平均大小，kb 计算。</li>
+<li>r_await/w_await/d_await<br> read/write/discard 的处理耗时，包含队列中的等待时间，以及真正的处理时间。毫秒计算。</li>
+<li>f_await<br> The average time (in milliseconds) for flush requests issued to the device to be served. The block layer combines flush requests and executes at most one at a time. Thus flush operations could be twice as long: Wait for current flush request, then execute it, then wait for the next one.</li>
+<li>aqu-sz<br> 队列的平均长度。</li>
+<li>%rrqm/%wrqm/%drqm<br> The percentage of read/write/discard requests merged together before being sent to the device.</li>
+<li>rrqm/s wrqm/s drqm/s<br> The number of read/write/discard requests merged per second that were queued to the device.</li>
+<li>r/s w/s d/s f/s<br> The number (after merges) of read/write/discard/flush requests completed per second for the device.</li>
+<li>rkB/s wkB/s<br> 等于 <code>rareq-sz * r/s</code> 和 <code>wareq-sz * w/s</code>。</li>
+</ol>
+<h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
+<li><a href="https://developer.aliyun.com/article/401890" target="_blank" rel="noopener">https://developer.aliyun.com/article/401890</a><br> ZFS</li>
+<li><a href="https://www.cnblogs.com/zl1991/p/10288291.html" target="_blank" rel="noopener">https://www.cnblogs.com/zl1991/p/10288291.html</a><br> O_SYNC 和 O_DIRECT</li>
+<li><a href="https://www.kernel.org/doc/Documentation/ABI/testing/procfs-diskstats" target="_blank" rel="noopener">https://www.kernel.org/doc/Documentation/ABI/testing/procfs-diskstats</a></li>
+<li><a href="https://manpages.debian.org/testing/sysstat/iostat.1.en.html" target="_blank" rel="noopener">https://manpages.debian.org/testing/sysstat/iostat.1.en.html</a></li>
+<li><a href="https://www.kernel.org/doc/Documentation/iostats.txt" target="_blank" rel="noopener">https://www.kernel.org/doc/Documentation/iostats.txt</a></li>
+</ol>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/Linux/" rel="tag"># Linux</a>
+          
+            <a href="/tags/FileSystem/" rel="tag"># FileSystem</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2022/06/18/rust-closure-self/" rel="next" title="Rust闭包实现递归">
+                <i class="fa fa-chevron-left"></i> Rust闭包实现递归
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2022/08/25/tiflash-proxy-reading/" rel="prev" title="TiFlash 源码解读：TiFlash Proxy 模块">
+                TiFlash 源码解读：TiFlash Proxy 模块 <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">262</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">154</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#文件系统的原理"><span class="nav-number">1.</span> <span class="nav-text">文件系统的原理</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Linux-VFS"><span class="nav-number">2.</span> <span class="nav-text">Linux VFS</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#超级块"><span class="nav-number">2.1.</span> <span class="nav-text">超级块</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#inode"><span class="nav-number">2.2.</span> <span class="nav-text">inode</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#目录项"><span class="nav-number">2.3.</span> <span class="nav-text">目录项</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#和进程相关的结构"><span class="nav-number">2.4.</span> <span class="nav-text">和进程相关的结构</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#io-uring"><span class="nav-number">3.</span> <span class="nav-text">io_uring</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#FUSE"><span class="nav-number">4.</span> <span class="nav-text">FUSE</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Zero-Copy-技术"><span class="nav-number">5.</span> <span class="nav-text">Zero Copy 技术</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Page-Cache"><span class="nav-number">6.</span> <span class="nav-text">Page Cache</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#ZFS"><span class="nav-number">7.</span> <span class="nav-text">ZFS</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#IO-调度"><span class="nav-number">8.</span> <span class="nav-text">IO 调度</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Linus-电梯"><span class="nav-number">8.1.</span> <span class="nav-text">Linus 电梯</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#最终期限调度"><span class="nav-number">8.2.</span> <span class="nav-text">最终期限调度</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#磁盘相关性能测试工具介绍"><span class="nav-number">9.</span> <span class="nav-text">磁盘相关性能测试工具介绍</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#proc-diskstats"><span class="nav-number">9.1.</span> <span class="nav-text">/proc/diskstats</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#iostat"><span class="nav-number">9.2.</span> <span class="nav-text">iostat</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">10.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2022/06/21/linux-fs/';
+          this.page.identifier = '2022/06/21/linux-fs/';
+          this.page.title = 'Linux 的文件系统';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+  
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Config({
+        tex2jax: {
+          inlineMath: [ ['$','$'], ["\\(","\\)"]  ],
+          processEscapes: true,
+          skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+        }
+      });
+    </script>
+
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax(), i;
+        for (i=0; i < all.length; i += 1) {
+          all[i].SourceElement().parentNode.className += ' has-jax';
+        }
+      });
+    </script>
+    <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+  
+
+
+  
+
+  
+
+</body>
+</html>

@@ -1,0 +1,1283 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="内存管理,Utility," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="介绍 valgrind 的 Memcheck、Callgrind、Helgrind、Massif 等工具的用法。">
+<meta name="keywords" content="内存管理,Utility">
+<meta property="og:type" content="article">
+<meta property="og:title" content="valgrind 用法">
+<meta property="og:url" content="http://www.calvinneo.com/2023/01/26/valgrind-usage/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="介绍 valgrind 的 Memcheck、Callgrind、Helgrind、Massif 等工具的用法。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2025-11-20T17:44:20.378Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="valgrind 用法">
+<meta name="twitter:description" content="介绍 valgrind 的 Memcheck、Callgrind、Helgrind、Massif 等工具的用法。">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2023/01/26/valgrind-usage/"/>
+
+
+
+
+
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5487541356791902"
+     crossorigin="anonymous"></script>
+  <title>valgrind 用法 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2023/01/26/valgrind-usage/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                valgrind 用法
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2023-01-26T10:04:26+08:00">
+                2023-01-26
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>介绍 valgrind 的 Memcheck、Callgrind、Helgrind、Massif 等工具的用法。</p>
+<a id="more"></a>
+
+<h1 id="Memcheck"><a href="#Memcheck" class="headerlink" title="Memcheck"></a>Memcheck</h1><p>功能是：</p>
+<ol>
+<li>未允许的内存访问，例如 overrun 或者 underrun 堆内存，或者 oveerrun 栈顶，或者访问已经被释放的内存。</li>
+<li>使用未定义的值，例如没有被初始化的值，或者从其他未初始化的值派生出来的值。</li>
+<li>错误释放堆内存，类似于 double free，或者错误搭配 new/new[]/malloc。</li>
+<li>在内存分配时，传入负数作为大小。</li>
+<li>内存泄露。</li>
+</ol>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">valgrind --tool=memcheck --leak-check=full --track-origins=yes</span><br></pre></td></tr></table></figure>
+
+<h2 id="Illegal-read-Illegal-write-errors"><a href="#Illegal-read-Illegal-write-errors" class="headerlink" title="Illegal read / Illegal write errors"></a>Illegal read / Illegal write errors</h2><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">int</span> y = <span class="number">1</span>;</span><br><span class="line">    <span class="built_in">printf</span> (<span class="string">"x = %d\n"</span>, *(<span class="keyword">int</span>*)(&amp;y + <span class="number">10</span>));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">==25724== Invalid read of size 4</span><br><span class="line">==25724==    at 0x400674: main</span><br><span class="line">==25724==  Address 0x0 is not stack&apos;d, malloc&apos;d or (recently) free&apos;d</span><br></pre></td></tr></table></figure>
+
+<h2 id="Use-of-uninitialised-values"><a href="#Use-of-uninitialised-values" class="headerlink" title="Use of uninitialised values"></a>Use of uninitialised values</h2><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">int</span> x;</span><br><span class="line">    <span class="built_in">printf</span> (<span class="string">"x = %d\n"</span>, x);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">==38591== Use of uninitialised value of size 8</span><br><span class="line">==38591==    at 0x571A32B: _itoa_word (in /usr/lib64/libc-2.17.so)</span><br><span class="line">==38591==    by 0x571E5B0: vfprintf (in /usr/lib64/libc-2.17.so)</span><br><span class="line">==38591==    by 0x57254E8: printf (in /usr/lib64/libc-2.17.so)</span><br><span class="line">==38591==    by 0x400682: main</span><br><span class="line"></span><br><span class="line">==38591== Conditional jump or move depends on uninitialised value(s)</span><br><span class="line">==38591==    at 0x571A335: _itoa_word (in /usr/lib64/libc-2.17.so)</span><br><span class="line">==38591==    by 0x571E5B0: vfprintf (in /usr/lib64/libc-2.17.so)</span><br><span class="line">==38591==    by 0x57254E8: printf (in /usr/lib64/libc-2.17.so)</span><br><span class="line">==38591==    by 0x400682: main</span><br><span class="line">==38591==  Uninitialised value was created by a stack allocation</span><br><span class="line">==38591==    at 0x400667: main</span><br></pre></td></tr></table></figure>
+
+<p>在程序操作未初始化的数据时，memcheck 会记录这些数据，但不会输出错误。只有当这个程序尝试使用这些未初始化的数据，并且会影响这个程序的外部可见性时，才会报错。在这个例子中，x 没有被初始化。memcheck 观察到这个值被传给 printf 和 vfprintf，但并没有输出错误。当 vfprintf 检查 x 的值，并且试图将其转换为 ASCII 字符串时，memcheck 才会输出错误。</p>
+<p>可以通过设置 <code>--track-origins=yes</code> 来检查这些未初始化的数据。它会使得 memcheck 跑得更慢，但更容易发现问题。</p>
+<h2 id="Use-of-uninitialised-or-unaddressable-values-in-system-calls"><a href="#Use-of-uninitialised-or-unaddressable-values-in-system-calls" class="headerlink" title="Use of uninitialised or unaddressable values in system calls"></a>Use of uninitialised or unaddressable values in system calls</h2><p>Memcheck 检查 system call 中所有的未初始化变量，包括：</p>
+<ol>
+<li>所有的直接变量。</li>
+<li>或者，如果一个 system call 需要读取程序中的某一段缓存，memcheck 会检查整个缓存是否 addressable，并且其内容是否被初始化。</li>
+<li>或者，如果这个 system call 需要写到用户提供的某一段缓存中，memcheck 需要检查这段缓存是否 addressable。</li>
+</ol>
+<h2 id="Illegal-frees"><a href="#Illegal-frees" class="headerlink" title="Illegal frees"></a>Illegal frees</h2><p>Memcheck 记录通过 malloc 和 new 分配的所有块，所以他可以知道某个 free 或者 delete 是否合法。在这里，出现了 double free。</p>
+<h3 id="C"><a href="#C" class="headerlink" title="C"></a>C</h3><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">void</span> * x = <span class="built_in">malloc</span>(<span class="number">10</span>);</span><br><span class="line">    <span class="built_in">free</span>(x);</span><br><span class="line">    <span class="built_in">free</span>(x);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>在出现非法读写的错误时，memcheck 会尝试解析被释放的地址。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">==27728== Invalid free() / delete / delete[] / realloc()</span><br><span class="line">==27728==    at 0x4C2B06D: free (vg_replace_malloc.c:540)</span><br><span class="line">==27728==    by 0x4006E4: main</span><br><span class="line">==27728==  Address 0x5ab1c80 is 0 bytes inside a block of size 10 free&apos;d</span><br><span class="line">==27728==    at 0x4C2B06D: free (vg_replace_malloc.c:540)</span><br><span class="line">==27728==    by 0x4006D8: main</span><br><span class="line">==27728==  Block was alloc&apos;d at</span><br><span class="line">==27728==    at 0x4C29F73: malloc (vg_replace_malloc.c:309)</span><br><span class="line">==27728==    by 0x4006C8: main</span><br></pre></td></tr></table></figure>
+
+<p>注意，如果我们释放的是指向某个堆空间内部的指针，则也会出现类似的错误。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">void</span> * x = <span class="built_in">malloc</span>(<span class="number">10</span>);</span><br><span class="line">    <span class="built_in">free</span>(x + <span class="number">1</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>此时，报错为 <code>is 1 bytes inside ... alloc&#39;d</code>。这样的报错说明不是 double free 的问题。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">==31870== Invalid free() / delete / delete[] / realloc()</span><br><span class="line">==31870==    at 0x4C2B06D: free (vg_replace_malloc.c:540)</span><br><span class="line">==31870==    by 0x4006DC: main</span><br><span class="line">==31870==  Address 0x5ab1c81 is 1 bytes inside a block of size 10 alloc&apos;d</span><br><span class="line">==31870==    at 0x4C29F73: malloc (vg_replace_malloc.c:309)</span><br><span class="line">==31870==    by 0x4006C8: main</span><br></pre></td></tr></table></figure>
+
+<h3 id="C-1"><a href="#C-1" class="headerlink" title="C++"></a>C++</h3><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">int</span> * x = <span class="keyword">new</span> <span class="keyword">int</span>[<span class="number">2</span>]&#123;<span class="number">1</span>, <span class="number">2</span>&#125;;</span><br><span class="line">    <span class="keyword">delete</span> [] x;</span><br><span class="line">    <span class="keyword">delete</span> [] x;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">==12625== Invalid free() / delete / delete[] / realloc()</span><br><span class="line">==12625==    at 0x4C2BB8F: operator delete[](void*) (vg_replace_malloc.c:651)</span><br><span class="line">==12625==    by 0x400705: main</span><br><span class="line">==12625==  Address 0x5ab1c80 is 0 bytes inside a block of size 8 free&apos;d</span><br><span class="line">==12625==    at 0x4C2BB8F: operator delete[](void*) (vg_replace_malloc.c:651)</span><br><span class="line">==12625==    by 0x4006F2: main</span><br><span class="line">==12625==  Block was alloc&apos;d at</span><br><span class="line">==12625==    at 0x4C2AC38: operator new[](unsigned long) (vg_replace_malloc.c:433)</span><br><span class="line">==12625==    by 0x4006C8: main</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">int</span> * x = <span class="keyword">new</span> <span class="keyword">int</span>[<span class="number">2</span>]&#123;<span class="number">1</span>, <span class="number">2</span>&#125;;</span><br><span class="line">    <span class="keyword">delete</span> [] (x + <span class="number">1</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">==18227== Invalid free() / delete / delete[] / realloc()</span><br><span class="line">==18227==    at 0x4C2BB8F: operator delete[](void*) (vg_replace_malloc.c:651)</span><br><span class="line">==18227==    by 0x4006FC: main</span><br><span class="line">==18227==  Address 0x5ab1c84 is 4 bytes inside a block of size 8 alloc&apos;d</span><br><span class="line">==18227==    at 0x4C2AC38: operator new[](unsigned long) (vg_replace_malloc.c:433)</span><br><span class="line">==18227==    by 0x4006C8: main</span><br></pre></td></tr></table></figure>
+
+<h2 id="When-a-heap-block-is-freed-with-an-inappropriate-deallocation-function"><a href="#When-a-heap-block-is-freed-with-an-inappropriate-deallocation-function" class="headerlink" title="When a heap block is freed with an inappropriate deallocation function"></a>When a heap block is freed with an inappropriate deallocation function</h2><figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">int</span> * x = <span class="keyword">new</span> <span class="keyword">int</span>[<span class="number">2</span>]&#123;<span class="number">1</span>, <span class="number">2</span>&#125;;</span><br><span class="line">    <span class="keyword">delete</span> x;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">==29865== Mismatched free() / delete / delete []</span><br><span class="line">==29865==    at 0x4C2B6DF: operator delete(void*, unsigned long) (vg_replace_malloc.c:595)</span><br><span class="line">==29865==    by 0x400710: main</span><br><span class="line">==29865==  Address 0x5ab1c80 is 0 bytes inside a block of size 8 alloc&apos;d</span><br><span class="line">==29865==    at 0x4C2AC38: operator new[](unsigned long) (vg_replace_malloc.c:433)</span><br><span class="line">==29865==    by 0x4006E8: main</span><br></pre></td></tr></table></figure>
+
+<p>C++ 中的 allocate 和 deallocate 操作包含：</p>
+<ol>
+<li>If allocated with malloc, calloc, realloc, valloc or memalign, you must deallocate with free.</li>
+<li>If allocated with new, you must deallocate with delete.</li>
+<li>If allocated with new[], you must deallocate with delete[].</li>
+</ol>
+<p>最要命的是在 Linux 中其实无所谓搞混这些 allocate 和 deallocate 操作。但是这样错误的搭配在其他平台比如 Solaris 上则会导致 crash。</p>
+<h2 id="Overlapping-source-and-destination-blocks"><a href="#Overlapping-source-and-destination-blocks" class="headerlink" title="Overlapping source and destination blocks"></a>Overlapping source and destination blocks</h2><p>在 <code>memcpy</code>、<code>strcpy</code>、<code>strncpy</code>、<code>strcat</code>、<code>strncat</code> 中，指向 src 和 dst 的指针不能 overlap。</p>
+<p>比较奇怪的是下面的代码并不会出现这样的错误。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">int</span> * x = <span class="keyword">new</span> <span class="keyword">int</span>[<span class="number">3</span>]&#123;<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>&#125;;</span><br><span class="line">    <span class="built_in">memcpy</span>(x + <span class="number">1</span>, x, <span class="number">2</span>);</span><br><span class="line">    <span class="keyword">void</span> * y = <span class="built_in">malloc</span>(<span class="number">10</span>);</span><br><span class="line">    <span class="built_in">memset</span>(y, <span class="number">0</span>, <span class="number">10</span>);</span><br><span class="line">    <span class="built_in">memcpy</span>(y + <span class="number">1</span>, y, <span class="number">2</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>原因是 gcc 会把 memcpy 优化掉，通过 <code>-fno-builtin-memcpy</code> 可以禁用这个性质。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">==15974== Source and destination overlap in memcpy(0x5ab1c81, 0x5ab1c80, 2)</span><br><span class="line">==15974==    at 0x4C2E81D: memcpy@@GLIBC_2.14 (vg_replace_strmem.c:1035)</span><br><span class="line">==15974==    by 0x40075E: main</span><br><span class="line">==15974==</span><br></pre></td></tr></table></figure>
+
+<h2 id="Fishy-argument-values"><a href="#Fishy-argument-values" class="headerlink" title="Fishy argument values"></a>Fishy argument values</h2><p>所有的内存分配函数都需要指定需要分配的大小，而这个大小肯定是一个非负数，并且不会特别大。例如我们不太可能在64位机器上分配 <code>2**23</code> 个字节。这样的大小通常来自于一个人为的错误，而这样的值就被称为 fishy value。在 <code>malloc</code>、<code>calloc</code>、<code>realloc</code>、<code>memalign</code>、<code>new</code>、<code>new []</code>。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">void</span> * x = <span class="built_in">malloc</span>(<span class="number">-2</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">==27571== Argument &apos;size&apos; of function malloc has a fishy (possibly negative) value: -2</span><br><span class="line">==27571==    at 0x4C29F73: malloc (vg_replace_malloc.c:309)</span><br><span class="line">==27571==    by 0x40067A: main</span><br></pre></td></tr></table></figure>
+
+<p>但同时注意到编译器也会触发警告。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">warning: argument 1 value ‘18446744073709551614’ exceeds maximum object size 9223372036854775807 [-Walloc-size-larger-than=]</span><br><span class="line">void * x = malloc(-2);</span><br></pre></td></tr></table></figure>
+
+<h2 id="Memory-leak-detection"><a href="#Memory-leak-detection" class="headerlink" title="Memory leak detection"></a>Memory leak detection</h2><p>Memcheck 会记录所有分配的堆对象。<br>通过设置 <code>--leak-check</code>，对于在结束时尚未被释放的 block，Memcheck 会检查这个 block 是否可以从 root set 被访问。这里的 root set 包括：</p>
+<ol>
+<li>通用寄存器</li>
+<li>在所有可访问内存，包括栈中的 initialised, aligned, pointer-sized data words</li>
+</ol>
+<p>有两种方法可以访问一个 block：</p>
+<ol>
+<li>start-pointer，也就是指向 block 开始位置的指针</li>
+<li>interior-pointer，也就是指向 block 中间位置的指针</li>
+</ol>
+<p>一个 interior-pointer 是如何产生的呢？</p>
+<ol>
+<li>它可能开始是一个 start-pointer，但后来被程序故意或者非故意地向前移动<br> 比如如果程序使用 tagged pointer。因为对齐的缘故，指针最右边的几位通常是0，所以会被用来存储额外的信息。这些信息可能导致指针被前进。</li>
+<li>可能是内存中的某个垃圾</li>
+<li>【stdstring】可能是指向 std::string 内部持有的 char[] 的指针<br> 例如某些编译期会在 std::string 的头部存3个字段，分别表示数组的 length、capacity 和 refcount，在这3个字段之后再放置真正的 char[]。但是它返回的指针是指向 char[] 的。这个有点类似 Redis 的 SDS 的实现。</li>
+<li>【length64】Some code might allocate a block of memory, and use the first 8 bytes to store (block size - 8) as a 64bit number. sqlite3MemMalloc does this.</li>
+<li>【newarray】可能是执行某个 T[] 中的指针。这里的 T 是一个 C++ 对象，它具有自定义的析构函数，并使用 new[] 分配，delete[] 删除<br> 在这种情况下，一些编译器会在指针的前面放一个 magic cookie，用来存放长度。</li>
+<li>【multipleinheritance】It might be a pointer to an inner part of a C++ object using multiple inheritance.</li>
+</ol>
+<p>You can optionally activate heuristics to use during the leak search to detect the interior pointers corresponding to the stdstring, length64, newarray and multipleinheritance cases. If the heuristic detects that an interior pointer corresponds to such a case, the block will be considered as reachable by the interior pointer. In other words, the interior pointer will be treated as if it were a start pointer.</p>
+<p>下面一张图阐释了几种内存泄露的情况：</p>
+<ol>
+<li><code>DR</code>: Directly reachable</li>
+<li><code>IR</code>: Indirectly reachable</li>
+<li><code>DL</code>: Directly lost</li>
+<li><code>IL</code>: Indirectly lost</li>
+<li><code>(y)XY</code>: it’s XY if the interior-pointer is a real pointer</li>
+<li><code>(n)XY</code>: it’s XY if the interior-pointer is not a real pointer</li>
+<li><code>(_)XY</code>: it’s XY in either case</li>
+</ol>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line">     Pointer chain            AAA Leak Case   BBB Leak Case</span><br><span class="line">     -------------            -------------   -------------</span><br><span class="line">(1)  RRR ------------&gt; BBB                    DR</span><br><span class="line">(2)  RRR ---&gt; AAA ---&gt; BBB    DR              IR</span><br><span class="line">(3)  RRR               BBB                    DL</span><br><span class="line">(4)  RRR      AAA ---&gt; BBB    DL              IL</span><br><span class="line">(5)  RRR ------?-----&gt; BBB                    (y)DR, (n)DL</span><br><span class="line">(6)  RRR ---&gt; AAA -?-&gt; BBB    DR              (y)IR, (n)DL</span><br><span class="line">(7)  RRR -?-&gt; AAA ---&gt; BBB    (y)DR, (n)DL    (y)IR, (n)IL</span><br><span class="line">(8)  RRR -?-&gt; AAA -?-&gt; BBB    (y)DR, (n)DL    (y,y)IR, (n,y)IL, (_,n)DL</span><br><span class="line">(9)  RRR      AAA -?-&gt; BBB    DL              (y)IL, (n)DL</span><br><span class="line"></span><br><span class="line">Pointer chain legend:</span><br><span class="line">- RRR: a root set node or DR block</span><br><span class="line">- AAA, BBB: heap blocks</span><br><span class="line">- ---&gt;: a start-pointer</span><br><span class="line">- -?-&gt;: an interior-pointer</span><br></pre></td></tr></table></figure>
+
+<p>前四行比较简单。<br>第5行，如果这个 interior pointer 是一个 real pointer，则是 directly reachable。如果不是 real pointer 则是 directly lost。<br>第6行，相当于是2+5，没啥特殊的。<br>第7行，相当于是5+1，没啥特殊的。<br>第8行，可以分成三种情况。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">     Pointer chain            AAA Leak Case   BBB Leak Case</span><br><span class="line">     -------------            -------------   -------------</span><br><span class="line">(8)  RRR -?-&gt; AAA -?n-&gt; BBB   (y)DR, (n)DL    DL</span><br><span class="line">(8)  RRR -?y-&gt; AAA -?y-&gt; BBB  DR              IR</span><br><span class="line">(8)  RRR -?n-&gt; AAA -?y-&gt; BBB  DL              IL</span><br></pre></td></tr></table></figure>
+
+<p>但实际输出的时候，不会按照上面9个情况来输出，而是设计为如下的形式：</p>
+<ol>
+<li>Still reachable 1-2行</li>
+<li>Definitely lost 3行</li>
+<li>Indirectly lost 4/9行</li>
+<li>Possibly lost 5-8行<br> 这种情况下可能存在1或者多个指针构成的链，但其中至少有一个指针是 interior pointer。这个可能只是内存中的随机值，并恰巧指向了某个块。</li>
+</ol>
+<h2 id="Details-of-Memcheck’s-checking-machinery"><a href="#Details-of-Memcheck’s-checking-machinery" class="headerlink" title="Details of Memcheck’s checking machinery"></a>Details of Memcheck’s checking machinery</h2><p>这一节介绍 Memcheck 的原理。</p>
+<h3 id="Valid-value-V-bits"><a href="#Valid-value-V-bits" class="headerlink" title="Valid-value (V) bits"></a>Valid-value (V) bits</h3><p>It is simplest to think of Memcheck implementing a synthetic CPU which is identical to a real CPU, except for one crucial detail. Every bit (literally) of data processed, stored and handled by the real CPU has, in the synthetic CPU, an associated “valid-value” bit, which says whether or not the accompanying bit has a legitimate value. In the discussions which follow, this bit is referred to as the V (valid-value) bit.</p>
+<p>Each byte in the system therefore has a 8 V bits which follow it wherever it goes. For example, when the CPU loads a word-size item (4 bytes) from memory, it also loads the corresponding 32 V bits from a bitmap which stores the V bits for the process’ entire address space. If the CPU should later write the whole or some part of that value to memory at a different address, the relevant V bits will be stored back in the V-bit bitmap.</p>
+<p>In short, each bit in the system has (conceptually) an associated V bit, which follows it around everywhere, even inside the CPU. Yes, all the CPU’s registers (integer, floating point, vector and condition registers) have their own V bit vectors. For this to work, Memcheck uses a great deal of compression to represent the V bits compactly.</p>
+<p>Copying values around does not cause Memcheck to check for, or report on, errors. However, when a value is used in a way which might conceivably affect your program’s externally-visible behaviour, the associated V bits are immediately checked. If any of these indicate that the value is undefined (even partially), an error is reported.</p>
+<h3 id="Valid-address-A-bits"><a href="#Valid-address-A-bits" class="headerlink" title="Valid-address (A) bits"></a>Valid-address (A) bits</h3><h3 id="结合-VV-和-VA"><a href="#结合-VV-和-VA" class="headerlink" title="结合 VV 和 VA"></a>结合 VV 和 VA</h3><h2 id="Debugging-MPI-Parallel-Programs-with-Valgrind"><a href="#Debugging-MPI-Parallel-Programs-with-Valgrind" class="headerlink" title="Debugging MPI Parallel Programs with Valgrind"></a>Debugging MPI Parallel Programs with Valgrind</h2><h1 id="Callgrind"><a href="#Callgrind" class="headerlink" title="Callgrind"></a>Callgrind</h1><p>检查程序中函数调用过程中出现的问题。</p>
+<h1 id="Cachegrind"><a href="#Cachegrind" class="headerlink" title="Cachegrind"></a>Cachegrind</h1><p>检查程序中缓存使用出现的问题。</p>
+<h1 id="Helgrind"><a href="#Helgrind" class="headerlink" title="Helgrind"></a>Helgrind</h1><p>检查多线程程序中出现的竞争问题。</p>
+<h1 id="Massif"><a href="#Massif" class="headerlink" title="Massif"></a>Massif</h1><p>检查程序中堆栈使用中出现的问题。</p>
+<h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
+<li><a href="https://valgrind.org/docs/manual/mc-manual.html#mc-manual.errormsgs" target="_blank" rel="noopener">https://valgrind.org/docs/manual/mc-manual.html#mc-manual.errormsgs</a></li>
+</ol>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/内存管理/" rel="tag"># 内存管理</a>
+          
+            <a href="/tags/Utility/" rel="tag"># Utility</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2023/01/12/high-concurrency/" rel="next" title="分布式架构和高并发相关场景">
+                <i class="fa fa-chevron-left"></i> 分布式架构和高并发相关场景
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2023/02/01/the-halt-problem/" rel="prev" title="停机问题">
+                停机问题 <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">262</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">154</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Memcheck"><span class="nav-number">1.</span> <span class="nav-text">Memcheck</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Illegal-read-Illegal-write-errors"><span class="nav-number">1.1.</span> <span class="nav-text">Illegal read / Illegal write errors</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Use-of-uninitialised-values"><span class="nav-number">1.2.</span> <span class="nav-text">Use of uninitialised values</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Use-of-uninitialised-or-unaddressable-values-in-system-calls"><span class="nav-number">1.3.</span> <span class="nav-text">Use of uninitialised or unaddressable values in system calls</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Illegal-frees"><span class="nav-number">1.4.</span> <span class="nav-text">Illegal frees</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#C"><span class="nav-number">1.4.1.</span> <span class="nav-text">C</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#C-1"><span class="nav-number">1.4.2.</span> <span class="nav-text">C++</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#When-a-heap-block-is-freed-with-an-inappropriate-deallocation-function"><span class="nav-number">1.5.</span> <span class="nav-text">When a heap block is freed with an inappropriate deallocation function</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Overlapping-source-and-destination-blocks"><span class="nav-number">1.6.</span> <span class="nav-text">Overlapping source and destination blocks</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Fishy-argument-values"><span class="nav-number">1.7.</span> <span class="nav-text">Fishy argument values</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Memory-leak-detection"><span class="nav-number">1.8.</span> <span class="nav-text">Memory leak detection</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Details-of-Memcheck’s-checking-machinery"><span class="nav-number">1.9.</span> <span class="nav-text">Details of Memcheck’s checking machinery</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Valid-value-V-bits"><span class="nav-number">1.9.1.</span> <span class="nav-text">Valid-value (V) bits</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Valid-address-A-bits"><span class="nav-number">1.9.2.</span> <span class="nav-text">Valid-address (A) bits</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#结合-VV-和-VA"><span class="nav-number">1.9.3.</span> <span class="nav-text">结合 VV 和 VA</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Debugging-MPI-Parallel-Programs-with-Valgrind"><span class="nav-number">1.10.</span> <span class="nav-text">Debugging MPI Parallel Programs with Valgrind</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Callgrind"><span class="nav-number">2.</span> <span class="nav-text">Callgrind</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Cachegrind"><span class="nav-number">3.</span> <span class="nav-text">Cachegrind</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Helgrind"><span class="nav-number">4.</span> <span class="nav-text">Helgrind</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Massif"><span class="nav-number">5.</span> <span class="nav-text">Massif</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">6.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2023/01/26/valgrind-usage/';
+          this.page.identifier = '2023/01/26/valgrind-usage/';
+          this.page.title = 'valgrind 用法';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>

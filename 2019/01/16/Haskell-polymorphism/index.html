@@ -1,0 +1,1247 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="Haskell,函数式,lambda," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="一般地来说，一个值，或者说一个函数，是多态的，当它可以是多种类型的。Haskell 原始支持的多态分为参数多态和 ad-hoc 多态。在文章haskell学习笔记中提到了 Parametric polymorphism、higher kinded polymorphism 和 higher rank polymorphism 三个概念，我们将在本文中详细探讨。">
+<meta name="keywords" content="Haskell,函数式,lambda">
+<meta property="og:type" content="article">
+<meta property="og:title" content="多态：以 Haskell 为例">
+<meta property="og:url" content="http://www.calvinneo.com/2019/01/16/Haskell-polymorphism/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="一般地来说，一个值，或者说一个函数，是多态的，当它可以是多种类型的。Haskell 原始支持的多态分为参数多态和 ad-hoc 多态。在文章haskell学习笔记中提到了 Parametric polymorphism、higher kinded polymorphism 和 higher rank polymorphism 三个概念，我们将在本文中详细探讨。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2025-02-03T16:46:51.911Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="多态：以 Haskell 为例">
+<meta name="twitter:description" content="一般地来说，一个值，或者说一个函数，是多态的，当它可以是多种类型的。Haskell 原始支持的多态分为参数多态和 ad-hoc 多态。在文章haskell学习笔记中提到了 Parametric polymorphism、higher kinded polymorphism 和 higher rank polymorphism 三个概念，我们将在本文中详细探讨。">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2019/01/16/Haskell-polymorphism/"/>
+
+
+
+
+
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5487541356791902"
+     crossorigin="anonymous"></script>
+  <title>多态：以 Haskell 为例 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2019/01/16/Haskell-polymorphism/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                多态：以 Haskell 为例
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2019-01-16T23:14:20+08:00">
+                2019-01-16
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>一般地来说，一个值，或者说一个函数，是多态的，当它可以是多种类型的。Haskell 原始支持的多态分为参数多态和 ad-hoc 多态。<br>在文章<a href="/2017/02/28/haskell%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/">haskell学习笔记</a>中提到了 Parametric polymorphism、higher kinded polymorphism 和 higher rank polymorphism 三个概念，我们将在本文中详细探讨。</p>
+<a id="more"></a>
+
+<h1 id="参数多态和Ad-hoc多态"><a href="#参数多态和Ad-hoc多态" class="headerlink" title="参数多态和Ad-hoc多态"></a>参数多态和Ad-hoc多态</h1><h2 id="参数多态"><a href="#参数多态" class="headerlink" title="参数多态"></a>参数多态</h2><p>参数多态(Parametric polymorphism)类似于其他语言中的泛型或者模板，此时一个值的类型中包含多个(unconstrained) type variable。</p>
+<figure class="highlight haskell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="title">id</span> :: a -&gt; a</span><br><span class="line"><span class="title">id</span> x = x</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> T&gt;</span><br><span class="line"><span class="function"><span class="keyword">auto</span> <span class="title">id</span><span class="params">(T x)</span></span>&#123;</span><br><span class="line">    <span class="keyword">return</span> x;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>在上面的代码中，<code>a</code>称为(unconstrained) type variable，它可以是任意的，这体现在没有<code>=&gt;</code>这样typeclass的约束。因此这也隐含了对于不同的类型，多态值的行为都是一致的，这是因为parametrically polymorphic value本身对自己的type variable类型一无所知。</p>
+<h2 id="Ad-hoc多态"><a href="#Ad-hoc多态" class="headerlink" title="Ad-hoc多态"></a>Ad-hoc多态</h2><p>相对应地，Ad-hoc 显得更随机应变。此时，这个多态值可以采用若干类型其中的一个，每一种不同类型的行为都是不同的。例如对于 <code>(+)</code> ，它对浮点数的处理和对整数的处理显然是不一样的。<br>特别地，typeclass 中定义的函数<a href="https://wiki.haskell.org/Polymorphism" target="_blank" rel="noopener">也可以是</a>类型多态或 Ad-hoc 多态的，这在文章<a href="/2017/02/28/haskell%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/">haskell 学习笔记</a>的 Ch3 有详细探讨。</p>
+<h1 id="子类多态"><a href="#子类多态" class="headerlink" title="子类多态"></a>子类多态</h1><p>Haskell 并没有提供子类多态的性质。子类多态实际上是类似 Protocol、Interface、Inherit 这样的东西。</p>
+<h1 id="Rank-N多态"><a href="#Rank-N多态" class="headerlink" title="Rank N多态"></a>Rank N多态</h1><h2 id="定义"><a href="#定义" class="headerlink" title="定义"></a>定义</h2><p><a href="https://en.wikipedia.org/wiki/Universal_quantification" target="_blank" rel="noopener">Universal quantification</a>表示对于任意的，即∀。Haskell 中有对应的关键字 <code>forall</code>。如下所示，在使用支持了 Existential Quantification 扩展的 Haskell 时，查看 <code>map</code> 的定义</p>
+<figure class="highlight haskell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="title">map</span> :: <span class="keyword">forall</span> a b. (a -&gt; b) -&gt; [a] -&gt; [b]</span><br></pre></td></tr></table></figure>
+
+<p>在 Haskell 98 中，像上面 a 和 b 这样的 free variable 是 implicitly universally quantified 的。在 Haskell 98 中只允许 Rank 1 Type，也就是说 Type 具有下面的形式：</p>
+<ol>
+<li>type <code>-&gt;</code> type</li>
+<li><code>forall</code> vars. [context <code>=&gt;</code>] type</li>
+<li>monotype<br> 也就是 Haskell 98 type</li>
+</ol>
+<p>Note that <code>forall</code>‘s are not allowed inside type constructors other than <code>-&gt;</code>.</p>
+<p><code>forall</code>s and contexts in the second argument of <code>-&gt;</code> may be floated out。如下所示，后面的 forall b 可以被提出来</p>
+<figure class="highlight haskell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="title">succ</span> :: (<span class="keyword">forall</span> a. a -&gt; a) -&gt; (<span class="keyword">forall</span> b. b -&gt; b)</span><br><span class="line"><span class="title">succ</span> :: <span class="keyword">forall</span> b. (<span class="keyword">forall</span> a. a -&gt; a) -&gt; b -&gt; b</span><br></pre></td></tr></table></figure>
+
+<p>但在 Higher Rank Types 中，type annotations 往往是不能被省略的。</p>
+<h2 id="Rank-1"><a href="#Rank-1" class="headerlink" title="Rank 1"></a>Rank 1</h2><p>Haskell 中的 Rank N Types 模块实现了 higher rank polymorphism 的概念。<br>首先研究什么是 Rank 1。</p>
+<figure class="highlight haskell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">&#123;-# LANGUAGE RankNTypes #-&#125;</span></span><br><span class="line"></span><br><span class="line"><span class="title">id</span> :: <span class="keyword">forall</span> a. a -&gt; a</span><br></pre></td></tr></table></figure>
+
+<p>引入的 <code>forall</code> 显式说明 <code>id</code> 能够作用在任意的(universally quantified)类型上。</p>
+<p>通过 let 或者 where 绑定的变量可以是 polymorphic 的。如下所示，f 既可以对 True 应用，又可以对 Char 应用，它肯定是个 Rank 2 了</p>
+<figure class="highlight haskell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">&gt; <span class="keyword">let</span> f x = x <span class="keyword">in</span> (f <span class="type">True</span>, f 'a')</span><br><span class="line">(<span class="type">True</span>,'a')</span><br></pre></td></tr></table></figure>
+
+<p>但 Haskell 不允许一个函数作为参数是 polymorphic 的。例如下面的语句中 f 是 g 的参数了，所以不能编译</p>
+<figure class="highlight haskell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="title">g</span> f = (f <span class="type">True</span>, f 'a')</span><br></pre></td></tr></table></figure>
+
+<p>但在 Rank 2 特性下，<code>g</code> 就可以有下面的签名了</p>
+<figure class="highlight haskell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="title">g</span> :: (<span class="keyword">forall</span> a. a -&gt; a) -&gt; (<span class="type">Bool</span>, <span class="type">Char</span>)</span><br></pre></td></tr></table></figure>
+
+<h2 id="Rank-2"><a href="#Rank-2" class="headerlink" title="Rank 2"></a>Rank 2</h2><p>接下来是 Rank 2。</p>
+<figure class="highlight haskell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">type</span> <span class="type">IdFunc</span> = forall a. a -&gt; a</span></span><br><span class="line"><span class="title">id</span> :: <span class="type">IdFunc</span></span><br><span class="line"><span class="title">id</span> x = x</span><br></pre></td></tr></table></figure>
+
+<p>在上面的代码中，我们为 <code>forall a. a -&gt; a</code> 这样类型的函数创建了一个 alias，称为 <code>IdFunc</code>。然后定义了一个 <code>IdFunc</code> 类型的函数 <code>id</code>。在这一步中，type variable <code>a</code> 消失了。紧接着我们又定义 <code>someInt</code> 这个函数，它是 monomorphic 的，虽然它接受一个 polymorphic 的参数。</p>
+<figure class="highlight haskell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="title">someInt</span> :: <span class="type">IdFunc</span> -&gt; <span class="type">Integer</span></span><br><span class="line"><span class="title">someInt</span> id' = id' <span class="number">3</span></span><br></pre></td></tr></table></figure>
+
+<p>进一步看函数 <code>someInt</code>，它要求传入一个多态函数，但自己却是单态的。这样的函数在原始 Haskell 中是不允许的，支持它们会给类型推导带来困难。</p>
+<p>从另一个角度查看这个问题，</p>
+<figure class="highlight haskell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="title">a</span> -&gt; b -&gt; a</span><br></pre></td></tr></table></figure>
+
+<p>上面的 type signature 隐含了 <code>a</code> 和 <code>b</code> 这两个 type variable 是 universally quantified 的，因此可以被写作</p>
+<figure class="highlight haskell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="title">forall</span> a b. a -&gt; b -&gt; a</span><br></pre></td></tr></table></figure>
+
+<p><code>forall</code>关键字可以被提到 <code>(-&gt;)</code> 的右边，或者 <code>(-&gt;)</code> 右边的 <code>forall</code> 可以提到前面，正如<code>(-&gt;)</code>是右结合的。即下面的形式也是 Rank-1 的，并且与上面的写法都等价</p>
+<figure class="highlight haskell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="title">forall</span> a. a -&gt; (<span class="keyword">forall</span> b. b -&gt; a)</span><br></pre></td></tr></table></figure>
+
+<p>但是在某一个 <code>(-&gt;)</code> 左边的 <code>forall</code> 不可以被提出。下面的语句中，后面的 <code>forall</code> 可以被提到最前面，因为它在 <code>(-&gt;)</code> 的右边；而前面的 <code>forall</code> 则不能提到最前面。</p>
+<figure class="highlight haskell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">(<span class="keyword">forall</span> a. a -&gt; a) -&gt; (<span class="keyword">forall</span> b. b -&gt; b)</span><br></pre></td></tr></table></figure>
+
+<p>我们发现在上面的语句中出现了两个层面的universal quantification，<code>forall b</code>能够被提到最前面，适用范围更广一点。这样的类型就是Rank-2的。</p>
+<figure class="highlight haskell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">Prelude</span>&gt; f :: (<span class="keyword">forall</span> a. a -&gt; a) -&gt; (<span class="keyword">forall</span> b. b -&gt; b)</span><br><span class="line"></span><br><span class="line">&lt;interactive&gt;:<span class="number">3</span>:<span class="number">15</span>:</span><br><span class="line">    <span class="type">Illegal</span> symbol '.' <span class="keyword">in</span> <span class="class"><span class="keyword">type</span></span></span><br><span class="line">    <span class="type">Perhaps</span> you intended to use <span class="type">RankNTypes</span> or a similar language</span><br><span class="line">    extension to enable explicit-<span class="keyword">forall</span> syntax: <span class="keyword">forall</span> &lt;tvs&gt;. &lt;<span class="class"><span class="keyword">type</span>&gt;</span></span><br></pre></td></tr></table></figure>
+
+<h1 id="类型多态"><a href="#类型多态" class="headerlink" title="类型多态"></a>类型多态</h1><p>在先前，我们讲到的“函数”都是关乎值的，而类型多态，也就是 higher kinded polymorphic，可以看做类型和类型之间的函数。</p>
+<h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
+<li><a href="https://ocharles.org.uk/blog/guest-posts/2014-12-18-rank-n-types.html" target="_blank" rel="noopener">https://ocharles.org.uk/blog/guest-posts/2014-12-18-rank-n-types.html</a></li>
+<li><a href="https://www.stephanboyer.com/post/115/higher-rank-and-higher-kinded-types" target="_blank" rel="noopener">https://www.stephanboyer.com/post/115/higher-rank-and-higher-kinded-types</a></li>
+<li><a href="https://wiki.haskell.org/Rank-N_types" target="_blank" rel="noopener">https://wiki.haskell.org/Rank-N_types</a></li>
+<li><a href="https://wiki.haskell.org/Polymorphism" target="_blank" rel="noopener">https://wiki.haskell.org/Polymorphism</a></li>
+<li><a href="https://www.haskell.org/hugs/pages/users_guide/quantified-types.html" target="_blank" rel="noopener">https://www.haskell.org/hugs/pages/users_guide/quantified-types.html</a></li>
+<li><a href="https://gitlab.haskell.org/haskell/prime/-/wikis/RankNTypes" target="_blank" rel="noopener">https://gitlab.haskell.org/haskell/prime/-/wikis/RankNTypes</a></li>
+</ol>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/Haskell/" rel="tag"># Haskell</a>
+          
+            <a href="/tags/函数式/" rel="tag"># 函数式</a>
+          
+            <a href="/tags/lambda/" rel="tag"># lambda</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2019/01/15/travel-bangkok/" rel="next" title="曼谷/芭提雅游记">
+                <i class="fa fa-chevron-left"></i> 曼谷/芭提雅游记
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2019/01/22/common-software/" rel="prev" title="通用生产力软件工具指南">
+                通用生产力软件工具指南 <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">262</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">154</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#参数多态和Ad-hoc多态"><span class="nav-number">1.</span> <span class="nav-text">参数多态和Ad-hoc多态</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#参数多态"><span class="nav-number">1.1.</span> <span class="nav-text">参数多态</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Ad-hoc多态"><span class="nav-number">1.2.</span> <span class="nav-text">Ad-hoc多态</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#子类多态"><span class="nav-number">2.</span> <span class="nav-text">子类多态</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Rank-N多态"><span class="nav-number">3.</span> <span class="nav-text">Rank N多态</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#定义"><span class="nav-number">3.1.</span> <span class="nav-text">定义</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Rank-1"><span class="nav-number">3.2.</span> <span class="nav-text">Rank 1</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Rank-2"><span class="nav-number">3.3.</span> <span class="nav-text">Rank 2</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#类型多态"><span class="nav-number">4.</span> <span class="nav-text">类型多态</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">5.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2019/01/16/Haskell-polymorphism/';
+          this.page.identifier = '2019/01/16/Haskell-polymorphism/';
+          this.page.title = '多态：以 Haskell 为例';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+  
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Config({
+        tex2jax: {
+          inlineMath: [ ['$','$'], ["\\(","\\)"]  ],
+          processEscapes: true,
+          skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+        }
+      });
+    </script>
+
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax(), i;
+        for (i=0; i < all.length; i += 1) {
+          all[i].SourceElement().parentNode.className += ' has-jax';
+        }
+      });
+    </script>
+    <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+  
+
+
+  
+
+  
+
+</body>
+</html>

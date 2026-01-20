@@ -1,0 +1,1284 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="内存管理,Linux,profiling," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="从 C++ 内存监控方案拆出。">
+<meta name="keywords" content="内存管理,Linux,profiling">
+<meta property="og:type" content="article">
+<meta property="og:title" content="使用 eBPF 监控内存分配">
+<meta property="og:url" content="http://www.calvinneo.com/2024/08/23/use-ebpf-to-monitor-memory/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="从 C++ 内存监控方案拆出。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2025-12-13T14:55:12.268Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="使用 eBPF 监控内存分配">
+<meta name="twitter:description" content="从 C++ 内存监控方案拆出。">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2024/08/23/use-ebpf-to-monitor-memory/"/>
+
+
+
+
+
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5487541356791902"
+     crossorigin="anonymous"></script>
+  <title>使用 eBPF 监控内存分配 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2024/08/23/use-ebpf-to-monitor-memory/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                使用 eBPF 监控内存分配
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2024-08-23T09:23:25+08:00">
+                2024-08-23
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>从<a href="/2024/08/23/monitor-alloc-in-C++/"> C++ 内存监控方案</a>拆出。</p>
+<a id="more"></a>
+
+<h1 id="memleak-的-Demo"><a href="#memleak-的-Demo" class="headerlink" title="memleak 的 Demo"></a>memleak 的 Demo</h1><p><a href="https://github.com/CalvinNeo/ebpf-heap-profile" target="_blank" rel="noopener">https://github.com/CalvinNeo/ebpf-heap-profile</a></p>
+<figure class="highlight sh"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">export</span> port=5761</span><br><span class="line">sudo lsof -i:<span class="variable">$port</span></span><br><span class="line">sudo python memleak.py 20 1 --pid XXX --obj /bin/tiflash/tiflash</span><br></pre></td></tr></table></figure>
+
+<p>输出的栈大概是这样的</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">15728640 bytes in 2 allocations from stack</span><br><span class="line">        0x000055d982b5062e        os_pages_map.llvm.2428227075819520184+0x4e [tiflash]</span><br><span class="line">        0x000055d982b503b6        pages_map+0x26 [tiflash]</span><br><span class="line">        0x000055d982b1744a        ehooks_default_alloc_impl+0xca [tiflash]</span><br><span class="line">        0x000055d982b1b5cd        ecache_alloc_grow+0x35d [tiflash]</span><br><span class="line">        0x000055d982b4e4d2        pac_alloc_impl.llvm.2573546850293068282+0x142 [tiflash]</span><br><span class="line">        0x000055d982b0d48f        arena_extent_alloc_large+0x15f [tiflash]</span><br><span class="line">        0x000055d982b497c1        large_palloc+0x301 [tiflash]</span><br><span class="line">        0x000055d982af2706        malloc_default+0x7a6 [tiflash]</span><br><span class="line">        0x000055d97b7a4074        Allocator&lt;false&gt;::alloc(unsigned long, unsigned long)+0xd4 [tiflash]</span><br><span class="line">        ...</span><br><span class="line">        0x000055d9825bf310        PreHandleSnapshot+0x250 [tiflash]</span><br><span class="line">        0x00007fd51ab59f48        proxy_ffi::engine_store_helper_impls::_$LT$impl$u20$proxy_ffi..interfaces..root..DB..EngineStoreServerHelper$GT$::pre_handle_snapshot::h9e183a85dcb8c111+0x168 [libtiflash_proxy.so]</span><br><span class="line">16777216 bytes in 1 allocations from stack</span><br></pre></td></tr></table></figure>
+
+<h2 id="TiFlash-的大事务测试"><a href="#TiFlash-的大事务测试" class="headerlink" title="TiFlash 的大事务测试"></a>TiFlash 的大事务测试</h2><p>我们基于这个 demo，用 TiFlash 的大事务进行了测试。</p>
+<h3 id="combined-mode-和-outstanding-mode"><a href="#combined-mode-和-outstanding-mode" class="headerlink" title="combined mode 和 outstanding mode"></a>combined mode 和 outstanding mode</h3><p>There are two modes in memleak, the <strong>outstanding mode</strong> and the <strong>combined outstanding mode</strong>(will be refered as combined mode later).</p>
+<p>combined mode 比 outstanding mode 返回的数据要少不少。例如在一次测试中，我们发现：</p>
+<ul>
+<li>jeprof 是 2188 MiB。</li>
+<li>combined mode 为 4.40GB<ul>
+<li>1GB 左右的数据显示为 stack information lost</li>
+<li>836 MB 左右的数据为 <code>read_carllerche_bytes</code>，后面会详细说。</li>
+</ul>
+</li>
+<li>outstanding mode 为 189MB</li>
+</ul>
+<p>outstanding 模式返回少的原因是：</p>
+<ul>
+<li><code>stack_id</code> 返回 -17<br>stack_id = -17（即 -EFAULT）通常表示 BPF 程序在尝试读取用户空间堆栈时失败，原因可能是：<ol>
+<li>用户空间堆栈不可访问（例如，目标进程的虚拟内存未映射或权限不足）。</li>
+<li>堆栈跟踪深度超过最大限制（max_stack_depth 配置）。</li>
+<li>进程已退出，导致堆栈信息无效。</li>
+</ol>
+</li>
+<li>栈太多了<br>  When using outstanding mode, memleak will generate thousands of stacks, which is much more than <code>--top</code>. As a result, many of them are ignored when we output the result.</li>
+</ul>
+<h3 id="read-carllerche-bytes-的奇怪函数"><a href="#read-carllerche-bytes-的奇怪函数" class="headerlink" title="read_carllerche_bytes 的奇怪函数"></a>read_carllerche_bytes 的奇怪函数</h3><p>Still, the <code>read_carllerche_bytes</code> function takes 19% memory. However, if we only hook the <code>malloc</code> call, such function disappears. So it may due to some malfunction of monitoring different memory allocation methods. In TiFlash, we seldomly using <code>mmap</code> to allocate memory, so it works fine if we only hook <code>malloc</code> calls.</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">876616479 bytes in 16369 allocations from stack</span><br><span class="line">    protobuf::stream::CodedInputStream::read_carllerche_bytes::he73c610ff7dfb55f+0x186 [libtiflash_proxy.so]</span><br></pre></td></tr></table></figure>
+
+<h2 id="memleak、jemalloc-和-RSS-的比较"><a href="#memleak、jemalloc-和-RSS-的比较" class="headerlink" title="memleak、jemalloc 和 RSS 的比较"></a>memleak、jemalloc 和 RSS 的比较</h2><ul>
+<li>memleak 输出的内存分配情况，可能会超过 RSS。</li>
+<li>但是无论使用 memleak 还是 jeprof，对于一个具体的函数，例如 <code>DB::Region::insert</code>，它占用的内存比例是相近的。</li>
+</ul>
+<p>为什么 RSS, jeprof 和 ebpf 的输出是不同的呢？</p>
+<ul>
+<li>According to detailed test result, there is no significant consistency between RSS, ebpf and jeprof’s record.<ul>
+<li>ebpf 追踪的内存分配会被 RSS 大一点点。</li>
+<li>jeprof 追踪的内存分配比 RSS 和 ebpf 更大。</li>
+<li>To be short, that is <code>jeprof &gt; ebpf &gt;~ RSS</code></li>
+</ul>
+</li>
+<li>当然，如下的测试也发现 RSS 记录的内存分配可能会被 jemalloc 更大  <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">rss 31904 allocated 14220 retained 6152 mapped 26616</span><br><span class="line">rss 31904 allocated 14860 retained 5508 mapped 27260 &lt;== rss grow slower</span><br><span class="line">rss 33952 allocated 15500 retained 4864 mapped 27904 &lt;== rss grow faster</span><br></pre></td></tr></table></figure></li>
+</ul>
+<p>Jemalloc 和 RSS 差别比较大</p>
+<ul>
+<li>Mapped 的内存不一定总是被分配到物理内存中，所以 <code>mapped</code>/<code>allocated</code> &gt; RSS 是可能的。</li>
+<li>Jemalloc 不一定每一次都从系统 mmap 出来我们所要 malloc 的内存，它会一次性向系统请求一个 chunk，然后每次从这个 chunk 中分配一段返回给 malloc 调用。具体可以见<a href="/2025/01/03/jemalloc-impl/">jemalloc 的实现</a>。因此，RSS/<code>mapped</code> &gt; <code>allocated</code> 是可能的。</li>
+</ul>
+<p>The result of ebpf and RSS are close to the real payload. ebpf may show a bit more allocations, it may because that:</p>
+<ul>
+<li>The allocation points to an allocated memory by jemalloc.</li>
+<li>Jemalloc only allocated the memory by <code>mmap</code>, and never access it, so the system may lazily allocate the memory, until a PAGE FAULT comes in.</li>
+<li>In Linux, if we want a immediate memory allocation on physical RAM, we need to call <code>mmap</code> with the flag <code>MAP_POPULATE</code>. Other ways such as immediate touch after allocation, or calling mlock can also be considered.</li>
+</ul>
+<h3 id="进一步实验"><a href="#进一步实验" class="headerlink" title="进一步实验"></a>进一步实验</h3><p>为了更精确的实验，就不能用 TiFlash 了，而是应该精确地控制内存分配，所以设计了如下的实验</p>
+<p>编译 <a href="https://github.com/CalvinNeo/jemalloc/tree/debug" target="_blank" rel="noopener">https://github.com/CalvinNeo/jemalloc/tree/debug</a> 中的 test.cpp 得到 test2。它会尝试分 5 次，每次分配 512 KiB</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">nohup ./test2  &gt; b.log 2&gt;&amp;1 &amp;</span><br><span class="line">sudo python /ebpf-heap-profile/memleak.py 5 1 --pid `ps aux | grep test2 | grep -v grep | awk &apos;&#123;print $2&#125;&apos;` --obj /jemalloc/test2 &gt; mleak.txt</span><br><span class="line">kill `ps aux | grep test2 | grep -v grep | awk &apos;&#123;print $2&#125;&apos;`</span><br></pre></td></tr></table></figure>
+
+<p>介绍下这个程序的输出：</p>
+<ul>
+<li>RSS：从 /proc/self/status 中读到的 VmRSS</li>
+<li>stats.allocated<br>  应用程序实际请求的内存，不包括 jemalloc 内部的碎片，也不包含已经被调用 <code>free</code>，但是还被 jemalloc 归还给 OS 的内存。</li>
+<li>stats.mapped<br>  jemalloc 通过 mmap 从 OS 映射的虚拟地址空间总量。</li>
+<li>stats.retained<br>  jemalloc 已经从 OS mmap 过来，但当前没有被任何 arena 使用，只是“留着以后可能再用”的内存。</li>
+</ul>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">stats.mapped</span><br><span class="line">└── jemalloc 管理的所有虚拟内存</span><br><span class="line">    ├── stats.allocated      ← 应用正在用</span><br><span class="line">    ├── arena 内部空闲内存</span><br><span class="line">    │   ├── dirty</span><br><span class="line">    │   └── muzzy</span><br><span class="line">    └── stats.retained       ← jemalloc 暂存、未分配</span><br></pre></td></tr></table></figure>
+
+<p>RSS 如下 </p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">RSS 2560 KiB, allocated 3372 - 108 = 3264 KiB, mapped 15700 - 12408 = 3292 KiB</span><br><span class="line">rss 19292 allocated 108 retained 1928 mapped 12408, (19292, 108, 1928, 12408)</span><br><span class="line"></span><br><span class="line">rss 19292 allocated 806 retained 1220 mapped 13116, (0, 698, 18014398509481276, 708)</span><br><span class="line">rss 19292 allocated 1448 retained 572 mapped 13764, (0, 641, 18014398509481336, 648)</span><br><span class="line">rss 21852 allocated 2088 retained 2488 mapped 14408, (2560, 640, 1916, 644)</span><br><span class="line">rss 21852 allocated 2728 retained 1844 mapped 15052, (0, 640, 18014398509481340, 644)</span><br><span class="line">rss 21852 allocated 3372 retained 1196 mapped 15700, (0, 644, 18014398509481336, 648)</span><br><span class="line"></span><br><span class="line">rss 21852 allocated 4012 retained 3624 mapped 16344, (0, 640, 2428, 644)</span><br><span class="line">rss 21852 allocated 4652 retained 2980 mapped 16988, (0, 640, 18014398509481340, 644)</span><br></pre></td></tr></table></figure>
+
+<p>从上可以总结得到 </p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">3372 - 108 = 3264 KiB, mapped 15700 - 12408 = 3292 KiB</span><br></pre></td></tr></table></figure>
+
+<p>而 memleak 的输出如下，其中 <code>===============*********===============</code> 向上的是 combined，向下的是 outstanding。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line">Attaching to pid 37627, Ctrl+C to quit.</span><br><span class="line">[13:38:02] Top 99 stacks with outstanding allocations:</span><br><span class="line">        64 bytes in 1 allocations from stack</span><br><span class="line">                operator new(unsigned long)+0x9 [test2]</span><br><span class="line">                ...</span><br><span class="line">                std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;*&amp;&amp;)+0x2e [test2]</span><br><span class="line">                keep_allocate()+0x6c [test2]</span><br><span class="line">                main+0x9 [test2]</span><br><span class="line">                __libc_start_call_main+0x80 [libc.so.6]</span><br><span class="line">        160 bytes in 5 allocations from stack</span><br><span class="line">                operator new(unsigned long)+0x9 [test2]</span><br><span class="line">                main+0x9 [test2]</span><br><span class="line">                __libc_start_call_main+0x80 [libc.so.6]</span><br><span class="line">        2621445 bytes in 5 allocations from stack</span><br><span class="line">                operator new(unsigned long)+0x9 [test2]</span><br><span class="line">===============*********===============</span><br><span class="line">[13:38:02] Top 99/11 stacks with outstanding allocations:</span><br><span class="line">        64 bytes in 1 allocations from stack</span><br><span class="line">                0x0000000000472949        operator new(unsigned long)+0x9 [test2]</span><br><span class="line">                ...</span><br><span class="line">                0x0000000000403ffc        keep_allocate()+0x6c [test2]</span><br><span class="line">                0x0000000000404081        main+0x9 [test2]</span><br><span class="line">                0x00007f210c029590        __libc_start_call_main+0x80 [libc.so.6]</span><br><span class="line">        160 bytes in 5 allocations from stack</span><br><span class="line">                0x0000000000472949        operator new(unsigned long)+0x9 [test2]</span><br><span class="line">                0x0000000000404081        main+0x9 [test2]</span><br><span class="line">                0x00007f210c029590        __libc_start_call_main+0x80 [libc.so.6]</span><br><span class="line">        2621445 bytes in 5 allocations from stack</span><br><span class="line">                0x0000000000472949        operator new(unsigned long)+0x9 [test2]</span><br></pre></td></tr></table></figure>
+
+<h1 id="memleak-简介"><a href="#memleak-简介" class="headerlink" title="memleak 简介"></a>memleak 简介</h1><h2 id="blazesym"><a href="#blazesym" class="headerlink" title="blazesym"></a>blazesym</h2><p>It uses blazesym to parse the symbols:</p>
+<ul>
+<li>If not compiled with <code>-g</code>, can’t get the line number</li>
+<li>If stripped, can only have addresses</li>
+</ul>
+<h2 id="stack-id"><a href="#stack-id" class="headerlink" title="stack_id"></a>stack_id</h2><p>Memleak uses stack_id to track different call stacks.</p>
+<ol>
+<li>Nature and Storage Mechanism</li>
+</ol>
+<ul>
+<li>stack_id is an integer assigned by the kernel through interfaces like <code>bpf_get_stackid()</code> from a <code>BPF_MAP_TYPE_STACK_TRACE</code>-type map.</li>
+<li>This map uses the hash value of the call stack as a key, stores the compressed stack information, and returns a unique ID.</li>
+<li>The same call stack pattern (i.e., an identical sequence of instruction addresses at each level) always receives the same <code>stack_id</code>.</li>
+</ul>
+<ol start="2">
+<li>Core Role</li>
+</ol>
+<ul>
+<li>Avoids repeatedly transmitting complete call stack data by replacing it with a lightweight ID.</li>
+<li>Enables efficient indexing and correlation of stack traces in performance analysis or debugging scenarios.</li>
+</ul>
+<ol start="3">
+<li>Lifecycle</li>
+</ol>
+<ul>
+<li>Created in BPF maps and persists as long as the BPF program is running.</li>
+<li>May be automatically freed when the map is destroyed or manually deleted.</li>
+</ul>
+<ol start="4">
+<li>Usage Constraints</li>
+</ol>
+<ul>
+<li><p>The validity of a <code>stack_id</code> is context-dependent, which means it is meaningful only within the same BPF map.<br>For example,</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">BPF_STACK_TRACE(stack_traces, 10240);</span><br></pre></td></tr></table></figure></li>
+<li><p>User-space tools typically resolve these IDs back to symbolic stack traces using additional metadata (e.g., /proc/kallsyms or debug symbols).</p>
+</li>
+</ul>
+<h2 id="环境依赖"><a href="#环境依赖" class="headerlink" title="环境依赖"></a>环境依赖</h2><ul>
+<li><p>The kernel has to be compiled with the support for bpf.</p>
+  <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">CONFIG_BPF=y</span><br><span class="line">CONFIG_BPF_SYSCALL=y</span><br><span class="line">CONFIG_BPF_JIT=y</span><br><span class="line">CONFIG_HAVE_EBPF_JIT=y</span><br><span class="line">CONFIG_BPF_EVENTS=y</span><br></pre></td></tr></table></figure></li>
+<li><p>The docker for TiFlash has to be bootstrapped with the privileges required by bpf.</p>
+  <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">securityContext:</span><br><span class="line">  privileged: true</span><br><span class="line">  capabilities:</span><br><span class="line">    add:</span><br><span class="line">      - SYS_ADMIN</span><br><span class="line">      - SYS_RESOURCE</span><br><span class="line">      - SYS_PTRACE</span><br><span class="line">      - NET_ADMIN</span><br><span class="line">      - SYSLOG</span><br><span class="line">      - IPC_LOCK</span><br><span class="line">  seccompProfile:</span><br><span class="line">    type: Unconfined</span><br></pre></td></tr></table></figure></li>
+<li><p>We need to refer to the configs in <code>/boot</code>.</p>
+</li>
+<li><p>The kernel need <code>kernel-devel</code> installed, with the correct version.</p>
+  <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sh-5.1# yum install kernel-devel</span><br></pre></td></tr></table></figure></li>
+</ul>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/内存管理/" rel="tag"># 内存管理</a>
+          
+            <a href="/tags/Linux/" rel="tag"># Linux</a>
+          
+            <a href="/tags/profiling/" rel="tag"># profiling</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2024/06/17/ugears-rockr-etc/" rel="next" title="系列拼装模型攻略">
+                <i class="fa fa-chevron-left"></i> 系列拼装模型攻略
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2024/08/23/monitor-alloc-in-C++/" rel="prev" title="C++ 内存监控方案">
+                C++ 内存监控方案 <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">262</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">154</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#memleak-的-Demo"><span class="nav-number">1.</span> <span class="nav-text">memleak 的 Demo</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#TiFlash-的大事务测试"><span class="nav-number">1.1.</span> <span class="nav-text">TiFlash 的大事务测试</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#combined-mode-和-outstanding-mode"><span class="nav-number">1.1.1.</span> <span class="nav-text">combined mode 和 outstanding mode</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#read-carllerche-bytes-的奇怪函数"><span class="nav-number">1.1.2.</span> <span class="nav-text">read_carllerche_bytes 的奇怪函数</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#memleak、jemalloc-和-RSS-的比较"><span class="nav-number">1.2.</span> <span class="nav-text">memleak、jemalloc 和 RSS 的比较</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#进一步实验"><span class="nav-number">1.2.1.</span> <span class="nav-text">进一步实验</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#memleak-简介"><span class="nav-number">2.</span> <span class="nav-text">memleak 简介</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#blazesym"><span class="nav-number">2.1.</span> <span class="nav-text">blazesym</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#stack-id"><span class="nav-number">2.2.</span> <span class="nav-text">stack_id</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#环境依赖"><span class="nav-number">2.3.</span> <span class="nav-text">环境依赖</span></a></li></ol></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2024/08/23/use-ebpf-to-monitor-memory/';
+          this.page.identifier = '2024/08/23/use-ebpf-to-monitor-memory/';
+          this.page.title = '使用 eBPF 监控内存分配';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>

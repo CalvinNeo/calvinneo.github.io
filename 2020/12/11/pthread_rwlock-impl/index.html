@@ -1,0 +1,1325 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="多线程,Linux,pthread," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="pthread_rwlock系列函数是pthread库的读写锁函数。随着版本的不同，它的实现也不同。本篇的组织是：  前置知识 GCC的扩展内联汇编 Futex   2.17和2.30两个版本的lowlevellock的实现 2.17和2.30两个版本的pthread_rwlock的实现 我们的结论是： 旧版GLIBC使用lowlevellock实现pthread_rwlock； 新版GLIBC使">
+<meta name="keywords" content="多线程,Linux,pthread">
+<meta property="og:type" content="article">
+<meta property="og:title" content="pthread_rwlock库的实现">
+<meta property="og:url" content="http://www.calvinneo.com/2020/12/11/pthread_rwlock-impl/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="pthread_rwlock系列函数是pthread库的读写锁函数。随着版本的不同，它的实现也不同。本篇的组织是：  前置知识 GCC的扩展内联汇编 Futex   2.17和2.30两个版本的lowlevellock的实现 2.17和2.30两个版本的pthread_rwlock的实现 我们的结论是： 旧版GLIBC使用lowlevellock实现pthread_rwlock； 新版GLIBC使">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2023-05-21T07:47:50.195Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="pthread_rwlock库的实现">
+<meta name="twitter:description" content="pthread_rwlock系列函数是pthread库的读写锁函数。随着版本的不同，它的实现也不同。本篇的组织是：  前置知识 GCC的扩展内联汇编 Futex   2.17和2.30两个版本的lowlevellock的实现 2.17和2.30两个版本的pthread_rwlock的实现 我们的结论是： 旧版GLIBC使用lowlevellock实现pthread_rwlock； 新版GLIBC使">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2020/12/11/pthread_rwlock-impl/"/>
+
+
+
+
+
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5487541356791902"
+     crossorigin="anonymous"></script>
+  <title>pthread_rwlock库的实现 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2020/12/11/pthread_rwlock-impl/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                pthread_rwlock库的实现
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2020-12-11T01:20:13+08:00">
+                2020-12-11
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>pthread_rwlock系列函数是pthread库的读写锁函数。随着版本的不同，它的实现也不同。<br>本篇的组织是：</p>
+<ol>
+<li>前置知识<ol>
+<li>GCC的扩展内联汇编</li>
+<li>Futex</li>
+</ol>
+</li>
+<li>2.17和2.30两个版本的lowlevellock的实现</li>
+<li>2.17和2.30两个版本的pthread_rwlock的实现<br> 我们的结论是：<br> 旧版GLIBC使用lowlevellock实现pthread_rwlock；<br> 新版GLIBC使用原子操作实现pthread_rwlock。<br> 因此具有不同的ABI</li>
+</ol>
+<a id="more"></a>
+
+
+<h1 id="扩展形式的GCC汇编介绍"><a href="#扩展形式的GCC汇编介绍" class="headerlink" title="扩展形式的GCC汇编介绍"></a>扩展形式的GCC汇编介绍</h1><p>在扩展形式的GCC汇编中，可以访问C语言中定义的变量，或者跳转到C语言定义的标签处。此外，GCC扩展汇编中可以用<code>:</code>去delimit各个operand parameter。<br>对于要访问的寄存器，并不一定要要显式指明，也可以留给GCC自己去选择，这可能让GCC更好去优化代码。<br><a href="https://gcc.gnu.org/onlinedocs/gcc/Extended-Asm.html" target="_blank" rel="noopener">GCC扩展内联汇编</a>格式如下:</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">asm asm-qualifiers ( AssemblerTemplate </span><br><span class="line">                      : OutputOperands</span><br><span class="line">                      : InputOperands</span><br><span class="line">                      : Clobbers</span><br><span class="line">                      : GotoLabels)</span><br></pre></td></tr></table></figure>
+
+<p>OutputOperands、InputOperands等列表里面的项目会从0开始标号，并且可以使用<code>%0</code>、<code>%1</code>的方法去表示，例如对下面的代码而言，<code>%0</code>是<code>old</code>，<code>%1</code>是<code>*Base</code>，<code>%2</code>是<code>Offset</code>。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">bool</span> old;</span><br><span class="line"></span><br><span class="line">__asm__ (<span class="string">"btsl %2,%1\n\t"</span> <span class="comment">// Turn on zero-based bit #Offset in Base.</span></span><br><span class="line">         <span class="string">"sbb %0,%0"</span>      <span class="comment">// Use the CF to calculate old.</span></span><br><span class="line">   : <span class="string">"=r"</span> (old), <span class="string">"+rm"</span> (*Base)</span><br><span class="line">   : <span class="string">"Ir"</span> (Offset)</span><br><span class="line">   : <span class="string">"cc"</span>);</span><br><span class="line"></span><br><span class="line"><span class="keyword">return</span> old;</span><br></pre></td></tr></table></figure>
+
+<p>我们看看这个语法中的几个组成部分：</p>
+<ol>
+<li>AssemblerTemplate<br> 是ASM代码的模板。</li>
+<li><a href="https://gcc.gnu.org/onlinedocs/gcc/Extended-Asm.html#OutputOperands" target="_blank" rel="noopener">OutputOperands</a><br> 一个逗号分隔的列表，表示所有被这段代码修改的变量。<br> 其中<code>+rm</code>、<code>=r</code>等表示<a href="https://gcc.gnu.org/onlinedocs/gcc/Constraints.html" target="_blank" rel="noopener">Constraints</a>，将在稍后介绍。<br> 在括号中的应该是一个C语言左值。</li>
+<li>InputOperands<br> 表示所有被这段代码访问的表达式。</li>
+<li>Clobbers<br> 除了OutputOperands之外，还被这段代码修改的内容，例如<ol>
+<li><code>cc</code>：eflags寄存器</li>
+<li><code>memory</code>：内存<br> 例如我们常见的<code>asm volatile(&quot;mfence&quot; ::: &quot;memory&quot;)</code>用法。</li>
+</ol>
+</li>
+<li>GotoLabels<br> 这段代码可能跳转到的C语言的标签。</li>
+</ol>
+<h2 id="Constraints"><a href="#Constraints" class="headerlink" title="Constraints"></a>Constraints</h2><h3 id="Simple-Constraints"><a href="#Simple-Constraints" class="headerlink" title="Simple Constraints"></a>Simple Constraints</h3><p><a href="https://gcc.gnu.org/onlinedocs/gcc/Simple-Constraints.html#Simple-Constraints" target="_blank" rel="noopener">Simple Constraints</a>都是字母或数字，表示允许其中的某一种类的操作。</p>
+<ol>
+<li><code>r</code>表示允许寄存器操作；<code>m</code>表示允许内存操作。这两个是很泛化的内存和寄存器操作。</li>
+<li><code>a</code>表示地址寄存器，<code>f</code>表示浮点寄存器，<code>d</code>表示数据寄存器。这些都对特定的处理器适用。</li>
+<li>数字表示matching constraint</li>
+</ol>
+<h3 id="Modifiers"><a href="#Modifiers" class="headerlink" title="Modifiers"></a>Modifiers</h3><p><a href="https://gcc.gnu.org/onlinedocs/gcc/Modifiers.html#Modifiers" target="_blank" rel="noopener">Modifiers</a>用来描述operands的读写性。</p>
+<ol>
+<li><code>+</code><br> 表示这个值在操作中会被<strong>读写</strong>。</li>
+<li><code>=</code><br> 表示这个值只会被写。</li>
+<li><code>&amp;</code></li>
+<li><code>%</code></li>
+</ol>
+<h1 id="Futex介绍"><a href="#Futex介绍" class="headerlink" title="Futex介绍"></a>Futex介绍</h1><p>Futex是一个<a href="https://man7.org/linux/man-pages/man2/futex.2.html" target="_blank" rel="noopener">系统调用</a>。在使用Futex时，大部分的工作是在用户态完成的，只有当程序很有可能阻塞较长时间时，才会真的去使用这个系统调用。<br>Futex值的加载、Futex值和传入的expected value的比较以及实际的阻塞都是原子的。并且，不同线程对同一个Futex值的并发操作是Total order的。</p>
+<p>Futex调用如下所示</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">long</span> <span class="title">futex</span><span class="params">(<span class="keyword">uint32_t</span> *uaddr, <span class="keyword">int</span> futex_op, <span class="keyword">uint32_t</span> val,</span></span></span><br><span class="line"><span class="function"><span class="params">         <span class="keyword">const</span> struct timespec *timeout,   <span class="comment">/* or: uint32_t val2 */</span></span></span></span><br><span class="line"><span class="function"><span class="params">         <span class="keyword">uint32_t</span> *uaddr2, <span class="keyword">uint32_t</span> val3)</span></span>;</span><br></pre></td></tr></table></figure>
+
+<p>它的实现类似下面</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">int</span></span><br><span class="line">futex(<span class="keyword">uint32_t</span> *uaddr, <span class="keyword">int</span> futex_op, <span class="keyword">uint32_t</span> val,</span><br><span class="line">     <span class="keyword">const</span> struct timespec *timeout, <span class="keyword">uint32_t</span> *uaddr2, <span class="keyword">uint32_t</span> val3)</span><br><span class="line">&#123;</span><br><span class="line">   <span class="keyword">return</span> syscall(SYS_futex, uaddr, futex_op, val,</span><br><span class="line">                  timeout, uaddr2, val3);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>其中<code>uaddr</code>指向一个Futex值，它在32位或者64位系统上都是一个32位的值。<br><code>futex_op</code>包含两部分，要执行的操作(operation)，以及操作的option。<br>option包含下面几个常量：</p>
+<ol>
+<li><p><code>FUTEX_PRIVATE_FLAG</code>：128<br> 【Since 2.6.22】<br> 这个option表示这个Futex是否是被跨进程共享的。指定这个flag能够允许内核做一系列优化。<br> 对于所有要执行的操作，提供了带<code>_PRIVATE</code>版本后缀的宏，其作用相当于or上了这个<code>FUTEX_PRIVATE_FLAG</code>。<br> 因为这个宏在22版本之后才有，所以我们看到nptl的一些实现上会使用<code>__ASSUME_PRIVATE_FUTEX</code>判定Linux是否支持Private Futex这个功能。我们可以认为在22版本之后的Linux下<a href="https://patches-gcc.linaro.org/patch/4760/#7887" target="_blank" rel="noopener">这个宏始终是1</a>。</p>
+ <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// kernel-features.h</span></span><br><span class="line"><span class="comment">/* Support for private futexes was added in 2.6.22.  */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">if</span> __LINUX_KERNEL_VERSION &gt;= 0x020616</span></span><br><span class="line"><span class="meta"># <span class="meta-keyword">define</span> __ASSUME_PRIVATE_FUTEX 1</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br></pre></td></tr></table></figure></li>
+<li><p><code>FUTEX_CLOCK_REALTIME</code>：256<br> 【Since 2.6.28】<br> 这个option指定timeout的计算方式</p>
+</li>
+</ol>
+<p>操作部分包含下面几个常量：</p>
+<ol>
+<li><code>FUTEX_WAIT</code>：0<br> 这个操作检查<code>uaddr</code>指向的值是否等于<code>val</code>。<br> 如果是，那么就会睡在这个Futex上面，直到另一个<code>FUTEXT_WAKE</code>被调用。这个读取、比较和开始睡眠的过程是原子的。<br> 如果不是，那么就会立即返回<code>EAGAIN</code>。<br> 之所以要在这个操作里面再比较一次<code>val</code>，而不是直接加锁，其原因是为了防止丢失wake up事件。例如，如果在本线程准备阻塞之后，另一个线程修改了Futex的值，并且遵循了下面的时序：<ol>
+<li>对方线程先修改Futex值</li>
+<li>对方线程执行<code>FUTEX_WAKE</code></li>
+<li>本线程执行<code>FUTEX_WAIT</code><br>那么在执行<code>FUTEX_WAIT</code>时同步检查<code>val</code>的方案就能发现Futex值变化了，并且不进入睡眠。</li>
+</ol>
+</li>
+<li><code>FUTEX_WAKE</code>：1<br> 这个操作唤醒最多<code>val</code>个睡在这个Futex上面的线程。指定<code>INT_MAX</code>表示唤起所有线程。</li>
+<li><code>FUTEX_FD</code>：2<br> 【已被移除】<br> 表示为当前Futex创建一个fd，当这个Futex发生<code>FUTEX_WAKE</code>调用时，这个fd被select、poll和epoll等可读。</li>
+<li><code>FUTEX_REQUEUE</code>：3<br> 是<code>FUTEX_CMP_REQUEUE</code>的不带check的简化版。</li>
+<li><code>FUTEX_CMP_REQUEUE</code>：4<br> TODO</li>
+<li><code>FUTEX_WAKE_OP</code>：5<br> 这个操作用来支持<strong>在用户态</strong>中对多个Futex同时操作的情形。例如<code>pthread_cond_signal</code>的实现中需要用到两个Futex，一个用来实现Mutex，一个用来管理和CV相连的Wait queue。通过这个操作可以避免一些contention或者上下文切换。<br> 这个op的主要过程是：<ol>
+<li>保存uaddr2的旧值到oldval，并且对uaddr2执行操作。这个操作是原子的。</li>
+<li>唤醒uaddr上的val个线程。</li>
+<li>如果oldval的值满足一定条件，则唤起val2个线程。</li>
+</ol>
+</li>
+<li><code>FUTEX_LOCK_PI</code>：6<br> 这里的PI表示”priority inheritance”，用来处理所谓的<a href="/2017/12/28/Concurrency-Programming-Compare/">优先级倒置</a>问题。<br> 它的解决方案是，当一个高优先级的任务被一个低优先级任务持有的锁阻塞时，会暂时提高这个低优先级任务的优先级为高优先级，这样它就不会被对方抢占。<br> 注意，这个”priority inheritance”的实现也必须是可传递的。也就是当这个低优先级任务在等待另一个中等优先级任务的锁的时候，所有的任务都要被提升为高优先级。</li>
+<li><code>FUTEX_UNLOCK_PI</code>：7</li>
+<li><code>FUTEX_TRYLOCK_PI</code>：8</li>
+<li><code>FUTEX_WAIT_BITSET</code>：9</li>
+<li><code>FUTEX_WAKE_BITSET</code>：10</li>
+<li><code>FUTEX_WAIT_REQUEUE_PI</code>：11</li>
+<li><code>FUTEX_CMP_REQUEUE_PI</code>：12</li>
+</ol>
+<p>下面我们讨论futex调用的返回值。首先如果发生错误，就按照通常规矩，返回-1，并且设置errno。对于成功的情况，需要根据op讨论：</p>
+<ol>
+<li><code>FUTEX_WAIT</code><br> 返回0表示caller被唤醒了。需要注意的是，这个0有可能是spurious wake-up，所以在这之后，仍然需要根据Futex值的具体值去判断是否继续block。我认为这也是为什么<code>__lll_lock_wait_private</code>的实现中有一个while循环的原因。</li>
+<li><code>FUTEX_WAKE</code><br> 返回唤醒了多少个waiter。</li>
+</ol>
+<h1 id="lll的GLIBC2-17版本"><a href="#lll的GLIBC2-17版本" class="headerlink" title="lll的GLIBC2.17版本"></a>lll的GLIBC2.17版本</h1><p>在这个版本中，lll的实现是FUTEX。<br>我们只看PRIVATE的部分</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// nptl/sysdeps/unix/sysv/linux/x86_64</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> lll_lock(futex, private) \</span></span><br><span class="line">  (<span class="keyword">void</span>)                      \</span><br><span class="line">    (&#123; <span class="keyword">int</span> ignore1, ignore2, ignore3;               \</span><br><span class="line">       <span class="keyword">if</span> (__builtin_constant_p (<span class="keyword">private</span>) &amp;&amp; (<span class="keyword">private</span>) == LLL_PRIVATE)        \</span><br><span class="line">   __asm __volatile (__lll_lock_asm_start             \</span><br><span class="line">         <span class="string">".subsection 1\n\t"</span>              \</span><br><span class="line">         <span class="string">".type _L_lock_%=, @function\n"</span>          \</span><br><span class="line">         <span class="string">"_L_lock_%=:\n"</span>              \</span><br><span class="line">         <span class="string">"1:\tlea %2, %%"</span> RDI_LP <span class="string">"\n"</span>           \</span><br><span class="line">         <span class="string">"2:\tsub $128, %%"</span> RSP_LP <span class="string">"\n"</span>         \</span><br><span class="line">         <span class="string">"3:\tcallq __lll_lock_wait_private\n"</span>        \</span><br><span class="line">         <span class="string">"4:\tadd $128, %%"</span> RSP_LP <span class="string">"\n"</span>         \</span><br><span class="line">         <span class="string">"5:\tjmp 24f\n"</span>              \</span><br><span class="line">         <span class="string">"6:\t.size _L_lock_%=, 6b-1b\n\t"</span>          \</span><br><span class="line">         <span class="string">".previous\n"</span>              \</span><br><span class="line">         LLL_STUB_UNWIND_INFO_5           \</span><br><span class="line">         <span class="string">"24:"</span>                \</span><br><span class="line">         : <span class="string">"=S"</span> (ignore1), <span class="string">"=&amp;D"</span> (ignore2), <span class="string">"=m"</span> (futex),   \</span><br><span class="line">           <span class="string">"=a"</span> (ignore3)             \</span><br><span class="line">         : <span class="string">"0"</span> (<span class="number">1</span>), <span class="string">"m"</span> (futex), <span class="string">"3"</span> (<span class="number">0</span>)          \</span><br><span class="line">         : <span class="string">"cx"</span>, <span class="string">"r11"</span>, <span class="string">"cc"</span>, <span class="string">"memory"</span>);          \</span><br><span class="line">       <span class="keyword">else</span>                     \</span><br><span class="line">...</span><br><span class="line">    &#125;)</span><br></pre></td></tr></table></figure>
+
+<p>查看<code>__lll_lock_wait_private</code>函数的调用。下面两个<code>lll_futex_wait</code>的含义是如果<code>futex</code>的值是2，那么就会进行等待。<br>那么为什么要写成两个呢？如果我们已经观察到<code>futex</code>是2，即已经被加锁了，那么我们就直接去wait了，否则我们可以尝试加锁。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">void</span></span><br><span class="line">__lll_lock_wait_private (<span class="keyword">int</span> *futex)</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">if</span> (*futex == <span class="number">2</span>)</span><br><span class="line">    lll_futex_wait (futex, <span class="number">2</span>, LLL_PRIVATE);</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+
+<p>但是加锁的过程也未必成功，可能有两个线程同时过了上面的检验，因此我们还需要进行一次判断。加锁操作是由<code>atomic_exchange_acq</code>调用，它会尝试将futex设置为2，并且返回原值。在while循环中，我们会判断返回的原值是否为0，如果不是0，那么说明这个锁已经被另一个线程加了，所以我们直接wait到这个锁被释放，然后在重新while一次尝试加锁。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">...</span><br><span class="line">  <span class="keyword">while</span> (atomic_exchange_acq (futex, <span class="number">2</span>) != <span class="number">0</span>)</span><br><span class="line">    lll_futex_wait (futex, <span class="number">2</span>, LLL_PRIVATE);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="辅助函数解释"><a href="#辅助函数解释" class="headerlink" title="辅助函数解释"></a>辅助函数解释</h2><h3 id="lll-futex-wait"><a href="#lll-futex-wait" class="headerlink" title="lll_futex_wait"></a>lll_futex_wait</h3><p>查看<code>lll_futex_wait</code>函数</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> lll_futex_wait(futex, val, private) \</span></span><br><span class="line">  lll_futex_timed_wait(futex, val, <span class="literal">NULL</span>, <span class="keyword">private</span>)</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> lll_futex_timed_wait(futex, val, timeout, private) \</span></span><br><span class="line">  (&#123;                        \</span><br><span class="line">    <span class="keyword">register</span> <span class="keyword">const</span> struct timespec *__to __asm (<span class="string">"r10"</span>) = timeout;       \</span><br><span class="line">    <span class="keyword">int</span> __status;                   \</span><br><span class="line">    <span class="keyword">register</span> __typeof (val) _val __asm (<span class="string">"edx"</span>) = (val);           \</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+
+<p>解释一下：</p>
+<ol>
+<li><p><code>__status</code>这个变量在一个地址寄存器上，是这个汇编段的Output。</p>
+</li>
+<li><p><code>SYS_futex</code> TODO</p>
+</li>
+<li><p><code>futex</code></p>
+</li>
+<li><p><code>__lll_private_flag</code>根据传入的两个参数决定是否产生private的futex。需要注意libc和libdl中的所有的futex都应该是private的。<br> 检查这个函数的实现，有一句很神奇的代码。这个代码的结果是，如果<code>private</code>设置了<code>FUTEX_PRIVATE_FLAG</code>位，那么就将这个位清空。要解释清楚这个问题，需要结合后面rwlock的初始化过程来看。</p>
+ <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#  <span class="meta-keyword">define</span> __lll_private_flag(fl, private) \</span></span><br><span class="line">  (((fl) | FUTEX_PRIVATE_FLAG) ^ (<span class="keyword">private</span>))</span><br></pre></td></tr></table></figure></li>
+<li><p><code>cc</code>表示eflags寄存器也会被修改。</p>
+</li>
+</ol>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">...</span><br><span class="line">    __asm __volatile (<span class="string">"syscall"</span>                 \</span><br><span class="line">          : <span class="string">"=a"</span> (__status)               \</span><br><span class="line">          : <span class="string">"0"</span> (SYS_futex), <span class="string">"D"</span> (futex),           \</span><br><span class="line">      <span class="string">"S"</span> (__lll_private_flag (FUTEX_WAIT, <span class="keyword">private</span>)),       \</span><br><span class="line">      <span class="string">"d"</span> (_val), <span class="string">"r"</span> (__to)              \</span><br><span class="line">          : <span class="string">"memory"</span>, <span class="string">"cc"</span>, <span class="string">"r11"</span>, <span class="string">"cx"</span>);           \</span><br><span class="line">    __status;                     \</span><br><span class="line">  &#125;)</span><br></pre></td></tr></table></figure>
+
+<h3 id="atomic-exchange-acq"><a href="#atomic-exchange-acq" class="headerlink" title="atomic_exchange_acq"></a>atomic_exchange_acq</h3><h1 id="lll的GLIBC2-30版本"><a href="#lll的GLIBC2-30版本" class="headerlink" title="lll的GLIBC2.30版本"></a>lll的GLIBC2.30版本</h1><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// lowlevellock.h</span></span><br><span class="line"><span class="comment">/* This is an expression rather than a statement even though its value is</span></span><br><span class="line"><span class="comment">   void, so that it can be used in a comma expression or as an expression</span></span><br><span class="line"><span class="comment">   that's cast to void.  */</span></span><br><span class="line"><span class="comment">/* The inner conditional compiles to a call to __lll_lock_wait_private if</span></span><br><span class="line"><span class="comment">   private is known at compile time to be LLL_PRIVATE, and to a call to</span></span><br><span class="line"><span class="comment">   __lll_lock_wait otherwise.  */</span></span><br><span class="line"><span class="comment">/* If FUTEX is 0 (not acquired), set to 1 (acquired with no waiters) and</span></span><br><span class="line"><span class="comment">   return.  Otherwise, ensure that it is &gt;1 (acquired, possibly with waiters)</span></span><br><span class="line"><span class="comment">   and then block until we acquire the lock, at which point FUTEX will still be</span></span><br><span class="line"><span class="comment">   &gt;1.  The lock is always acquired on return.  */</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> __lll_lock(futex, private)                                      \</span></span><br><span class="line">  ((<span class="keyword">void</span>)                                                               \</span><br><span class="line">   (&#123;                                                                   \</span><br><span class="line">     <span class="keyword">int</span> *__futex = (futex);                                            \</span><br><span class="line">     <span class="keyword">if</span> (__glibc_unlikely                                               \</span><br><span class="line">         (atomic_compare_and_exchange_bool_acq (__futex, <span class="number">1</span>, <span class="number">0</span>)))        \</span><br><span class="line">       &#123;                                                                \</span><br><span class="line">         <span class="keyword">if</span> (__builtin_constant_p (<span class="keyword">private</span>) &amp;&amp; (<span class="keyword">private</span>) == LLL_PRIVATE) \</span><br><span class="line">           __lll_lock_wait_private (__futex);                           \</span><br><span class="line">         <span class="keyword">else</span>                                                           \</span><br><span class="line">           __lll_lock_wait (__futex, <span class="keyword">private</span>);                          \</span><br><span class="line">       &#125;                                                                \</span><br><span class="line">   &#125;))</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> lll_lock(futex, private)  \</span></span><br><span class="line">  __lll_lock (&amp;(futex), <span class="keyword">private</span>)</span><br></pre></td></tr></table></figure>
+
+<h1 id="rwlock的GLIBC2-17实现"><a href="#rwlock的GLIBC2-17实现" class="headerlink" title="rwlock的GLIBC2.17实现"></a>rwlock的GLIBC2.17实现</h1><h2 id="INIT"><a href="#INIT" class="headerlink" title="INIT"></a>INIT</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// pthread_rwlock_init.c</span></span><br><span class="line"><span class="keyword">int</span></span><br><span class="line">__pthread_rwlock_init (rwlock, attr)</span><br><span class="line">     <span class="keyword">pthread_rwlock_t</span> *rwlock;</span><br><span class="line">     <span class="keyword">const</span> <span class="keyword">pthread_rwlockattr_t</span> *attr;</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">pthread_rwlockattr</span> *<span class="title">iattr</span>;</span></span><br><span class="line"></span><br><span class="line">  iattr = ((<span class="keyword">const</span> struct pthread_rwlockattr *) attr) ?: &amp;default_attr;</span><br><span class="line"></span><br><span class="line">  <span class="built_in">memset</span> (rwlock, <span class="string">'\0'</span>, <span class="keyword">sizeof</span> (*rwlock));</span><br><span class="line"></span><br><span class="line">  rwlock-&gt;__data.__flags</span><br><span class="line">    = iattr-&gt;lockkind == PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP;</span><br><span class="line">    </span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+
+<p><code>__ASSUME_PRIVATE_FUTEX</code>这个宏表示是否支持Private Futex，在2.6.22之前是不支持的，因此我们看到在对应分支没有使用<code>FUTEX_PRIVATE_FLAG</code>这个宏，而是借助了<code>THREAD_GETMEM</code>的实现。<br><code>FUTEX_PRIVATE_FLAG</code>的值表示这个Futex是否是Private的，在之前已经介绍过。</p>
+<p><code>__SHARED</code>这个字段我觉得有点奇怪了，我不是很明白为啥Futex用Private，而pthread用Shared，正好这两个值是相反的。源码在注释里面给了下面这个转换表，容易看出来在不支持<code>FUTEX_PRIVATE_FLAG</code>的时候就都是0。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">            |     pshared     |     result</span><br><span class="line">            | shared  private | shared  private |</span><br><span class="line">------------+-----------------+-----------------+</span><br><span class="line">!avail 0    |     0       0   |     0       0   |</span><br><span class="line"> avail 0x80 |  0x80       0   |     0    0x80   |</span><br></pre></td></tr></table></figure>
+
+<p>不管怎样吧，下面我们设置<code>_shared</code>的值，正好和Private相反。也就是如果我们希望我们的rwlock是Private的，那么我们就清空<code>FUTEX_PRIVATE_FLAG</code>位；如果我们希望它是Shared，那么就设置<code>FUTEX_PRIVATE_FLAG</code>。这样我们xor一下就能得到Private的实际值，这实际上对应了我们先前在<code>lll_futex_timed_wait</code>这个函数上的困惑。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">...</span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> __ASSUME_PRIVATE_FUTEX</span></span><br><span class="line">  rwlock-&gt;__data.__shared = (iattr-&gt;pshared == PTHREAD_PROCESS_PRIVATE</span><br><span class="line">                 ? <span class="number">0</span> : FUTEX_PRIVATE_FLAG);</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+
+<p>由于</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">...</span><br><span class="line"><span class="meta">#<span class="meta-keyword">else</span></span></span><br><span class="line">  rwlock-&gt;__data.__shared = (iattr-&gt;pshared == PTHREAD_PROCESS_PRIVATE</span><br><span class="line">                 ? <span class="number">0</span></span><br><span class="line">                 : THREAD_GETMEM (THREAD_SELF,</span><br><span class="line">                          header.private_futex));</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"></span><br><span class="line">  <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line">strong_alias (__pthread_rwlock_init, pthread_rwlock_init)</span><br></pre></td></tr></table></figure>
+
+<h2 id="LOCK"><a href="#LOCK" class="headerlink" title="LOCK"></a>LOCK</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// pthread_rwlock_wrlock.c</span></span><br><span class="line"><span class="comment">/* Acquire write lock for RWLOCK.  */</span></span><br><span class="line"><span class="keyword">int</span></span><br><span class="line">__pthread_rwlock_wrlock (rwlock)</span><br><span class="line">     <span class="keyword">pthread_rwlock_t</span> *rwlock;</span><br><span class="line">&#123;</span><br><span class="line">  <span class="keyword">int</span> result = <span class="number">0</span>;</span><br></pre></td></tr></table></figure>
+
+<p>这个<code>LIBC_PROBE</code>定义在<code>include/stap-probe.h</code>里面，实际上是一个systemtap静态检查点的功能。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">...</span><br><span class="line">  LIBC_PROBE (wrlock_entry, <span class="number">1</span>, rwlock);</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+
+<p>下面调用<code>lll_lock</code>去加lowlevellock锁</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br></pre></td><td class="code"><pre><span class="line">...</span><br><span class="line">  <span class="comment">/* Make sure we are alone.  */</span></span><br><span class="line">  lll_lock (rwlock-&gt;__data.__lock, rwlock-&gt;__data.__shared);</span><br><span class="line"></span><br><span class="line">  <span class="keyword">while</span> (<span class="number">1</span>)</span><br><span class="line">    &#123;</span><br><span class="line">      <span class="comment">/* Get the rwlock if there is no writer and no reader.  */</span></span><br><span class="line">      <span class="keyword">if</span> (rwlock-&gt;__data.__writer == <span class="number">0</span> &amp;&amp; rwlock-&gt;__data.__nr_readers == <span class="number">0</span>)</span><br><span class="line">    &#123;</span><br><span class="line">      <span class="comment">/* Mark self as writer.  */</span></span><br><span class="line">      rwlock-&gt;__data.__writer = THREAD_GETMEM (THREAD_SELF, tid);</span><br><span class="line"></span><br><span class="line">      LIBC_PROBE (wrlock_acquire_write, <span class="number">1</span>, rwlock);</span><br><span class="line">      <span class="keyword">break</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">      <span class="comment">/* Make sure we are not holding the rwlock as a writer.  This is</span></span><br><span class="line"><span class="comment">     a deadlock situation we recognize and report.  */</span></span><br><span class="line">      <span class="keyword">if</span> (__builtin_expect (rwlock-&gt;__data.__writer</span><br><span class="line">                == THREAD_GETMEM (THREAD_SELF, tid), <span class="number">0</span>))</span><br><span class="line">    &#123;</span><br><span class="line">      result = EDEADLK;</span><br><span class="line">      <span class="keyword">break</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">      <span class="comment">/* Remember that we are a writer.  */</span></span><br><span class="line">      <span class="keyword">if</span> (++rwlock-&gt;__data.__nr_writers_queued == <span class="number">0</span>)</span><br><span class="line">    &#123;</span><br><span class="line">      <span class="comment">/* Overflow on number of queued writers.  */</span></span><br><span class="line">      --rwlock-&gt;__data.__nr_writers_queued;</span><br><span class="line">      result = EAGAIN;</span><br><span class="line">      <span class="keyword">break</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">      <span class="keyword">int</span> waitval = rwlock-&gt;__data.__writer_wakeup;</span><br><span class="line"></span><br><span class="line">      <span class="comment">/* Free the lock.  */</span></span><br><span class="line">      lll_unlock (rwlock-&gt;__data.__lock, rwlock-&gt;__data.__shared);</span><br><span class="line"></span><br><span class="line">      <span class="comment">/* Wait for the writer or reader(s) to finish.  */</span></span><br><span class="line">      lll_futex_wait (&amp;rwlock-&gt;__data.__writer_wakeup, waitval,</span><br><span class="line">              rwlock-&gt;__data.__shared);</span><br><span class="line"></span><br><span class="line">      <span class="comment">/* Get the lock.  */</span></span><br><span class="line">      lll_lock (rwlock-&gt;__data.__lock, rwlock-&gt;__data.__shared);</span><br><span class="line"></span><br><span class="line">      <span class="comment">/* To start over again, remove the thread from the writer list.  */</span></span><br><span class="line">      --rwlock-&gt;__data.__nr_writers_queued;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">  <span class="comment">/* We are done, free the lock.  */</span></span><br><span class="line">  lll_unlock (rwlock-&gt;__data.__lock, rwlock-&gt;__data.__shared);</span><br><span class="line"></span><br><span class="line">  <span class="keyword">return</span> result;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">weak_alias (__pthread_rwlock_wrlock, pthread_rwlock_wrlock)</span><br><span class="line">hidden_def (__pthread_rwlock_wrlock)</span><br></pre></td></tr></table></figure>
+
+<h2 id="辅助函数详解"><a href="#辅助函数详解" class="headerlink" title="辅助函数详解"></a>辅助函数详解</h2><h3 id="THREAD-GETMEM"><a href="#THREAD-GETMEM" class="headerlink" title="THREAD_GETMEM"></a>THREAD_GETMEM</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* Read member of the thread descriptor directly.  */</span></span><br><span class="line"><span class="meta"># <span class="meta-keyword">define</span> THREAD_GETMEM(descr, member) \</span></span><br><span class="line">  (&#123; __typeof (descr-&gt;member) __value;                \</span><br><span class="line">     <span class="keyword">if</span> (<span class="keyword">sizeof</span> (__value) == <span class="number">1</span>)                 \</span><br><span class="line">       <span class="keyword">asm</span> <span class="keyword">volatile</span> (<span class="string">"movb %%fs:%P2,%b0"</span>              \</span><br><span class="line">         : <span class="string">"=q"</span> (__value)               \</span><br><span class="line">         : <span class="string">"0"</span> (<span class="number">0</span>), <span class="string">"i"</span> (offsetof (struct pthread, member)));     \</span><br><span class="line">     <span class="keyword">else</span> <span class="keyword">if</span> (<span class="keyword">sizeof</span> (__value) == <span class="number">4</span>)                \</span><br><span class="line">       <span class="keyword">asm</span> <span class="keyword">volatile</span> (<span class="string">"movl %%fs:%P1,%0"</span>               \</span><br><span class="line">         : <span class="string">"=r"</span> (__value)               \</span><br><span class="line">         : <span class="string">"i"</span> (offsetof (struct pthread, member)));        \</span><br><span class="line">     <span class="keyword">else</span>                     \</span><br><span class="line">       &#123;                      \</span><br><span class="line">   <span class="keyword">if</span> (<span class="keyword">sizeof</span> (__value) != <span class="number">8</span>)               \</span><br><span class="line">     <span class="comment">/* There should not be any value with a size other than 1,       \</span></span><br><span class="line"><span class="comment">        4 or 8.  */</span>                 \</span><br><span class="line">     <span class="built_in">abort</span> ();                    \</span><br><span class="line">                        \</span><br><span class="line">   <span class="keyword">asm</span> <span class="keyword">volatile</span> (<span class="string">"movq %%fs:%P1,%q0"</span>              \</span><br><span class="line">           : <span class="string">"=r"</span> (__value)               \</span><br><span class="line">           : <span class="string">"i"</span> (offsetof (struct pthread, member)));        \</span><br><span class="line">       &#125;                      \</span><br><span class="line">     __value; &#125;)</span><br></pre></td></tr></table></figure>
+
+<h1 id="rwlock的GLIBC2-30实现"><a href="#rwlock的GLIBC2-30实现" class="headerlink" title="rwlock的GLIBC2.30实现"></a>rwlock的GLIBC2.30实现</h1><h2 id="INIT-1"><a href="#INIT-1" class="headerlink" title="INIT"></a>INIT</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// pthread_rwlock_init.c</span></span><br><span class="line"><span class="comment">/* See pthread_rwlock_common.c.  */</span></span><br><span class="line"><span class="keyword">int</span></span><br><span class="line">__pthread_rwlock_init (<span class="keyword">pthread_rwlock_t</span> *rwlock,</span><br><span class="line">               <span class="keyword">const</span> <span class="keyword">pthread_rwlockattr_t</span> *attr)</span><br><span class="line">&#123;</span><br><span class="line">  ASSERT_TYPE_SIZE (<span class="keyword">pthread_rwlock_t</span>, __SIZEOF_PTHREAD_RWLOCK_T);</span><br><span class="line"></span><br><span class="line">  <span class="keyword">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">pthread_rwlockattr</span> *<span class="title">iattr</span>;</span></span><br><span class="line"></span><br><span class="line">  iattr = ((<span class="keyword">const</span> struct pthread_rwlockattr *) attr) ?: &amp;default_rwlockattr;</span><br><span class="line"></span><br><span class="line">  <span class="built_in">memset</span> (rwlock, <span class="string">'\0'</span>, <span class="keyword">sizeof</span> (*rwlock));</span><br><span class="line"></span><br><span class="line">  rwlock-&gt;__data.__flags = iattr-&gt;lockkind;</span><br><span class="line"></span><br><span class="line">  <span class="comment">/* The value of __SHARED in a private rwlock must be zero.  */</span></span><br><span class="line">  rwlock-&gt;__data.__shared = (iattr-&gt;pshared != PTHREAD_PROCESS_PRIVATE);</span><br><span class="line"></span><br><span class="line">  <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>strong_alias</code>是C的一个别名机制，定义<code>pthread_rwlock_init</code>是<code>__pthread_rwlock_init</code>的别名。别名包括strong和weak的。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">strong_alias (__pthread_rwlock_init, pthread_rwlock_init)</span><br></pre></td></tr></table></figure>
+
+<p>它的实现在<code>libc-symbols.h</code>中。其中，<code>__typeof (name) aliasname</code>定义了一个<code>aliasname</code>，它的类型是<code>name</code>的类型。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* Define ALIASNAME as a strong alias for NAME.  */</span></span><br><span class="line"><span class="meta"># <span class="meta-keyword">define</span> strong_alias(name, aliasname) _strong_alias(name, aliasname)</span></span><br><span class="line"><span class="meta"># <span class="meta-keyword">define</span> _strong_alias(name, aliasname) \</span></span><br><span class="line">  <span class="keyword">extern</span> __typeof (name) aliasname __attribute__ ((alias (#name))) \</span><br><span class="line">    __attribute_copy__ (name);</span><br></pre></td></tr></table></figure>
+
+<h2 id="LOCK-1"><a href="#LOCK-1" class="headerlink" title="LOCK"></a>LOCK</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// pthread_rwlock_wrlock.c</span></span><br><span class="line"><span class="comment">/* See pthread_rwlock_common.c.  */</span></span><br><span class="line"><span class="keyword">int</span></span><br><span class="line">__pthread_rwlock_wrlock (<span class="keyword">pthread_rwlock_t</span> *rwlock)</span><br><span class="line">&#123;</span><br><span class="line">  LIBC_PROBE (wrlock_entry, <span class="number">1</span>, rwlock);</span><br><span class="line"></span><br><span class="line">  <span class="keyword">int</span> result = __pthread_rwlock_wrlock_full (rwlock, CLOCK_REALTIME, <span class="literal">NULL</span>);</span><br><span class="line">  LIBC_PROBE (wrlock_acquire_write, <span class="number">1</span>, rwlock);</span><br><span class="line">  <span class="keyword">return</span> result;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">weak_alias (__pthread_rwlock_wrlock, pthread_rwlock_wrlock)</span><br><span class="line">hidden_def (__pthread_rwlock_wrlock)</span><br></pre></td></tr></table></figure>
+
+<p><code>__pthread_rwlock_wrlock_full</code>使用原子操作实现的</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// pthread_rwlock_common.c</span></span><br></pre></td></tr></table></figure>
+
+<h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
+<li><a href="https://man7.org/linux/man-pages/man2/futex.2.html" target="_blank" rel="noopener">https://man7.org/linux/man-pages/man2/futex.2.html</a><br> 附注一下，Linux的man page后面的数字序号有下面的含义：<ol>
+<li>普通命令</li>
+<li>系统调用</li>
+<li>库函数</li>
+<li>特殊文件,也就是/dev下的各种设备文件</li>
+<li>文件的格式</li>
+<li>游戏留的</li>
+<li>附件，或者一些全局变量</li>
+<li>是root专用的命令</li>
+</ol>
+</li>
+<li><a href="https://man7.org/linux/man-pages/man7/futex.7.html" target="_blank" rel="noopener">https://man7.org/linux/man-pages/man7/futex.7.html</a></li>
+<li><a href="https://www.cnblogs.com/pslydff/p/7041444.html" target="_blank" rel="noopener">https://www.cnblogs.com/pslydff/p/7041444.html</a></li>
+<li><a href="https://gohalo.me/post/program-c-gdb-deadlock-analyze-introduce.html" target="_blank" rel="noopener">https://gohalo.me/post/program-c-gdb-deadlock-analyze-introduce.html</a></li>
+</ol>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/多线程/" rel="tag"># 多线程</a>
+          
+            <a href="/tags/Linux/" rel="tag"># Linux</a>
+          
+            <a href="/tags/pthread/" rel="tag"># pthread</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2020/11/21/v8-compile/" rel="next" title="V8引擎编译">
+                <i class="fa fa-chevron-left"></i> V8引擎编译
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2020/12/13/gcc-glibc-compile/" rel="prev" title="GCC 和 GLIBC编译">
+                GCC 和 GLIBC编译 <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">262</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">154</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#扩展形式的GCC汇编介绍"><span class="nav-number">1.</span> <span class="nav-text">扩展形式的GCC汇编介绍</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Constraints"><span class="nav-number">1.1.</span> <span class="nav-text">Constraints</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Simple-Constraints"><span class="nav-number">1.1.1.</span> <span class="nav-text">Simple Constraints</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Modifiers"><span class="nav-number">1.1.2.</span> <span class="nav-text">Modifiers</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Futex介绍"><span class="nav-number">2.</span> <span class="nav-text">Futex介绍</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#lll的GLIBC2-17版本"><span class="nav-number">3.</span> <span class="nav-text">lll的GLIBC2.17版本</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#辅助函数解释"><span class="nav-number">3.1.</span> <span class="nav-text">辅助函数解释</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#lll-futex-wait"><span class="nav-number">3.1.1.</span> <span class="nav-text">lll_futex_wait</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#atomic-exchange-acq"><span class="nav-number">3.1.2.</span> <span class="nav-text">atomic_exchange_acq</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#lll的GLIBC2-30版本"><span class="nav-number">4.</span> <span class="nav-text">lll的GLIBC2.30版本</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#rwlock的GLIBC2-17实现"><span class="nav-number">5.</span> <span class="nav-text">rwlock的GLIBC2.17实现</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#INIT"><span class="nav-number">5.1.</span> <span class="nav-text">INIT</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#LOCK"><span class="nav-number">5.2.</span> <span class="nav-text">LOCK</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#辅助函数详解"><span class="nav-number">5.3.</span> <span class="nav-text">辅助函数详解</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#THREAD-GETMEM"><span class="nav-number">5.3.1.</span> <span class="nav-text">THREAD_GETMEM</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#rwlock的GLIBC2-30实现"><span class="nav-number">6.</span> <span class="nav-text">rwlock的GLIBC2.30实现</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#INIT-1"><span class="nav-number">6.1.</span> <span class="nav-text">INIT</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#LOCK-1"><span class="nav-number">6.2.</span> <span class="nav-text">LOCK</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">7.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2020/12/11/pthread_rwlock-impl/';
+          this.page.identifier = '2020/12/11/pthread_rwlock-impl/';
+          this.page.title = 'pthread_rwlock库的实现';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>

@@ -1,0 +1,1490 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="C++,内存管理," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="介绍下 jemalloc 的实现。目前的实现和 4.5 及之前的实现还是有比较大的差别的。因此代码主要是看的 4.5，并介绍了下 5.2.1 的几个重要的变化。">
+<meta name="keywords" content="C++,内存管理">
+<meta property="og:type" content="article">
+<meta property="og:title" content="jemalloc 的实现">
+<meta property="og:url" content="http://www.calvinneo.com/2025/01/03/jemalloc-impl/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="介绍下 jemalloc 的实现。目前的实现和 4.5 及之前的实现还是有比较大的差别的。因此代码主要是看的 4.5，并介绍了下 5.2.1 的几个重要的变化。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2025-09-29T14:55:59.069Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="jemalloc 的实现">
+<meta name="twitter:description" content="介绍下 jemalloc 的实现。目前的实现和 4.5 及之前的实现还是有比较大的差别的。因此代码主要是看的 4.5，并介绍了下 5.2.1 的几个重要的变化。">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2025/01/03/jemalloc-impl/"/>
+
+
+
+
+
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5487541356791902"
+     crossorigin="anonymous"></script>
+  <title>jemalloc 的实现 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2025/01/03/jemalloc-impl/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                jemalloc 的实现
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2025-01-03T14:06:10+08:00">
+                2025-01-03
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>介绍下 jemalloc 的实现。目前的实现和 4.5 及之前的实现还是有比较大的差别的。因此代码主要是看的 4.5，并介绍了下 5.2.1 的几个重要的变化。</p>
+<a id="more"></a>
+
+<h1 id="设计理念"><a href="#设计理念" class="headerlink" title="设计理念"></a>设计理念</h1><ul>
+<li>最大化内存分配和释放的性能</li>
+<li>减少内部碎片和外部碎片</li>
+<li>减少线程之间的竞争和 false sharing</li>
+<li>支持 heap profiling</li>
+</ul>
+<h1 id="实现理念"><a href="#实现理念" class="headerlink" title="实现理念"></a>实现理念</h1><h2 id="基本情况"><a href="#基本情况" class="headerlink" title="基本情况"></a>基本情况</h2><p>jemalloc 中定义了一系列 size classes，这是通过 size_classes.h 生成的。从小到大可以进行编号，例如大小在 0 到 8 之间的就是 0 号，8 到 16 之间的就是 1 号。size2index 和 index2size 可以实现转换。</p>
+<h3 id="4-5-版本"><a href="#4-5-版本" class="headerlink" title="4.5 版本"></a>4.5 版本</h3><p>基于内存大小，把申请的内存分为三类：</p>
+<ul>
+<li>Small 的 size 小于 page 大小，为 8/16/32 bytes 等。会返回某个 run 中的一个 region。</li>
+<li>Large 以 page 为单位，小于 chunk 的大小。会返回一个 run。</li>
+<li>Huge 会使用多个 chunk。<br>  所以 Huge 是按照 chunk 对齐的，这通常被用来区分一个地址是否属于 Huge。</li>
+</ul>
+<p>因为 tcache 的存在，内存分配可能和上述相比有更多的优化。</p>
+<p>名词解释：</p>
+<ul>
+<li>page 指的是操作系统的 page，一般是 4KB。mmap 系统调用分配内存以 page 为单位，但分配的内存未必是按照 page size 对齐的，所以可能要多分配一些出来，然后 trim。</li>
+<li>chunk 指的是 jemalloc 向 OS 申请内存的最小单位。它一定是 page size 的倍数。默认是 2MiB。</li>
+<li>run：一个 chunk 分成多个<strong>不同大小</strong>的 run。</li>
+<li>region：一个 run 分成多个<strong>相同大小</strong>的 region。Small 对象的内存分配和释放就是标记某个 region 被使用。</li>
+<li>bin：由 bin 管理存储同一种大小的 Small 对象（也就是说同一种 size class）的多个 run。</li>
+</ul>
+<h2 id="【4-5-版本】chuck-的基本设计"><a href="#【4-5-版本】chuck-的基本设计" class="headerlink" title="【4.5 版本】chuck 的基本设计"></a>【4.5 版本】chuck 的基本设计</h2><p>arena_chunk_s 的结构如下所示：</p>
+<ul>
+<li>extent_node_t 的 node</li>
+<li>arena_chunk_map_bits_t 即 arena_chunk_map_bits_s 类型的 map_bits<br>  包含了 chunk 中除了 header 使用的 page 之外的所有 page 的元信息。</li>
+<li>arena_chunk_map_misc_t 即 arena_chunk_map_misc_s<br>  记录了各个 run 的元信息。<br>  这个结构并没有在 arena_chunk_s 中被表示出来。应该是 C 语言的问题。</li>
+<li>pages，也就是 payload</li>
+</ul>
+<p>这个 map_bits 的长度实际上等于 map_bias，是在 arena_boot 中计算的。这个计算有个神奇的 <code>for (i &lt; 3)</code> 循环，将在后面介绍。</p>
+<p>arena_chunk_map_bits_t 是一个 size_t。它如何设置，取决于 page 是 run 的第一个、中间的、普通的 page。以及 run 的类型是未分配、small 和 large。容易推断出，一个 run 至少对应一个 page。</p>
+<p>在初始化时还会设置：</p>
+<ul>
+<li>arena_maxrun 等于 chunk 的大小减去 header 的大小。</li>
+<li>large_maxclass：Large 类型的 class 的最大的大小。</li>
+</ul>
+<h2 id="【4-5-版本】run-的基本设计"><a href="#【4-5-版本】run-的基本设计" class="headerlink" title="【4.5 版本】run 的基本设计"></a>【4.5 版本】run 的基本设计</h2><p>arena_chunk_map_misc_t 是 run 的元信息，前面提到，它也是存在 chunk 的 header 中，而不会有自己单独的 run header。</p>
+<p>ph_link 有两个互斥的用途：</p>
+<ul>
+<li>在 arena_s 中的 runs_avail 堆，用来管理 arena 中所有可用的 run</li>
+<li>在 arena_bin_s 中的 runs 堆，用来管理分配给某个 bin 的 run</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">arena_chunk_map_misc_s</span> &#123;</span></span><br><span class="line">    phn(<span class="keyword">arena_chunk_map_misc_t</span>)     ph_link;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">union</span> &#123;</span><br><span class="line">        <span class="comment">/* Linkage for list of dirty runs. */</span></span><br><span class="line">        <span class="keyword">arena_runs_dirty_link_t</span>     rd;</span><br><span class="line"></span><br><span class="line">        <span class="comment">/* Profile counters, used for large object runs. */</span></span><br><span class="line">        <span class="keyword">union</span> &#123;</span><br><span class="line">            <span class="keyword">void</span>            *prof_tctx_pun;</span><br><span class="line">            <span class="keyword">prof_tctx_t</span>     *prof_tctx;</span><br><span class="line">        &#125;;</span><br><span class="line"></span><br><span class="line">        <span class="comment">/* Small region run metadata. */</span></span><br><span class="line">        <span class="keyword">arena_run_t</span>         run;</span><br><span class="line">    &#125;;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>通过 arena_run_split_small 函数，可以将 run 分解，得到对应 size 的一系列 run，并交给对应的 bin 管理。</p>
+<p>通过 arena_run_coalesce 函数，run 在释放时也可以被前后合并。</p>
+<p>对于 Small 结构，有 arena_run_t 结构用来维护</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">arena_run_s</span> &#123;</span></span><br><span class="line">    <span class="keyword">szind_t</span>     binind;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">unsigned</span>    nfree;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">bitmap_t</span>    bitmap[BITMAP_GROUPS_MAX];</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<h2 id="【4-5-版本】bin-的基本设计"><a href="#【4-5-版本】bin-的基本设计" class="headerlink" title="【4.5 版本】bin 的基本设计"></a>【4.5 版本】bin 的基本设计</h2><p>runs_avail 是一个数组，数组长度等于 runs_avail_nclasses。分配给 bin 的 run 会从 arena_s 的 runs_avail 中删除，移动到 arena_bin_s 管理。其中，runcur 记录目前正在被用来分配的 run。runs 记录目前非空、非满的 run。此外：</p>
+<ul>
+<li>空的 bin 不会被任何结构记录，因为这个时候内存都已经分配给用户了，用户理应通过 free 来释放内存。</li>
+<li>满的 bin 会被会收到 runs_avail 中</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">arena_bin_s</span> &#123;</span></span><br><span class="line">    <span class="keyword">malloc_mutex_t</span>      lock;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">arena_run_t</span>     *runcur;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">arena_run_heap_t</span>    runs;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/* Bin statistics. */</span></span><br><span class="line">    <span class="keyword">malloc_bin_stats_t</span>  stats;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>为什么 run 被记录在 arena 而不是 chunk 中呢？</p>
+<h2 id="free"><a href="#free" class="headerlink" title="free"></a>free</h2><p>这里定义 pageind 为</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">pageind = ((<span class="keyword">uintptr_t</span>)ptr - (<span class="keyword">uintptr_t</span>)chunk) &gt;&gt; LG_PAGE;</span><br></pre></td></tr></table></figure>
+
+<h3 id="5-2-1"><a href="#5-2-1" class="headerlink" title="5.2.1"></a>5.2.1</h3><p>首先需要区分 Huge、Large 和 Small：</p>
+<ul>
+<li>Huge 可以判断是否和 chunk 大小也就是 2MiB 对齐。</li>
+<li>Large 可以通过 page 对应的 map_bits 和 CHUNK_MAP_LARGE 做 and 来实现。</li>
+</ul>
+<p>Small 比较麻烦，因为还需要找到对应的 region。</p>
+<p>在 arena_dalloc_small 中处理，主要是调用 arena_dalloc_bin，然后调用 arena_decay_tick。</p>
+<p>步骤是：</p>
+<ul>
+<li>找到对应的 run page offset，也就是 <code>pppppppp pppppppp ppp</code>。也就是这个 region 对应的 run 的第一个 page。</li>
+<li>然后获得这个 run 的 misc 数据。目的是找到 run 对应的 bin 是哪个。</li>
+<li>对对应的 bin 加锁，执行 arena_dalloc_bin_locked_impl。在 4.2.1 中这个函数有一些重复计算的地方不知道为啥。这个函数主要调用 arena_run_reg_dalloc，后面还有一些对 bin 是否为空的判断。</li>
+</ul>
+<p><code>arena_run_reg_dalloc</code> 的有效过程是：</p>
+<ul>
+<li>arena_run_regind 获得 region id</li>
+<li><code>bitmap_unset(run-&gt;bitmap, &amp;bin_info-&gt;bitmap_info, regind);</code> 标记这个 region 被释放。</li>
+</ul>
+<h2 id="【5-2-1-版本】-extent-gt-slab-gt-region"><a href="#【5-2-1-版本】-extent-gt-slab-gt-region" class="headerlink" title="【5.2.1 版本】 extent -&gt; slab -&gt; region"></a>【5.2.1 版本】 extent -&gt; slab -&gt; region</h2><p>从 5.x 版本开始，jemalloc 使用 extent -&gt; slab -&gt; region 代替了原有的三级分配模式。对应的 release node 如下：</p>
+<blockquote>
+<p>Organize virtual memory as “extents” of virtual memory pages, rather than as<br>naturally aligned “chunks”, and store all metadata in arbitrarily distant<br>locations.  This reduces virtual memory external fragmentation, and will<br>interact better with huge pages (not yet explicitly supported).  (@jasone)</p>
+</blockquote>
+<p>对比如下：</p>
+<ul>
+<li>Chunks (Pre-5.0.0)<ul>
+<li>Naturally aligned: Chunks were aligned to their own size boundaries (e.g., a 2MB chunk was aligned to 2MB boundaries) ChangeLog:397-402</li>
+<li>Fixed size: Chunks had predetermined sizes that were powers of 2</li>
+<li>Metadata co-location: Metadata was stored within the chunk itself</li>
+<li>Hierarchy: Used chunk → run → region structure</li>
+</ul>
+</li>
+<li>Extents (5.0.0+)<ul>
+<li>Page-aligned: Extents are only aligned to page boundaries, not their own size ChangeLog:479-482</li>
+<li>Variable size: Extents can be any multiple of the page size</li>
+<li>Metadata separation: Metadata is stored in “arbitrarily distant locations” from the extent data ChangeLog:479-482</li>
+<li>Simplified hierarchy: Uses extent → slab → region structure</li>
+</ul>
+</li>
+</ul>
+<h2 id="purge"><a href="#purge" class="headerlink" title="purge"></a>purge</h2><h3 id="muzzy-和-dirty"><a href="#muzzy-和-dirty" class="headerlink" title="muzzy 和 dirty"></a>muzzy 和 dirty</h3><p>purge <a href="https://youjiali1995.github.io/allocator/jemalloc-purge/" target="_blank" rel="noopener">分为几个阶段</a>：</p>
+<ul>
+<li>active -&gt; dirty<br>  变为 dirty 后，heap profiling 是无法看到的。但是 RSS 依然较高。</li>
+<li>dirty -&gt; muzzy<br>  调用 madvise(MADV_FREE)</li>
+<li>muzzy -&gt; cleaned<br>  调用 madvise(MADV_DONTNEED)</li>
+</ul>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">/*</span><br><span class="line"> * Methods for purging unused pages differ between operating systems.</span><br><span class="line"> *</span><br><span class="line"> *   madvise(..., MADV_FREE) : This marks pages as being unused, such that they</span><br><span class="line"> *                             will be discarded rather than swapped out.</span><br><span class="line"> *   madvise(..., MADV_DONTNEED) : If JEMALLOC_PURGE_MADVISE_DONTNEED_ZEROS is</span><br><span class="line"> *                                 defined, this immediately discards pages,</span><br><span class="line"> *                                 such that new pages will be demand-zeroed if</span><br><span class="line"> *                                 the address region is later touched;</span><br><span class="line"> *                                 otherwise this behaves similarly to</span><br><span class="line"> *                                 MADV_FREE, though typically with higher</span><br><span class="line"> *                                 system overhead.</span><br><span class="line"> */</span><br></pre></td></tr></table></figure>
+
+<h3 id="何时-purge"><a href="#何时-purge" class="headerlink" title="何时 purge"></a>何时 purge</h3><p>有两个 ctl，对应了 <code>arena.$i.{purtge,decay}</code> 命令，相关<a href="https://jemalloc.net/jemalloc.3.html" target="_blank" rel="noopener">文档</a>：</p>
+<ul>
+<li>arena_i_purge_ctl<br>  Purge all unused dirty pages for arena <code>&lt;i&gt;</code>, or for all arenas if <code>&lt;i&gt;</code> equals MALLCTL_ARENAS_ALL.</li>
+<li>arena_i_decay_ctl<br>  Trigger decay-based purging of unused dirty/muzzy pages for arena <code>&lt;i&gt;</code>, or for all arenas if <code>&lt;i&gt;</code> equals MALLCTL_ARENAS_ALL.<br>  The proportion of unused dirty/muzzy pages to be purged depends on the current time; see opt.dirty_decay_ms and opt.muzy_decay_ms for details.</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">const</span> <span class="keyword">ctl_named_node_t</span> arena_i_node[] = &#123;</span><br><span class="line">    &#123;NAME(<span class="string">"purge"</span>),     CTL(arena_i_purge)&#125;,</span><br><span class="line">    &#123;NAME(<span class="string">"decay"</span>),     CTL(arena_i_decay)&#125;,</span><br><span class="line">    &#123;NAME(<span class="string">"reset"</span>),     CTL(arena_i_reset)&#125;,</span><br><span class="line">    &#123;NAME(<span class="string">"dss"</span>),       CTL(arena_i_dss)&#125;,</span><br><span class="line">    &#123;NAME(<span class="string">"lg_dirty_mult"</span>), CTL(arena_i_lg_dirty_mult)&#125;,</span><br><span class="line">    &#123;NAME(<span class="string">"decay_time"</span>),    CTL(arena_i_decay_time)&#125;,</span><br><span class="line">    &#123;NAME(<span class="string">"chunk_hooks"</span>),   CTL(arena_i_chunk_hooks)&#125;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>purge 和 decay 的区别，是 <code>arena_purge</code> 的 <code>all</code> 参数。实际上导致了调用的是 <code>arena_purge_to_limit(ndirty_limit=0)</code> 还是 <code>arena_maybe_purge</code>。</p>
+<p>arena_maybe_purge 分为两种模式，受到 opt_purge 管理：</p>
+<ul>
+<li>purge_mode_ratio<br>  purge 更少的 page，直到满足 arena-&gt;ndirty &lt;= ndirty_limit。<br>  这个应该是对应了 lazy 模式。</li>
+<li>purge_mode_decay<br>  purge 尽可能多的 page，但是不违背 arena-&gt;ndirty &gt;= ndirty_limit。<br>  这实际上是默认值。decay 实际上是基于时间的管理。</li>
+</ul>
+<p>实际上这里 ndirty_limit 就是能够容忍的最多的 dirty page 的数量。</p>
+<p>看看默认的 purge_mode_decay 模式，首先要检查下结构 <code>arena_decay_s</code>：</p>
+<ul>
+<li>time<br>  Approximate time in seconds from the creation of a set of unused dirty pages until an equivalent set of unused dirty pages is purged and/or reused.<br>  产生的 dirty pages 会在 decay_time 时间后全部 purge。默认是 10s。</li>
+<li>interval<br>  time / SMOOTHSTEP_NSTEPS。相当于分这么多组去 decay，而不是一次性搞完，从而避免每次占用较多的资源。<br>  SMOOTHSTEP_NSTEPS 等于 200。</li>
+<li>epoch<br>  Time at which the current decay interval logically started.<br>  We do not actually advance to a new epoch until sometime after it starts because of scheduling and computation delays, and it is even possible to completely skip epochs.<br>  In all cases, during epoch advancement we merge all relevant activity into the most recently recorded epoch.<br>  结合 interval 和 deadline 的理解就是 epoch 理论上就是不断自增 interval，但实际上什么时候开始是不确定的，甚至可能跳过某些 epoch。每个 epoch 开始的时候会处理之前的所有工作。</li>
+<li>deadline<br>  Deadline for current epoch.<br>  This is the sum of interval and per epoch jitter. 实际上就是 <code>[epoch + interval, epoch + 2*interval)</code>。<br>  Epochs always advance by precise multiples of interval, but we but we randomize the deadline to reduce the likelihood of arenas purging in lockstep.</li>
+<li>ndirty<br>  epoch 开始的时候 dirty page 的数量。</li>
+<li>backlog<br>  Trailing log of how many unused dirty pages were generated during each of the past SMOOTHSTEP_NSTEPS decay epochs, where the last element is the most recent epoch. Corresponding epoch times are relative to epoch.</li>
+</ul>
+<blockquote>
+<p>因为在 purge 的过程中，会有新的 dirty page 产生，所以将整个 purge 划分为 SMOOTHSTEP_NSTEPS 组，每组分别负责 interval 时间内产生的 dirty page 的回收，每组能保留的 dirty pages 数量根据 Smootherstep 曲线，总的能保留的 dirty page 数量为 200 组的叠加，超出的会 purge。</p>
+</blockquote>
+<p>实现在 arena_maybe_purge_decay：</p>
+<ul>
+<li>arena_decay_deadline_reached 检查 <code>decay.deadline</code> 是否已经到达</li>
+<li>arena_decay_epoch_advance<ul>
+<li>arena_decay_epoch_advance_helper</li>
+<li>arena_decay_epoch_advance_purge<br>  计算出 ndirty_limit。调用 arena_purge_to_limit(ndirty_limit)，更新 decay.dirty。</li>
+</ul>
+</li>
+</ul>
+<h3 id="Smooth-steps-曲线"><a href="#Smooth-steps-曲线" class="headerlink" title="Smooth steps 曲线"></a>Smooth steps 曲线</h3><p>SMOOTHSTEP 是一个表：</p>
+<ul>
+<li>x 从 0.005 开始递增到 1.000</li>
+<li>y 是对应 x 取值时，smooth step 函数的值。对于 jemalloc 的场景，就是在 x 的时刻，需要回收大概多少的内存了</li>
+<li>h 是 y 乘上 <code>2 ** SMOOTHSTEP_BFP</code> 的结果，这样转成整数计算方便很多</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SMOOTHSTEP_VARIANT  <span class="meta-string">"smoother"</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SMOOTHSTEP_NSTEPS   200</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SMOOTHSTEP_BFP      24</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> SMOOTHSTEP \</span></span><br><span class="line"> <span class="comment">/* STEP(step, h,                            x,     y) */</span> \</span><br><span class="line">    STEP(   <span class="number">1</span>, UINT64_C(<span class="number">0x0000000000000014</span>), <span class="number">0.005</span>, <span class="number">0.000001240643750</span>) \</span><br><span class="line">    STEP(   <span class="number">2</span>, UINT64_C(<span class="number">0x00000000000000a5</span>), <span class="number">0.010</span>, <span class="number">0.000009850600000</span>) \</span><br></pre></td></tr></table></figure>
+
+<p>这个 SMOOTHSTEP 宏是计算机生成的，但也可以手算，结果如下。可以看到 20 和 0x14 相等。</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">$ dc</span><br><span class="line">&gt; 5 k 2 24 ^ 0.000001240643750 * p</span><br><span class="line">20.814548172800000</span><br></pre></td></tr></table></figure>
+
+<h3 id="5-2-1-版本的-purge-和-decay"><a href="#5-2-1-版本的-purge-和-decay" class="headerlink" title="5.2.1 版本的 purge 和 decay"></a>5.2.1 版本的 purge 和 decay</h3><p>在 4.5 中，使用 dirty_time。到了 5.2.1 中，就变成了 dirty_decay_ms 和 muzzy_decay_ms 了，但值还是一样的。</p>
+<p>这个<a href="https://github.com/CalvinNeo/jemalloc/tree/debug" target="_blank" rel="noopener">基于 5.2.1 的分支</a>上有我的一些调试记录。</p>
+<p>这里，有个结论是 5.2.1 上如果不开启 background thread 特性，那么指定 dirty_decay_ms 为非 0 值，则可能起不到预期的回收 dirty 页面的效果。我也在 tiflash 这个 binary 上进行了测试，验证过：</p>
+<ul>
+<li>关闭 background thread，但是开启 dirty_decay_ms，则后续手动 purge 仍有 RSS 内存释放</li>
+<li>开启 background thread，且开启 dirty_decau_ms，则内存会被回收，稍后手动 purge 不会进一步释放 RSS 内存</li>
+</ul>
+<p>原因是回收的逻辑大概如下：</p>
+<ul>
+<li>如果 decay_ms 为 0，则在 arena_maybe_decay 中会直接调用 arena_decay_to_limit 去 purge。这实际上是会 purge 最多 current_npages。</li>
+<li>否则判断是否到达这个 epoch 的 deadline<ul>
+<li>如果是，则调用 arena_decay_epoch_advance<br>  在这个函数中，会判断是否开启 background thread 特性。<br>  如果关闭，会调用 arena_decay_try_purge，这也是 background thread 关闭后唯一释放内存的路径。如果开启，则只有当前线程是 background thread 的时候才会调用 arena_decay_try_purge。<br>  如果 purge，会 purge 最多 current_npages。</li>
+<li>如果否，则只有当前线程是 background thread 的时候，才会调用 arena_decay_try_purge。purge 最多 arena_decay_backlog_npages_limit。  <figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"> <span class="keyword">else</span> <span class="keyword">if</span> (is_background_thread) &#123;</span><br><span class="line">    arena_decay_try_purge(tsdn, arena, decay, extents,</span><br><span class="line">        extents_npages_get(extents),</span><br><span class="line">        arena_decay_backlog_npages_limit(decay),</span><br><span class="line">        is_background_thread);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></li>
+</ul>
+</li>
+</ul>
+<p>从上述逻辑发现，只要 background thread 特性被关闭，则 arena_maybe_decay 即使被调用，也不会有渐进的 decay。</p>
+<p>BTW，这儿的 epoch 确实比较重要，比如 <a href="https://github.com/CalvinNeo/jemalloc/blob/a7a05294e8148007cd29b9630d789b46d7e6a2ae/test.cpp#L116" target="_blank" rel="noopener">这如果不 epoch 一下</a>，就不会更新内存分配情况。</p>
+<p>从 arena_maybe_decay 再往上层的调用关系大概有下面几条链路：</p>
+<ul>
+<li>arena_decay_ms_set 和 arena_decay_impl 会调用 arena_maybe_decay。</li>
+<li>arena_decay_dirty 和 arena_decay_muzzy 会调用 arena_decay_impl。<ul>
+<li>arena_extents_dirty_dalloc 和 arena_decay 会调用 arena_decay_dirty。</li>
+</ul>
+</li>
+</ul>
+<p>我在 test.cpp 中做了实验。在 free 的时候，会调用 arena_extents_dirty_dalloc。而 arena_decay 在下面被调用：</p>
+<ul>
+<li>arena_decay_ticks</li>
+<li>background_work_sleep_once</li>
+<li>ctl 方法 arena_i_decay</li>
+<li>ctl 方法 arena_i_destroy_ctl</li>
+<li>tcache_destroy</li>
+</ul>
+<h4 id="arena-decay-to-limit-的实现"><a href="#arena-decay-to-limit-的实现" class="headerlink" title="arena_decay_to_limit 的实现"></a>arena_decay_to_limit 的实现</h4><p>注意，这一部分的代码，和最新版本又不太一样了，主要是最新版本中又加了 ecache 对象。</p>
+<ol>
+<li>创建一个 extent_list_t。获得当前 arena 的 extent_hook_t。</li>
+<li>arena_stash_decayed<br> 调用 extents_evict，如果返回非 NULL，则 append 到刚创建的 extent_list_t 结构中。</li>
+<li>arena_decay_stashed<br> 遍历 extent_list_t 结构。 <figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">switch</span> (extents_state_get(extents)) &#123;</span><br><span class="line"><span class="keyword">case</span> extent_state_active:</span><br><span class="line">    not_reached();</span><br><span class="line"><span class="keyword">case</span> extent_state_dirty:</span><br><span class="line">    <span class="keyword">if</span> (!all &amp;&amp; muzzy_decay_ms != <span class="number">0</span> &amp;&amp;</span><br><span class="line">        !extent_purge_lazy_wrapper(tsdn, arena,</span><br><span class="line">        r_extent_hooks, extent, <span class="number">0</span>,</span><br><span class="line">        extent_size_get(extent))) &#123;</span><br><span class="line">        extents_dalloc(tsdn, arena, r_extent_hooks,</span><br><span class="line">            &amp;arena-&gt;extents_muzzy, extent);</span><br><span class="line">        arena_background_thread_inactivity_check(tsdn,</span><br><span class="line">            arena, is_background_thread);</span><br><span class="line">        <span class="keyword">break</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="comment">/* Fall through. */</span></span><br><span class="line"><span class="keyword">case</span> extent_state_muzzy:</span><br><span class="line">    extent_dalloc_wrapper(tsdn, arena, r_extent_hooks,</span><br><span class="line">        extent);</span><br><span class="line">    <span class="keyword">if</span> (config_stats) &#123;</span><br><span class="line">        nunmapped += npages;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">break</span>;</span><br><span class="line"><span class="keyword">case</span> extent_state_retained:</span><br><span class="line"><span class="keyword">default</span>:</span><br><span class="line">    not_reached();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></li>
+</ol>
+<h3 id="4-5-如何-purge"><a href="#4-5-如何-purge" class="headerlink" title="4.5 如何 purge"></a>4.5 如何 purge</h3><p>这里以 4.5 的 arena_purge_to_limit 来讲解。</p>
+<p>首先介绍两个结构 rd_link 和 cc_link。它们就是我们要清理的对象，都是 qr 结构的链表。</p>
+<p>rd_link 对应了要回收的 run，cc_link 对应了要回收的 chunk。容易想到，run 和 chunk 的回收方式可能是不一样的，chunk 可能最终会被通过 munmap 返回给系统。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">arena_runs_dirty_link_s</span> &#123;</span></span><br><span class="line">    qr(<span class="keyword">arena_runs_dirty_link_t</span>) rd_link;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">extent_node_s</span> &#123;</span></span><br><span class="line">    ...</span><br><span class="line">    <span class="comment">/* Linkage for arena's runs_dirty and chunks_cache rings. */</span></span><br><span class="line">    <span class="keyword">arena_runs_dirty_link_t</span> rd;</span><br><span class="line">    qr(<span class="keyword">extent_node_t</span>)   cc_link;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>代码如下，可以看到，它将要释放的 chunk 和 run 分别放到 purge_chunks_sentinel 和 purge_runs_sentinel 中进行管理。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">void</span></span><br><span class="line">arena_purge_to_limit(<span class="keyword">tsdn_t</span> *tsdn, <span class="keyword">arena_t</span> *arena, <span class="keyword">size_t</span> ndirty_limit)</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">chunk_hooks_t</span> chunk_hooks = chunk_hooks_get(tsdn, arena);</span><br><span class="line">    <span class="keyword">size_t</span> npurge, npurged;</span><br><span class="line">    <span class="keyword">arena_runs_dirty_link_t</span> purge_runs_sentinel;</span><br><span class="line">    <span class="keyword">extent_node_t</span> purge_chunks_sentinel;</span><br><span class="line"></span><br><span class="line">    arena-&gt;purging = <span class="literal">true</span>;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/*</span></span><br><span class="line"><span class="comment">     * Calls to arena_dirty_count() are disabled even for debug builds</span></span><br><span class="line"><span class="comment">     * because overhead grows nonlinearly as memory usage increases.</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">if</span> (<span class="literal">false</span> &amp;&amp; config_debug) &#123;</span><br><span class="line">        <span class="keyword">size_t</span> ndirty = arena_dirty_count(arena);</span><br><span class="line">        assert(ndirty == arena-&gt;ndirty);</span><br><span class="line">    &#125;</span><br><span class="line">    assert(opt_purge != purge_mode_ratio || (arena-&gt;nactive &gt;&gt;</span><br><span class="line">        arena-&gt;lg_dirty_mult) &lt; arena-&gt;ndirty || ndirty_limit == <span class="number">0</span>);</span><br><span class="line"></span><br><span class="line">    qr_new(&amp;purge_runs_sentinel, rd_link);</span><br><span class="line">    extent_node_dirty_linkage_init(&amp;purge_chunks_sentinel);</span><br><span class="line"></span><br><span class="line">    npurge = arena_stash_dirty(tsdn, arena, &amp;chunk_hooks, ndirty_limit,</span><br><span class="line">        &amp;purge_runs_sentinel, &amp;purge_chunks_sentinel);</span><br><span class="line">    <span class="keyword">if</span> (npurge == <span class="number">0</span>)</span><br><span class="line">        <span class="keyword">goto</span> label_return;</span><br><span class="line">    npurged = arena_purge_stashed(tsdn, arena, &amp;chunk_hooks,</span><br><span class="line">        &amp;purge_runs_sentinel, &amp;purge_chunks_sentinel);</span><br><span class="line">    assert(npurged == npurge);</span><br><span class="line">    arena_unstash_purged(tsdn, arena, &amp;chunk_hooks, &amp;purge_runs_sentinel,</span><br><span class="line">        &amp;purge_chunks_sentinel);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (config_stats)</span><br><span class="line">        arena-&gt;stats.npurge++;</span><br><span class="line"></span><br><span class="line">label_return:</span><br><span class="line">    arena-&gt;purging = <span class="literal">false</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里的脉络是：</p>
+<ul>
+<li>extent_node_dirty_linkage_init</li>
+<li>arena_stash_dirty</li>
+<li>arena_purge_stashed</li>
+<li>arena_unstash_purged 是真正的释放过程</li>
+</ul>
+<h4 id="chunk-的释放策略"><a href="#chunk-的释放策略" class="headerlink" title="chunk 的释放策略"></a>chunk 的释放策略</h4><p>调用 chunk_dalloc_wrapper，这里面对 chunk_hooks 有个判断，默认是走 chunk_dalloc_default_impl。最终实际上会调用 mummap。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">bool</span></span><br><span class="line">chunk_dalloc_default_impl(<span class="keyword">void</span> *chunk, <span class="keyword">size_t</span> size)</span><br><span class="line">&#123;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!have_dss || !chunk_in_dss(chunk))</span><br><span class="line">        <span class="keyword">return</span> (chunk_dalloc_mmap(chunk, size));</span><br><span class="line">    <span class="keyword">return</span> (<span class="literal">true</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">bool</span></span><br><span class="line">chunk_dalloc_mmap(<span class="keyword">void</span> *chunk, <span class="keyword">size_t</span> size)</span><br><span class="line">&#123;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (config_munmap)</span><br><span class="line">        pages_unmap(chunk, size);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> (!config_munmap);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">void</span></span><br><span class="line">pages_unmap(<span class="keyword">void</span> *addr, <span class="keyword">size_t</span> size)</span><br><span class="line">&#123;</span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> _WIN32</span></span><br><span class="line">    <span class="keyword">if</span> (VirtualFree(addr, <span class="number">0</span>, MEM_RELEASE) == <span class="number">0</span>)</span><br><span class="line"><span class="meta">#<span class="meta-keyword">else</span></span></span><br><span class="line">    <span class="keyword">if</span> (munmap(addr, size) == <span class="number">-1</span>)</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">    &#123;</span><br><span class="line">...</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h4 id="run-的释放策略"><a href="#run-的释放策略" class="headerlink" title="run 的释放策略"></a>run 的释放策略</h4><p>调用 arena_run_dalloc。</p>
+<ul>
+<li>如果释放这个 run 导致 chunk 闲置，则调用 arena_chunk_dalloc。这个函数最终可能会走到 arena_maybe_purge，从而导致 chunk 被回收</li>
+<li>如果这个 run 是 dirty bit 被 set 了，则调用 arena_maybe_purge。</li>
+</ul>
+<h2 id="tcache"><a href="#tcache" class="headerlink" title="tcache"></a>tcache</h2><p>tcache 的主要目标是优化多线程下内存分配性能：</p>
+<ul>
+<li>减少锁争用：通过缓存内存块，线程可以在自己的本地缓存中处理分配和释放操作，避免频繁访问共享的全局 arena 数据结构</li>
+<li>提高分配速度：小对象的内存分配和释放可以直接从 tcache 完成</li>
+<li>降低内存碎片化</li>
+</ul>
+<h3 id="tsd"><a href="#tsd" class="headerlink" title="tsd"></a>tsd</h3><p>tsd 的主要作用是避免线程之间的资源竞争。每个线程可以有自己独立的一份分配器状态。tsd 的实现依赖于线程局部存储（Thread-Local Storage，TLS）。tsd 中就包含了 tcache 结构。tsdn 和 tsd 的区别是 tsdn 是 nullable 的。</p>
+<p>“分配器状态”中包含 <code>tsd_state_t</code> 以及 MALLOC_TSD 中的项目。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">tsd_s</span> &#123;</span></span><br><span class="line">    <span class="keyword">tsd_state_t</span> state;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> O(n, t)                             \</span></span><br><span class="line">    t       n;</span><br><span class="line">MALLOC_TSD</span><br><span class="line"><span class="meta">#<span class="meta-keyword">undef</span> O</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>MALLOC_TSD 中的项目有</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> MALLOC_TSD                          \</span></span><br><span class="line"><span class="comment">/*  O(name,         type) */</span>                \</span><br><span class="line">    O(tcache,           <span class="keyword">tcache_t</span> *)             \</span><br><span class="line">    O(thread_allocated,     <span class="keyword">uint64_t</span>)               \</span><br><span class="line">    O(thread_deallocated,   <span class="keyword">uint64_t</span>)               \</span><br><span class="line">    O(prof_tdata,       <span class="keyword">prof_tdata_t</span> *)             \</span><br><span class="line">    O(iarena,           <span class="keyword">arena_t</span> *)              \</span><br><span class="line">    O(arena,            <span class="keyword">arena_t</span> *)              \</span><br><span class="line">    O(arenas_tdata,     <span class="keyword">arena_tdata_t</span> *)            \</span><br><span class="line">    O(narenas_tdata,        <span class="keyword">unsigned</span>)               \</span><br><span class="line">    O(arenas_tdata_bypass,  <span class="keyword">bool</span>)                   \</span><br><span class="line">    O(tcache_enabled,       <span class="keyword">tcache_enabled_t</span>)           \</span><br><span class="line">    O(quarantine,       <span class="keyword">quarantine_t</span> *)             \</span><br><span class="line">    O(witnesses,        <span class="keyword">witness_list_t</span>)             \</span><br><span class="line">    O(witness_fork,     <span class="keyword">bool</span>)                   \</span><br></pre></td></tr></table></figure>
+
+<h3 id="tcache-alloc-small"><a href="#tcache-alloc-small" class="headerlink" title="tcache_alloc_small"></a>tcache_alloc_small</h3><p>以 small 对象为例，尝试分配。</p>
+<p>首先通过 tcache_alloc_easy 从对应的 bin 中选择尝试分配。如果失败，则要调用 arena_tcache_fill_small 从 arena 中申请整块 run 进行分配，run 剩余部分也归这个 tcache。</p>
+<p>首先了解下结构</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">tcache_bin_s</span> &#123;</span></span><br><span class="line">    <span class="keyword">tcache_bin_stats_t</span> tstats;</span><br><span class="line">    <span class="keyword">int</span>     low_water;  <span class="comment">/* Min # cached since last GC. */</span></span><br><span class="line">    <span class="keyword">unsigned</span>    lg_fill_div;    <span class="comment">/* Fill (ncached_max &gt;&gt; lg_fill_div). */</span></span><br><span class="line">    <span class="keyword">unsigned</span>    ncached;    <span class="comment">/* # of cached objects. */</span></span><br><span class="line">    <span class="comment">/*</span></span><br><span class="line"><span class="comment">     * To make use of adjacent cacheline prefetch, the items in the avail</span></span><br><span class="line"><span class="comment">     * stack goes to higher address for newer allocations.  avail points</span></span><br><span class="line"><span class="comment">     * just above the available space, which means that</span></span><br><span class="line"><span class="comment">     * avail[-ncached, ... -1] are available items and the lowest item will</span></span><br><span class="line"><span class="comment">     * be allocated first.</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">void</span>        **avail;    <span class="comment">/* Stack of available objects. */</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>在 full 的时候，需要分配 ncached_max &gt;&gt; lg_fill_div 到 avail 结构中。lg_fill_div 是一个从 1 开始动态调整的值。对于 small 分配，ncached_max 是 TCACHE_NSLOTS_SMALL_MIN = 20。</p>
+<p>arena_tcache_fill_small 的实现就是调用 arena_run_reg_alloc 在 run 中分配。如果没有 run，或者 run 用完了，就 arena_bin_malloc_hard。这个函数也会设置 runcur，所以后续的调用能够使用。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">void</span></span><br><span class="line">arena_tcache_fill_small(<span class="keyword">tsdn_t</span> *tsdn, <span class="keyword">arena_t</span> *arena, <span class="keyword">tcache_bin_t</span> *tbin,</span><br><span class="line">    <span class="keyword">szind_t</span> binind, <span class="keyword">uint64_t</span> prof_accumbytes)</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">unsigned</span> i, nfill;</span><br><span class="line">    <span class="keyword">arena_bin_t</span> *bin;</span><br><span class="line"></span><br><span class="line">    assert(tbin-&gt;ncached == <span class="number">0</span>);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (config_prof &amp;&amp; arena_prof_accum(tsdn, arena, prof_accumbytes))</span><br><span class="line">        prof_idump(tsdn);</span><br><span class="line">    bin = &amp;arena-&gt;bins[binind];</span><br><span class="line">    malloc_mutex_lock(tsdn, &amp;bin-&gt;lock);</span><br><span class="line">    <span class="keyword">for</span> (i = <span class="number">0</span>, nfill = (tcache_bin_info[binind].ncached_max &gt;&gt;</span><br><span class="line">        tbin-&gt;lg_fill_div); i &lt; nfill; i++) &#123;</span><br><span class="line">        <span class="keyword">arena_run_t</span> *run;</span><br><span class="line">        <span class="keyword">void</span> *ptr;</span><br><span class="line">        <span class="keyword">if</span> ((run = bin-&gt;runcur) != <span class="literal">NULL</span> &amp;&amp; run-&gt;nfree &gt; <span class="number">0</span>)</span><br><span class="line">            ptr = arena_run_reg_alloc(run, &amp;arena_bin_info[binind]);</span><br><span class="line">        <span class="keyword">else</span></span><br><span class="line">            ptr = arena_bin_malloc_hard(tsdn, arena, bin);</span><br><span class="line">        <span class="keyword">if</span> (ptr == <span class="literal">NULL</span>) &#123;</span><br><span class="line">            <span class="comment">/*</span></span><br><span class="line"><span class="comment">             * OOM.  tbin-&gt;avail isn't yet filled down to its first</span></span><br><span class="line"><span class="comment">             * element, so the successful allocations (if any) must</span></span><br><span class="line"><span class="comment">             * be moved just before tbin-&gt;avail before bailing out.</span></span><br><span class="line"><span class="comment">             */</span></span><br><span class="line">            <span class="keyword">if</span> (i &gt; <span class="number">0</span>) &#123;</span><br><span class="line">                memmove(tbin-&gt;avail - i, tbin-&gt;avail - nfill,</span><br><span class="line">                    i * <span class="keyword">sizeof</span>(<span class="keyword">void</span> *));</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="keyword">break</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">if</span> (config_fill &amp;&amp; unlikely(opt_junk_alloc)) &#123;</span><br><span class="line">            arena_alloc_junk_small(ptr, &amp;arena_bin_info[binind],</span><br><span class="line">                <span class="literal">true</span>);</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="comment">/* Insert such that low regions get used first. */</span></span><br><span class="line">        *(tbin-&gt;avail - nfill + i) = ptr;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (config_stats) &#123;</span><br><span class="line">        bin-&gt;stats.nmalloc += i;</span><br><span class="line">        bin-&gt;stats.nrequests += tbin-&gt;tstats.nrequests;</span><br><span class="line">        bin-&gt;stats.curregs += i;</span><br><span class="line">        bin-&gt;stats.nfills++;</span><br><span class="line">        tbin-&gt;tstats.nrequests = <span class="number">0</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    malloc_mutex_unlock(tsdn, &amp;bin-&gt;lock);</span><br><span class="line">    tbin-&gt;ncached = i;</span><br><span class="line">    arena_decay_tick(tsdn, arena);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="DSS-Dynamic-Storage-Segments"><a href="#DSS-Dynamic-Storage-Segments" class="headerlink" title="DSS(Dynamic Storage Segments)"></a>DSS(Dynamic Storage Segments)</h2><h2 id="malloc-的简单流程"><a href="#malloc-的简单流程" class="headerlink" title="malloc 的简单流程"></a>malloc 的简单流程</h2><p>主要是调用 ialloc_body。这里 usize 是对应的 size class 的最小值，即 index2size。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line">JEMALLOC_EXPORT JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN</span><br><span class="line"><span class="keyword">void</span> JEMALLOC_NOTHROW *</span><br><span class="line">JEMALLOC_ATTR(<span class="built_in">malloc</span>) JEMALLOC_ALLOC_SIZE(<span class="number">1</span>)</span><br><span class="line">je_malloc(<span class="keyword">size_t</span> size)</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">void</span> *ret;</span><br><span class="line">    <span class="keyword">tsdn_t</span> *tsdn;</span><br><span class="line">    <span class="keyword">size_t</span> <span class="function">usize <span class="title">JEMALLOC_CC_SILENCE_INIT</span><span class="params">(<span class="number">0</span>)</span></span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (size == <span class="number">0</span>)</span><br><span class="line">        size = <span class="number">1</span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (likely(!malloc_slow)) &#123;</span><br><span class="line">        ret = ialloc_body(size, <span class="literal">false</span>, &amp;tsdn, &amp;usize, <span class="literal">false</span>);</span><br><span class="line">        ialloc_post_check(ret, tsdn, usize, <span class="string">"malloc"</span>, <span class="literal">true</span>, <span class="literal">false</span>);</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        ret = ialloc_body(size, <span class="literal">false</span>, &amp;tsdn, &amp;usize, <span class="literal">true</span>);</span><br><span class="line">        ialloc_post_check(ret, tsdn, usize, <span class="string">"malloc"</span>, <span class="literal">true</span>, <span class="literal">true</span>);</span><br><span class="line">        UTRACE(<span class="number">0</span>, size, ret);</span><br><span class="line">        JEMALLOC_VALGRIND_MALLOC(ret != <span class="literal">NULL</span>, tsdn, ret, usize, <span class="literal">false</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> (ret);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>ialloc_body 最终通过 ialloc -&gt; iallocztm 走到 arena_malloc。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line">JEMALLOC_ALWAYS_INLINE_C <span class="keyword">void</span> *</span><br><span class="line">ialloc_body(<span class="keyword">size_t</span> size, <span class="keyword">bool</span> zero, <span class="keyword">tsdn_t</span> **tsdn, <span class="keyword">size_t</span> *usize,</span><br><span class="line">    <span class="keyword">bool</span> slow_path)</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">tsd_t</span> *tsd;</span><br><span class="line">    <span class="keyword">szind_t</span> ind;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (slow_path &amp;&amp; unlikely(malloc_init())) &#123;</span><br><span class="line">        *tsdn = <span class="literal">NULL</span>;</span><br><span class="line">        <span class="keyword">return</span> (<span class="literal">NULL</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    tsd = tsd_fetch();</span><br><span class="line">    *tsdn = tsd_tsdn(tsd);</span><br><span class="line">    witness_assert_lockless(tsd_tsdn(tsd));</span><br><span class="line"></span><br><span class="line">    ind = size2index(size);</span><br><span class="line">    <span class="keyword">if</span> (unlikely(ind &gt;= NSIZES))</span><br><span class="line">        <span class="keyword">return</span> (<span class="literal">NULL</span>);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (config_stats || (config_prof &amp;&amp; opt_prof) || (slow_path &amp;&amp;</span><br><span class="line">        config_valgrind &amp;&amp; unlikely(in_valgrind))) &#123;</span><br><span class="line">        *usize = index2size(ind);</span><br><span class="line">        assert(*usize &gt; <span class="number">0</span> &amp;&amp; *usize &lt;= HUGE_MAXCLASS);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (config_prof &amp;&amp; opt_prof)</span><br><span class="line">        <span class="keyword">return</span> (ialloc_prof(tsd, *usize, ind, zero, slow_path));</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> (ialloc(tsd, size, ind, zero, slow_path));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>arena_malloc 中，如果开启了 tcache，就尝试从 tcache 去分配。否则，直接通过 arena_malloc_hard 从 arena 分配。所以在 4.5 中，大部分情况下的 small 和 large 都是通过 tcache 走的。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line">JEMALLOC_ALWAYS_INLINE <span class="keyword">void</span> *</span><br><span class="line">arena_malloc(<span class="keyword">tsdn_t</span> *tsdn, <span class="keyword">arena_t</span> *arena, <span class="keyword">size_t</span> size, <span class="keyword">szind_t</span> ind, <span class="keyword">bool</span> zero,</span><br><span class="line">    <span class="keyword">tcache_t</span> *tcache, <span class="keyword">bool</span> slow_path)</span><br><span class="line">&#123;</span><br><span class="line"></span><br><span class="line">    assert(!tsdn_null(tsdn) || tcache == <span class="literal">NULL</span>);</span><br><span class="line">    assert(size != <span class="number">0</span>);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (likely(tcache != <span class="literal">NULL</span>)) &#123;</span><br><span class="line">        <span class="keyword">if</span> (likely(size &lt;= SMALL_MAXCLASS)) &#123;</span><br><span class="line">            <span class="keyword">return</span> (tcache_alloc_small(tsdn_tsd(tsdn), arena,</span><br><span class="line">                tcache, size, ind, zero, slow_path));</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">if</span> (likely(size &lt;= tcache_maxclass)) &#123;</span><br><span class="line">            <span class="keyword">return</span> (tcache_alloc_large(tsdn_tsd(tsdn), arena,</span><br><span class="line">                tcache, size, ind, zero, slow_path));</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="comment">/* (size &gt; tcache_maxclass) case falls through. */</span></span><br><span class="line">        assert(size &gt; tcache_maxclass);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> (arena_malloc_hard(tsdn, arena, size, ind, zero));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h1 id="从实现分析设计理念"><a href="#从实现分析设计理念" class="headerlink" title="从实现分析设计理念"></a>从实现分析设计理念</h1><h2 id="最大化内存分配和释放的性能"><a href="#最大化内存分配和释放的性能" class="headerlink" title="最大化内存分配和释放的性能"></a>最大化内存分配和释放的性能</h2><p>主要体现在：</p>
+<ul>
+<li>避免大量的向系统申请内存的动作</li>
+<li>快速定位可以被用来分配的内存</li>
+</ul>
+<p>快速定位上：</p>
+<ul>
+<li>给定任意地址 ptr，通过 CHUNK_ADDR2BASE 就可以找到对应的 chunk 的地址，进而就可以找到对应的几个元信息。诸如 map_bias 的是全局变量，所以也能在常数时间中计算得到 bits 和 mics 的偏移。</li>
+<li>通过 ptr 和 chunk 的地址 c，就可以通过 <code>((uintptr_t)ptr - (uintptr_t)chunk)&gt;&gt;LG_PAGE</code> 算出 page id。</li>
+</ul>
+<p>chunk 的分配上：</p>
+<ul>
+<li>使用红黑树缓存之前已经分配，但是目前空闲的 chunk。使用两种红黑树来支持两种排序方式：size、address 和 address。</li>
+<li>使用 spare 缓存最近空闲的 chunk，减少对红黑树的访问。</li>
+<li>使用 retain 缓存之前已经分配，但是目前被释放了的 chunk。</li>
+</ul>
+<h2 id="减少内部碎片和外部碎片"><a href="#减少内部碎片和外部碎片" class="headerlink" title="减少内部碎片和外部碎片"></a>减少内部碎片和外部碎片</h2><p>chunk 的各个 page 和各个 run 的元信息都放在了 chunk 头部，减少了内部碎片。</p>
+<h2 id="减少线程之间的竞争"><a href="#减少线程之间的竞争" class="headerlink" title="减少线程之间的竞争"></a>减少线程之间的竞争</h2><p>jemalloc 会创建多个 arena，每个线程由一个 arena 负责。默认创建 CPU * 4 数量的 arena。在每个 arena 中使用 nthreads 记录负责的线程数量。</p>
+<p>每个线程分配内存时，会基于下面的逻辑选择 arena：</p>
+<ul>
+<li>若 nthreads==0 已创建的 arena，则选择该 arena</li>
+<li>若还有未创建的 arena，则选择新创建一个 arena</li>
+<li>选择 nthreads 最少的 arena</li>
+</ul>
+<h1 id="后续版本的一些优化"><a href="#后续版本的一些优化" class="headerlink" title="后续版本的一些优化"></a>后续版本的一些优化</h1><h2 id="background-thread"><a href="#background-thread" class="headerlink" title="background thread"></a>background thread</h2><p>线程名是 <code>jemalloc_bg_thd</code>。</p>
+<h2 id="opt-retain"><a href="#opt-retain" class="headerlink" title="opt_retain"></a>opt_retain</h2><p>主要是在 dealloc 的时候要不要调用 pages_unmap。</p>
+<p>在 5.2.1 中引入了 opt_retain。如果开启了 opt_retain，那么进行 munmap 可能还会导致 rss 无法快速释放。原因是 purge 的时候可能使用 MADV_FREE。【Q】但实际我好像没观察到这一部分影响有多大。</p>
+<p>从代码来看，这个功能主要被 extent_purge_lazy_default 调用，实际上对应了 extent_hooks_t 中的 purge_lazy 方法。在代码中还是被广泛使用的。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">bool</span></span><br><span class="line">pages_purge_lazy(<span class="keyword">void</span> *addr, <span class="keyword">size_t</span> size) &#123;</span><br><span class="line">    assert(ALIGNMENT_ADDR2BASE(addr, os_page) == addr);</span><br><span class="line">    assert(PAGE_CEILING(size) == size);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!pages_can_purge_lazy) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (!pages_can_purge_lazy_runtime) &#123;</span><br><span class="line">        <span class="comment">/*</span></span><br><span class="line"><span class="comment">         * Built with lazy purge enabled, but detected it was not</span></span><br><span class="line"><span class="comment">         * supported on the current system.</span></span><br><span class="line"><span class="comment">         */</span></span><br><span class="line">        <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="meta-keyword">ifdef</span> _WIN32</span></span><br><span class="line">    VirtualAlloc(addr, size, MEM_RESET, PAGE_READWRITE);</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">elif</span> defined(JEMALLOC_PURGE_MADVISE_FREE)</span></span><br><span class="line">    <span class="keyword">return</span> (madvise(addr, size,</span><br><span class="line">#  ifdef MADV_FREE</span><br><span class="line">        MADV_FREE</span><br><span class="line">#  <span class="keyword">else</span></span><br><span class="line">        JEMALLOC_MADV_FREE</span><br><span class="line">#  endif</span><br><span class="line">        ) != <span class="number">0</span>);</span><br><span class="line"><span class="meta">#<span class="meta-keyword">elif</span> defined(JEMALLOC_PURGE_MADVISE_DONTNEED) &amp;&amp; \</span></span><br><span class="line">    !defined(JEMALLOC_PURGE_MADVISE_DONTNEED_ZEROS)</span><br><span class="line">    <span class="keyword">return</span> (madvise(addr, size, MADV_DONTNEED) != <span class="number">0</span>);</span><br><span class="line"><span class="meta">#<span class="meta-keyword">else</span></span></span><br><span class="line">    not_reached();</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>注意，初始化的时候会有检查这个功能是否可以有</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">...</span><br><span class="line">    <span class="keyword">if</span> (pages_can_purge_lazy) &#123;</span><br><span class="line">        <span class="keyword">bool</span> committed = <span class="literal">false</span>;</span><br><span class="line">        <span class="keyword">void</span> *madv_free_page = os_pages_map(<span class="literal">NULL</span>, PAGE, PAGE, &amp;committed);</span><br><span class="line">        <span class="keyword">if</span> (madv_free_page == <span class="literal">NULL</span>) &#123;</span><br><span class="line">            <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        assert(pages_can_purge_lazy_runtime);</span><br><span class="line">        <span class="keyword">if</span> (pages_purge_lazy(madv_free_page, PAGE)) &#123;</span><br><span class="line">            pages_can_purge_lazy_runtime = <span class="literal">false</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        os_pages_unmap(madv_free_page, PAGE);</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
+
+<h1 id="一些写法"><a href="#一些写法" class="headerlink" title="一些写法"></a>一些写法</h1><h2 id="计算-map-bias"><a href="#计算-map-bias" class="headerlink" title="计算 map_bias"></a>计算 map_bias</h2><p>在 arena_boot 中计算。</p>
+<p>变量常量介绍：</p>
+<ul>
+<li>chunk_npages 表示 chunk 中 page 的总数。</li>
+<li>LG_PAGE：一个 page 是 2 ** LG_PAGE 这么大。</li>
+</ul>
+<p>每次迭代算出一个 header_size，并向上取整计算 header 需要多少 page 存放。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">map_bias = <span class="number">0</span>;</span><br><span class="line"><span class="keyword">for</span> (i = <span class="number">0</span>; i &lt; <span class="number">3</span>; i++) &#123;</span><br><span class="line">    <span class="keyword">size_t</span> header_size = offsetof(<span class="keyword">arena_chunk_t</span>, map_bits) +</span><br><span class="line">        ( ( <span class="keyword">sizeof</span>(<span class="keyword">arena_chunk_map_bits_t</span>) +</span><br><span class="line">            <span class="keyword">sizeof</span>(<span class="keyword">arena_chunk_map_misc_t</span>) ) * (chunk_npages-map_bias) );</span><br><span class="line">    map_bias = (header_size + PAGE_MASK) &gt;&gt; LG_PAGE;</span><br><span class="line">&#125;</span><br><span class="line">assert(map_bias &gt; <span class="number">0</span>);</span><br></pre></td></tr></table></figure>
+
+<p>随便取几个值跑下这个算法，可以看出，第二个迭代中，实际分配的 header 的大小 allocated_header_size 可能小于真实需要的 header 大小 real_payload_header_size。如果 bits_size + misc_size 越大，那么这个效应越明显。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;cstdio&gt;</span></span></span><br><span class="line"><span class="keyword">const</span> <span class="keyword">int</span> bits_size = <span class="number">4</span>;</span><br><span class="line"><span class="keyword">const</span> <span class="keyword">int</span> misc_size = <span class="number">128</span>;</span><br><span class="line"><span class="keyword">const</span> <span class="keyword">int</span> fixed_head = <span class="number">1024</span>;</span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="keyword">int</span> chunk_npages = <span class="number">4096</span>;</span><br><span class="line">    <span class="keyword">int</span> map_bias = <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">0</span>; i &lt; <span class="number">3</span>; i++) &#123;</span><br><span class="line">        <span class="keyword">size_t</span> header_size = fixed_head +</span><br><span class="line">            ( ( bits_size +</span><br><span class="line">                misc_size ) * (chunk_npages-map_bias) );</span><br><span class="line">        map_bias = (header_size + <span class="number">4096</span>) &gt;&gt; <span class="number">12</span>;</span><br><span class="line">        <span class="keyword">int</span> allocated_header_size = map_bias * <span class="number">4096</span>;</span><br><span class="line">        <span class="keyword">int</span> real_payload_header_size = (bits_size + misc_size) * (chunk_npages-map_bias) + fixed_head;</span><br><span class="line">        <span class="built_in">printf</span>(<span class="string">"map_bias %u payload %u header_size %u real_payload_header_size %u allocated_header_size %u\n"</span>, map_bias, chunk_npages-map_bias, header_size, real_payload_header_size, allocated_header_size);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">map_bias <span class="number">133</span> payload <span class="number">3963</span> header_size <span class="number">541696</span> real_payload_header_size <span class="number">524140</span> allocated_header_size <span class="number">544768</span></span><br><span class="line">map_bias <span class="number">128</span> payload <span class="number">3968</span> header_size <span class="number">524140</span> real_payload_header_size <span class="number">524800</span> allocated_header_size <span class="number">524288</span></span><br><span class="line">map_bias <span class="number">129</span> payload <span class="number">3967</span> header_size <span class="number">524800</span> real_payload_header_size <span class="number">524668</span> allocated_header_size <span class="number">528384</span></span><br></pre></td></tr></table></figure>
+
+<p>可见：</p>
+<ul>
+<li>第一个迭代假设每个 page 都有一个 map_bit 和 map_misc，这种情况下算出来的 map_bias 偏大，payload 就少了。</li>
+<li>第二个迭代因为 payload 少了，所以 header 就会偏小。</li>
+</ul>
+<h1 id="一些结构"><a href="#一些结构" class="headerlink" title="一些结构"></a>一些结构</h1><h2 id="pages"><a href="#pages" class="headerlink" title="pages"></a>pages</h2><p>是和 mmap 有关的内存页面分配的基础函数。</p>
+<p>pages_decommit 是一个底层内存管理函数，主要用“解除提交”物理内存（释放物理内存或交换空间），但保留虚拟地址空间的映射。它的行为类似于 mprotect(addr, length, PROT_NONE)。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">ifndef</span> _WIN32</span></span><br><span class="line"><span class="meta">#  <span class="meta-keyword">define</span> PAGES_PROT_COMMIT (PROT_READ | PROT_WRITE)</span></span><br><span class="line"><span class="meta">#  <span class="meta-keyword">define</span> PAGES_PROT_DECOMMIT (PROT_NONE)</span></span><br><span class="line"><span class="keyword">static</span> <span class="keyword">int</span>  mmap_flags;</span><br><span class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">...</span><br><span class="line">        <span class="keyword">int</span> prot = commit ? PAGES_PROT_COMMIT : PAGES_PROT_DECOMMIT;</span><br><span class="line">        <span class="keyword">void</span> *result = mmap(addr, size, prot, mmap_flags | MAP_FIXED,</span><br><span class="line">            <span class="number">-1</span>, <span class="number">0</span>);</span><br><span class="line">        <span class="keyword">if</span> (result == MAP_FAILED) &#123;</span><br><span class="line">            <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">if</span> (result != addr) &#123;</span><br><span class="line">            <span class="comment">/*</span></span><br><span class="line"><span class="comment">             * We succeeded in mapping memory, but not in the right</span></span><br><span class="line"><span class="comment">             * place.</span></span><br><span class="line"><span class="comment">             */</span></span><br><span class="line">            os_pages_unmap(result, size);</span><br><span class="line">            <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">        &#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="qr"><a href="#qr" class="headerlink" title="qr"></a>qr</h2><p>是一个 deque，或者 List 的实现。</p>
+<h2 id="rb"><a href="#rb" class="headerlink" title="rb"></a>rb</h2><p>提供了红黑树相关的方法，例如 <code>_remove</code> 等。</p>
+<p>红黑树被广泛使用，例如：</p>
+<ul>
+<li>extent_tree_szad_</li>
+<li>extent_tree_ad_</li>
+</ul>
+<h2 id="【5-2-1】extent"><a href="#【5-2-1】extent" class="headerlink" title="【5.2.1】extent"></a>【5.2.1】extent</h2><p>extent 是一个基于红黑树的，用来分配内存的结构。它被 5.x 之后引入，用来替代 chunk。</p>
+<p>一般调用类似 <code>extent_tree_szad_remove</code> 的方法，表示从 extent 中分配一块内存。此时，会从 extent 的 szad 中删除对应内存的标记信息。</p>
+<h2 id="bitmap"><a href="#bitmap" class="headerlink" title="bitmap"></a>bitmap</h2><p>bitmap 中记录了一些比较有趣的实现。比如 <code>USE_TREE</code> 提出了一个有意思的结构。</p>
+<p>bitmap 初始都是 1，set 一个位会将它变为 0。然后有一系列的比如 full、get、set、unset 之类的方法。包括 sfu 这个方法可以查询第一个 bit 0 的位置，然后将其设置为 1。</p>
+<h2 id="phn"><a href="#phn" class="headerlink" title="phn"></a>phn</h2><p>这是一个堆的实现。</p>
+<h2 id="base"><a href="#base" class="headerlink" title="base"></a>base</h2><p>这是 base allocator，是 jemalloc 初始化时候使用的一个低级分配方式。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">void</span> *</span><br><span class="line">base_alloc(<span class="keyword">tsdn_t</span> *tsdn, <span class="keyword">size_t</span> size)</span><br><span class="line">&#123;</span><br><span class="line">...</span><br><span class="line">    usize = s2u(csize);</span><br><span class="line">    extent_node_init(&amp;key, <span class="literal">NULL</span>, <span class="literal">NULL</span>, usize, <span class="literal">false</span>, <span class="literal">false</span>);</span><br><span class="line">    malloc_mutex_lock(tsdn, &amp;base_mtx);</span><br><span class="line">    node = extent_tree_szad_nsearch(&amp;base_avail_szad, &amp;key);</span><br><span class="line">    <span class="keyword">if</span> (node != <span class="literal">NULL</span>) &#123;</span><br><span class="line">        <span class="comment">/* Use existing space. */</span></span><br><span class="line">        extent_tree_szad_remove(&amp;base_avail_szad, node);</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        <span class="comment">/* Try to allocate more space. */</span></span><br><span class="line">        node = base_chunk_alloc(tsdn, csize);</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
+
+<h1 id="一些知识"><a href="#一些知识" class="headerlink" title="一些知识"></a>一些知识</h1><p><a href="/2025/01/03/memory-context-knowledge/">见内存领域知识</a></p>
+<h1 id="一些方法"><a href="#一些方法" class="headerlink" title="一些方法"></a>一些方法</h1><h2 id="如何编译"><a href="#如何编译" class="headerlink" title="如何编译"></a>如何编译</h2><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">./configure --enable-prof --enable-log</span><br><span class="line">make -j40 &amp;&amp; g++ test.cpp -Iinclude -ljemalloc -o test2 &amp;&amp; ./test2</span><br><span class="line">LD_LIBRARY_PATH=./lib/ ./test2</span><br></pre></td></tr></table></figure>
+
+<h2 id="如何-debug"><a href="#如何-debug" class="headerlink" title="如何 debug"></a>如何 debug</h2><p>指定 log 这个隐藏 conf，就可以打印日志。注意，需要 <code>--enable-log</code> 编译选项。</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">export</span> MALLOC_CONF=<span class="string">"log:."</span></span><br></pre></td></tr></table></figure>
+
+<p>在需要的地方可以使用</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">LOG(<span class="string">"module_name"</span>, <span class="string">"formatter"</span>, ...)</span><br></pre></td></tr></table></figure>
+
+<p>然后可以指定 <code>log:module_name</code>，从而只打印自己想要的一部分日志。</p>
+<p>例如可以 <code>export MALLOC_CONF=&quot;prof:true,lg_prof_interval:1,prof_active:true,log:.&quot;</code> 测试 dump。</p>
+<h1 id="关于-jeprof-in-脚本"><a href="#关于-jeprof-in-脚本" class="headerlink" title="关于 jeprof.in 脚本"></a>关于 jeprof.in 脚本</h1><h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ul>
+<li><a href="https://youjiali1995.github.io/allocator/jemalloc/" target="_blank" rel="noopener">https://youjiali1995.github.io/allocator/jemalloc/</a><br>  基于 4.5 之前的版本</li>
+<li><a href="https://yaoguais.github.io/article/jemalloc/structures.html" target="_blank" rel="noopener">https://yaoguais.github.io/article/jemalloc/structures.html</a></li>
+<li><a href="https://github.com/leebaok/jemalloc-4.2.1-readcode/blob/readcode/readcode/more.md" target="_blank" rel="noopener">https://github.com/leebaok/jemalloc-4.2.1-readcode/blob/readcode/readcode/more.md</a></li>
+<li><a href="https://youjiali1995.github.io/allocator/jemalloc-purge/" target="_blank" rel="noopener">https://youjiali1995.github.io/allocator/jemalloc-purge/</a><br>  5.0.1 版本 purge 的改进</li>
+</ul>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/C/" rel="tag"># C++</a>
+          
+            <a href="/tags/内存管理/" rel="tag"># 内存管理</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2024/12/29/rocksdb-compaction/" rel="next" title="RocksDB 的 Compaction 策略">
+                <i class="fa fa-chevron-left"></i> RocksDB 的 Compaction 策略
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2025/01/03/memory-context-knowledge/" rel="prev" title="内存领域知识">
+                内存领域知识 <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">262</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">154</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#设计理念"><span class="nav-number">1.</span> <span class="nav-text">设计理念</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#实现理念"><span class="nav-number">2.</span> <span class="nav-text">实现理念</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#基本情况"><span class="nav-number">2.1.</span> <span class="nav-text">基本情况</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#4-5-版本"><span class="nav-number">2.1.1.</span> <span class="nav-text">4.5 版本</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#【4-5-版本】chuck-的基本设计"><span class="nav-number">2.2.</span> <span class="nav-text">【4.5 版本】chuck 的基本设计</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#【4-5-版本】run-的基本设计"><span class="nav-number">2.3.</span> <span class="nav-text">【4.5 版本】run 的基本设计</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#【4-5-版本】bin-的基本设计"><span class="nav-number">2.4.</span> <span class="nav-text">【4.5 版本】bin 的基本设计</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#free"><span class="nav-number">2.5.</span> <span class="nav-text">free</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#5-2-1"><span class="nav-number">2.5.1.</span> <span class="nav-text">5.2.1</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#【5-2-1-版本】-extent-gt-slab-gt-region"><span class="nav-number">2.6.</span> <span class="nav-text">【5.2.1 版本】 extent -&gt; slab -&gt; region</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#purge"><span class="nav-number">2.7.</span> <span class="nav-text">purge</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#muzzy-和-dirty"><span class="nav-number">2.7.1.</span> <span class="nav-text">muzzy 和 dirty</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#何时-purge"><span class="nav-number">2.7.2.</span> <span class="nav-text">何时 purge</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Smooth-steps-曲线"><span class="nav-number">2.7.3.</span> <span class="nav-text">Smooth steps 曲线</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#5-2-1-版本的-purge-和-decay"><span class="nav-number">2.7.4.</span> <span class="nav-text">5.2.1 版本的 purge 和 decay</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#arena-decay-to-limit-的实现"><span class="nav-number">2.7.4.1.</span> <span class="nav-text">arena_decay_to_limit 的实现</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4-5-如何-purge"><span class="nav-number">2.7.5.</span> <span class="nav-text">4.5 如何 purge</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#chunk-的释放策略"><span class="nav-number">2.7.5.1.</span> <span class="nav-text">chunk 的释放策略</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#run-的释放策略"><span class="nav-number">2.7.5.2.</span> <span class="nav-text">run 的释放策略</span></a></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#tcache"><span class="nav-number">2.8.</span> <span class="nav-text">tcache</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#tsd"><span class="nav-number">2.8.1.</span> <span class="nav-text">tsd</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#tcache-alloc-small"><span class="nav-number">2.8.2.</span> <span class="nav-text">tcache_alloc_small</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#DSS-Dynamic-Storage-Segments"><span class="nav-number">2.9.</span> <span class="nav-text">DSS(Dynamic Storage Segments)</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#malloc-的简单流程"><span class="nav-number">2.10.</span> <span class="nav-text">malloc 的简单流程</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#从实现分析设计理念"><span class="nav-number">3.</span> <span class="nav-text">从实现分析设计理念</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#最大化内存分配和释放的性能"><span class="nav-number">3.1.</span> <span class="nav-text">最大化内存分配和释放的性能</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#减少内部碎片和外部碎片"><span class="nav-number">3.2.</span> <span class="nav-text">减少内部碎片和外部碎片</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#减少线程之间的竞争"><span class="nav-number">3.3.</span> <span class="nav-text">减少线程之间的竞争</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#后续版本的一些优化"><span class="nav-number">4.</span> <span class="nav-text">后续版本的一些优化</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#background-thread"><span class="nav-number">4.1.</span> <span class="nav-text">background thread</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#opt-retain"><span class="nav-number">4.2.</span> <span class="nav-text">opt_retain</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#一些写法"><span class="nav-number">5.</span> <span class="nav-text">一些写法</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#计算-map-bias"><span class="nav-number">5.1.</span> <span class="nav-text">计算 map_bias</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#一些结构"><span class="nav-number">6.</span> <span class="nav-text">一些结构</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#pages"><span class="nav-number">6.1.</span> <span class="nav-text">pages</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#qr"><span class="nav-number">6.2.</span> <span class="nav-text">qr</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#rb"><span class="nav-number">6.3.</span> <span class="nav-text">rb</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#【5-2-1】extent"><span class="nav-number">6.4.</span> <span class="nav-text">【5.2.1】extent</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#bitmap"><span class="nav-number">6.5.</span> <span class="nav-text">bitmap</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#phn"><span class="nav-number">6.6.</span> <span class="nav-text">phn</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#base"><span class="nav-number">6.7.</span> <span class="nav-text">base</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#一些知识"><span class="nav-number">7.</span> <span class="nav-text">一些知识</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#一些方法"><span class="nav-number">8.</span> <span class="nav-text">一些方法</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#如何编译"><span class="nav-number">8.1.</span> <span class="nav-text">如何编译</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#如何-debug"><span class="nav-number">8.2.</span> <span class="nav-text">如何 debug</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#关于-jeprof-in-脚本"><span class="nav-number">9.</span> <span class="nav-text">关于 jeprof.in 脚本</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">10.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2025/01/03/jemalloc-impl/';
+          this.page.identifier = '2025/01/03/jemalloc-impl/';
+          this.page.title = 'jemalloc 的实现';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>

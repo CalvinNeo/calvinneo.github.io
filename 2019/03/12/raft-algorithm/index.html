@@ -1,0 +1,1518 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="分布式,raft,论文阅读,一致性," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="本文来自我的文章分布式一致性和分布式共识协议太长，因此将其中的Raft部分单独列出来作为一篇文章。 Raft协议的设计者们认为Paxos协议非常难于理解，并且需要作出很多修改才能够应用到工程中，因此设计了偏重于实现的Raft协议，这甚至体现在他们的论文标题《In Search of an Understandable Consensus Algorithm(Extended Version)》上，">
+<meta name="keywords" content="分布式,raft,论文阅读,一致性">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Raft共识算法">
+<meta property="og:url" content="http://www.calvinneo.com/2019/03/12/raft-algorithm/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="本文来自我的文章分布式一致性和分布式共识协议太长，因此将其中的Raft部分单独列出来作为一篇文章。 Raft协议的设计者们认为Paxos协议非常难于理解，并且需要作出很多修改才能够应用到工程中，因此设计了偏重于实现的Raft协议，这甚至体现在他们的论文标题《In Search of an Understandable Consensus Algorithm(Extended Version)》上，">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:image" content="http://www.calvinneo.com/img/fbs/raft/rzfg.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/fbs/raft/byzzt.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/fbs/raft/f10.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/fbs/raft/f11.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/fbs/raft_exam/1.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/fbs/raft_exam/2.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/fbs/raft_exam/3.png">
+<meta property="og:updated_time" content="2025-03-14T05:59:41.991Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Raft共识算法">
+<meta name="twitter:description" content="本文来自我的文章分布式一致性和分布式共识协议太长，因此将其中的Raft部分单独列出来作为一篇文章。 Raft协议的设计者们认为Paxos协议非常难于理解，并且需要作出很多修改才能够应用到工程中，因此设计了偏重于实现的Raft协议，这甚至体现在他们的论文标题《In Search of an Understandable Consensus Algorithm(Extended Version)》上，">
+<meta name="twitter:image" content="http://www.calvinneo.com/img/fbs/raft/rzfg.png">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2019/03/12/raft-algorithm/"/>
+
+
+
+
+
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5487541356791902"
+     crossorigin="anonymous"></script>
+  <title>Raft共识算法 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2019/03/12/raft-algorithm/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                Raft共识算法
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2019-03-12T12:33:22+08:00">
+                2019-03-12
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>本文来自我的文章<a href="/2017/09/20/distributed-system-consistency-and-consensus/">分布式一致性和分布式共识协议</a>太长，因此将其中的Raft部分单独列出来作为一篇文章。</p>
+<p>Raft协议的设计者们认为Paxos协议非常难于理解，并且需要作出很多修改才能够应用到工程中，因此设计了偏重于实现的Raft协议，这甚至体现在他们的论文标题《In Search of an Understandable Consensus Algorithm(Extended Version)》上，此外作者也提供了一个C++版本的实现<a href="https://github.com/logcabin/liblogcabin" target="_blank" rel="noopener">liblogcabin</a>。Raft协议主要分为三个模块，Leader election、Log replication和Safety。<br>Raft将服务器节点分为Leader、Candidate和Follower三种，协调者被称为领袖/主(Leader)，参与者被称为群众(Follower)。相对于其他的协议，Raft中的Leader更强，这体现在：</p>
+<ol>
+<li>Leader是唯一的。</li>
+<li>Log entries只能从Leader发送给其他服务器，事实上Follower不主动发送，而只响应来自Leader和Candidate的请求。</li>
+<li>客户端只能和Leader交互，如果客户端首先连上了Follower，那么会被Follower转发给Leader。</li>
+<li>Raft的独特之处还在于其在Leader election的过程中Raft使用了随机计时器进行超时。此外，Raft还提供了一个joint consensus的算法处理Membership changes的问题。</li>
+</ol>
+<a id="more"></a>
+
+<h1 id="Raft基础概念"><a href="#Raft基础概念" class="headerlink" title="Raft基础概念"></a>Raft基础概念</h1><h2 id="状态"><a href="#状态" class="headerlink" title="状态"></a>状态</h2><p>Raft协议要求在每个节点上维护以下的状态：</p>
+<h3 id="共有状态"><a href="#共有状态" class="headerlink" title="共有状态"></a>共有状态</h3><p>注意<code>currentTerm</code>、<code>votedFor</code>、<code>log[]</code>这三个状态是持久化的，其他的则是volatile的。</p>
+<ol>
+<li><code>currentTerm</code><br> 这个在后面的讨论中非常常用，表示了当前服务器已知的最新任期。</li>
+<li><code>votedFor</code><br> 顾名思义。</li>
+<li><code>log[]</code><br> 这个是日志，是我们需要维护一致性的对象。</li>
+<li><code>commitIndex</code><br> <strong>已知的</strong>最大的已经被提交(Commit)的日志条目的index。<br> 对Follower来说，这个是根据来自Leader的<code>AppendEntriesRPC</code>中的<code>leaderCommit</code>字段来更新。</li>
+<li><code>lastApplied</code><br> 一旦<code>commitIndex &gt; lastApplied</code>，那么就将<code>[lastApplied + 1, commitIndex]</code>区间里的日志条目依次apply到复制状态机上。我们这里仍然要特别注意提交(commit)与应用(apply)区别。一个是针对日志，一个是针对RSM。</li>
+</ol>
+<h3 id="Leader专用状态"><a href="#Leader专用状态" class="headerlink" title="Leader专用状态"></a>Leader专用状态</h3><ol>
+<li><code>nextIndex[]</code>：对于每一个服务器，Leader下一个需要发送给它的日志条目的索引值。初始值（当某个节点成为Leader后进行这项初始化）为Leader的<code>logs.size()</code>。在一些实现中会使用<code>commitIndex + 1</code>。</li>
+<li><code>matchIndex[]</code>：对于每一个服务器，已经复制给他的日志的最大索引值。初始值为-1，这个值是非常保守的。<br>这两个值是Leader用来同步各Follower的日志的，但是当一个节点成为Leader时，它实际上并不知道其他节点上的日志情况，所以它给出的值都是需要调整的。这个调整的过程非常巧妙，它是和日志复制一同进行的。我们将在Log replication部分详细说明。</li>
+</ol>
+<h2 id="任期"><a href="#任期" class="headerlink" title="任期"></a>任期</h2><p>Raft中的Leader具有任期term机制，每个term只会对应一个Leader，所以可以<strong>通过term唯一标识这个Leader</strong>。每个节点维护有自己<strong>已知</strong>最新的<code>currentTerm</code>，出于网络分区等原因，它<strong>不一定是全局最新的</strong>。服务器之间通信时会交换各自的任期号，根据论文5.1节，如果一个节点检查到自己的<code>currentTerm</code>小于对方在RPC（包括Request和Response）中附带的<code>term</code>，则更新到较大的任期值；相对应地，如果检测到自己的大于对方的，则忽略对方的请求。当一个Leader发现自己具有过期的任期时，它会立刻切换成Follower。<br>注意，一个有<strong>较大任期号的<code>RequestVote</code>请求并不意味着发送该请求的节点是Leader</strong>。但是一个<strong>较大任期号的<code>AppendEntries</code>请求一定是来自Leader的</strong>，因为只有Leader会发送AppendEntries。</p>
+<h3 id="一个有趣的问题（一个离题的讨论）"><a href="#一个有趣的问题（一个离题的讨论）" class="headerlink" title="一个有趣的问题（一个离题的讨论）"></a>一个有趣的问题（一个离题的讨论）</h3><p>在Raft编程实践中，当节点收到一个Candidate的RequestVote请求时更新term的做法，在判断选举结束时会有一些麻烦。一般地，假如观测Candidate节点，当它收到足够的票数时我们能够知道新Leader被决议出来，并且就是自己。但假如我们观测Follower节点，那么当它<strong>第一次</strong>收到新Leader合法的<code>AppendEntries</code>心跳时我们知道新Leader被决议出来，并且是发送方。但我们发现第一次和第二次并不是那么好区分，因为无论是第几次，我们观测的节点始终是Follower，而term也始终没有变（不然说明Leader又换了）。所以我们会使用另外的状态<code>leader_name</code>来维护Leader的名字，并在第一次收到心跳时设置其值为发送方，在丢失Leader或发现选举开始时将其值清空。这样我们就可以通过值是否为空来判断是否是第一次收到心跳了，于是我们能够准确找出选举结束的时刻。</p>
+<h2 id="日志与日志约束"><a href="#日志与日志约束" class="headerlink" title="日志与日志约束"></a>日志与日志约束</h2><p>来自客户端的请求被表示成一系列将被应用到复制状态机上的指令，这些指令在Raft集群的所有节点上被记录为日志条目(Log Entries)。在每个日志条目中记录了对应的term以及是否该条目已经被提交。Raft协议下要求日志满足以下的约束（论文图3），这些约束贯穿Raft整个算法，并且是相互密不可分的。</p>
+<ol>
+<li>领导人只附加原则(Leader Append-Only)（论文节5.3详细论述）<br> <strong>Leader</strong>绝对不会删除或者覆盖<strong>自己的日志</strong>，只会增加。上文中已经说了在Log replication部分会介绍一个Leader优雅的逐步同步Follower的日志，以求达到和自己一致的方法。而这换句话说也就意味着<strong>当Leader和Follower不一致时，永远是Follower顺应Leader</strong>，此时<strong>Follower的日志可能会被Leader覆盖</strong>。</li>
+<li>日志匹配原则(Log Matching)（论文节5.3详细论述）<br> 这个原则包含以下两个小点：<ol>
+<li>如果不同节点上的日志中的两个条目具有相同的index和term，那么这两个条目的内容是一致的。<br> 这个特性为下面的领导人完全性提供了<strong>必要保证</strong>。<br> 我们知道一个日志条目必然是由某个Leader在某个index创建的，根据领导人只附加原则，每个领导人在index创建的日志条目必然是unique的，因为日志的删除和覆盖不被允许。而在论述任期机制时我们又知道term是能唯一标识Leader的。综上，可以<strong>仅根据index和term唯一标识</strong>一个日志条目。</li>
+<li>如果不同节点上的日志中的两个条目具有相同的index和term，那么这两个日志<strong>index前</strong>的部分也相同。<br> 这是由<code>AppendEntriesRPC</code>这个RPC中<code>prevLogIndex</code>和<code>prevLogTerm</code>两个字段保证的。当一个<code>AppendEntriesRPC</code>命令到达时，Follower会比较自己是否具有<code>prevLogIndex</code>和<code>prevLogTerm</code>所标记的条目，如果没有（这意味着诸如Leader宕机等情况导致的诸如没有能够全部复制到所有节点的情况）则拒绝这次添加（此时<code>AppendEntriesRPC</code>失败了），并且会削减掉自己已知的不符合Leader日志的部分（可以查看后文有关<code>AppendEntriesRPC</code>的部分）。因此每一次的<code>AppendEntriesRPC</code>都会附带一次check，从而保证了这条性质，有点类似于归纳法(induction)。<br> 根据日志匹配原则，我们在实现时可断言<code>logs.size() == logs.back().index() + 1 == last_log_index() + 1</code>。除非出现了Log compact的情况，这也是我们在实现时应当小心使用<code>log.size()</code>和<code>logs[]</code>的原因。</li>
+</ol>
+</li>
+<li>领导人完全性(Leader Completeness)<br> 这个特性是Raft的一个核心特性。如果某个日志条目在某个term中已经被<strong>提交</strong>，那么这个条目必然出现在所有具有更大的term的Leader中，在这里<strong>已提交</strong>是必须的，我们将在Log replication中进行详细说明。这个规定实际上保证了选出的Leader拥有所有<strong>已经提交</strong>的日志条目，容易看出，我们先前的领导人只附加原则实际上为这个特性提供了条件。<br> 根据<a href="https://zhuanlan.zhihu.com/p/26330001" target="_blank" rel="noopener">这篇文章</a>的介绍，我们发现领导人完全性是Raft容易实现的一个重要原因。通过领导人完全性原则，Raft协议<strong>不再允许日志空洞</strong>，也就是说Leader必须含有全部已提交记录，<strong>一个日志落后的节点不可能被选为Leader</strong>。而在Paxos协议族中的一些协议是允许具有日志空洞的节点成为Leader，再在后面异步地填自己的日志空洞的。而在Raft中，只有Leader通过<code>AppendEntriesRPC</code>单向向全部Follower复制日志。</li>
+<li>状态机安全特性(State Machine Safety)<br> 如果一个Leader已经<strong>apply</strong>了位于index的日志条目，那么没有任何服务器可以在这个index上<strong>apply</strong>一个不同的日志条目。<br> 状态机安全特性实际上保证了所有的服务器都会按照<strong>相同的顺序</strong>提交相同的日志给RSM（论文5.4.3节旁注）。事实上根据领导人完全性可以证明状态机安全性，首先一个被apply的日志必须是已提交并与Leader相同的。如果某个较早term上的日志条目被apply的话，日志匹配原则能够保证所有之后term对应的Leader都拥有相同的日志条目，因此他们稍后也会apply相同的日志条目。<br> Raft协议保证一旦条目被提交，那么它是持久化的(durable)（不会被丢失或更改），并且一定会被所有可用的复制状态机执行（论文5.3节）。</li>
+</ol>
+<h3 id="选举限制-论文5-4-1节"><a href="#选举限制-论文5-4-1节" class="headerlink" title="选举限制(论文5.4.1节)"></a>选举限制(论文5.4.1节)</h3><p>再次总结一下，上面四点日志约束实际上保证了在Raft中的<strong>日志是连续的，中间不会出现空洞</strong>。Raft的论文提到除了Leader-based的共识算法，其他的共识算法并不保证这个特性，例如Viewstamped Replication（此外，还有基于zxid的Zookeeper协议）中，日志是可以拥有空洞的。对于这些协议，需要有一个额外的机制来方便性Leader找回空洞处日志。</p>
+<p>要求日志连续，实际上方便了Follower和Leader之间的同步过程，所有的日志复制是单向从Leader到Follower的，Leader只需要关注Follower上一次的同步位置即可。而在选举过程中，我们也只需要比较<strong>最后一个log的index和term</strong>即可，不需要去比较其他的日志条目了。这也是Raft协议在实现上方便性的来源之一，但也可能会导致一些性能问题。</p>
+<p>在上文中可以看到，实际上通过选举来保证领导人完全性原则，也就是只有拥有<strong>全部已提交</strong>日志的Candidate才有可能胜选，注意，未提交的日志无所谓。因为Candidate至少需要majority票，所以一旦它当选了，说明每一条被提交的日志，会出现在<strong>其中至少一台Server上</strong>。如果说这个Candidate的日志不比majority中任何其他节点的旧，那么他必然持有了所有的已提交日志。</p>
+<p>【注】这里如何日志的新旧，查看“【如何比较日志新旧】”说明。</p>
+<h2 id="RPC"><a href="#RPC" class="headerlink" title="RPC"></a>RPC</h2><p>Raft中定义了两种主要的RPC包，<code>AppendEntriesRPC</code>和<code>RequestVoteRPC</code>。</p>
+<h3 id="AppendEntriesRPC"><a href="#AppendEntriesRPC" class="headerlink" title="AppendEntriesRPC"></a>AppendEntriesRPC</h3><p><code>AppendEntriesRPC</code>具有心跳包和推送日志的作用。此外，通过<code>AppendEntriesRPC</code>还可以发现选举产生的新Leader，可以参考先前讨论任期时提到的有趣的问题。这个RPC包含以下部分</p>
+<ol>
+<li><code>term</code><br> 表示<strong>Leader</strong>的当前任期号。为了表示区别，**下面写作<code>rpc_term_id</code>**。</li>
+<li><code>leaderId</code><br> 表示当前领导人的id，这样来自客户端的请求能被Follower转发给Leader。</li>
+<li><code>prevLogIndex</code>和<code>prevLogTerm</code><br> 表示新日志条目之前的index和其对应的term，这个是为了保障先前提到的日志匹配原则。Leader在构造这两个字段时实际上是根据自己维护的<code>nextIndex[]</code>和<code>matchIndex[]</code>来计算的。</li>
+<li><code>entries</code><br> <code>entries</code>就是我们要维护的日志条目。</li>
+<li><code>leaderCommit</code><br> 表示Leader已经提交的日志的序号，这样其他的服务器才能知道Leader当前的提交位置，并跟随提交。<br> 注意Leader可能<strong>已经Commit了我还没有的日志</strong>，即我们不能<code>assert(request.leader_commit() &lt;= last_log_index())</code>(可以参考我的代码)。</li>
+</ol>
+<h3 id="AppendEntriesRPC-Response"><a href="#AppendEntriesRPC-Response" class="headerlink" title="AppendEntriesRPC Response"></a>AppendEntriesRPC Response</h3><p>Follower在接受到该RPC后会发送回执：</p>
+<ol>
+<li><code>term</code>表示当前的任期号</li>
+<li><code>success</code><br> 表示这次添加是否成功，它的判定规则如下：<ol>
+<li>当<code>rpc_term_id &lt; term</code>时返回false，显然我们不接受一个较老的Leader。</li>
+<li>当不存在满足<code>prevLogIndex</code>的条目时返回false。这个暗示Leader要发靠前一点的Log。</li>
+<li>即使存在<code>prevLogIndex</code>的条目，但这个条目的<code>term</code><strong>不同于</strong><code>prevLogTerm</code>时，删除从<code>prevLogIndex</code>开始的所有项目。<br> 这里的“不同于”是非常重要的，<strong>如果Follower拥有Leader发来的所有的Entries（也就是Leader的更短），他也是不能删除自己后面的Entry的</strong>。当Follower收到RPC时，<code>prevLogIndex</code>肯定是可能大于等于Follower的log大小的，例如Leader收到了Client的新Log。但<code>prevLogIndex</code><strong>也是可能小于Follower的</strong>，最普遍的一种情况是Leader刚选举出来，还在试探Log。还有一种情况是Follower拥有了先前某个Leader复制的一些Log，而当前的Leader没有。还有一些情况是<a href="(https://thesquareplanet.com/blog/students-guide-to-raft/">我们收到了经历了时延的RPC</a>，这曾经导致我希望对RPC编号来解决这个问题，但实际上没必要。在我的代码中，会列举这些情况，以及相关日志。</li>
+<li>添加所有我们log中没有的条目。</li>
+<li>同步<code>leaderCommit</code>。</li>
+</ol>
+ 特别地，对于心跳包，我们<a href="https://thesquareplanet.com/blog/students-guide-to-raft/" target="_blank" rel="noopener">同样应当进行这样的检测</a>。</li>
+</ol>
+<h3 id="RequestVoteRPC"><a href="#RequestVoteRPC" class="headerlink" title="RequestVoteRPC"></a>RequestVoteRPC</h3><ol>
+<li><code>term</code><br> 表示Candidate的任期号</li>
+<li><code>candidateId</code><br> 表示Candidate的id</li>
+<li><code>lastLogIndex</code>和<code>lastLogTerm</code><br> 表示Candidate的最后日志条目的index和term，每个投票者会比较对方是否新于自己的，从而进行投票。</li>
+</ol>
+<h3 id="RequestVoteRPC-Response"><a href="#RequestVoteRPC-Response" class="headerlink" title="RequestVoteRPC Response"></a>RequestVoteRPC Response</h3><p>投票者在接受到该RPC后会基于term和投票规则进行判定，并发送回执</p>
+<ol>
+<li><code>term</code></li>
+<li><code>voteGranted</code>表明是否同意</li>
+</ol>
+<h1 id="Leader-election"><a href="#Leader-election" class="headerlink" title="Leader election"></a>Leader election</h1><h2 id="投票过程"><a href="#投票过程" class="headerlink" title="投票过程"></a>投票过程</h2><p>在2PC中我们看到，参与者必须对协调者有timeout机制，否则整个系统会阻塞，Raft同样有这样的功能，并且Raft的election timeout是在150ms-300ms之间随机的，且每个节点不同。Leader存活时会不停的往所有的节点发送RPC心跳包，考虑一个节点在election timeout时间中没有接到心跳包的情况。站在全局的角度来看，这可能是老Leader挂了，所以得选举出一个新的Leader出来；这也可能是网络延迟/分区的原因，因此可能在选举途中或者结束后老Leader又回来了。但站在这个节点的角度来看，它只能认为Leader已经挂了，因此成为Candidates参加Leader选举。此时它执行下面两个操作：</p>
+<ol>
+<li>递增自己的<code>currentTerm</code></li>
+<li>发送<code>RequestVoteRPC</code>消息给所有节点，这时候节点们根据一定规则进行投票</li>
+</ol>
+<p>【Q】<strong>对于一个合法的RequestVote请求，我们需要更新自己的term么</strong>？<br>根据Raft论文中的“Rules for Servers”条目，只要我们在RPC中发现了一个更新的<code>term</code>，就需要更新自己的term。</p>
+<p>成为Leader需要获得<strong>整个集群</strong>共$N$个节点中过半数（$\ge N/2+1$，例如3个节点则需要两个，4个节点则需要3个）的票，才能成为新的Leader，这是为了保证最多只会有一个Candidate赢得选举。投票可能产生三种结果：</p>
+<ol>
+<li>自己成为Leader<br> 获得过半数票的节点自动成为Leader，并开始发送心跳包，也就是<code>entries</code>字段为空的<code>AppendEntriesRPC</code>。如果其余的节点发现<code>rpc_term_id</code>大于等于自己的<code>currentTerm</code>时就可以知道已经选出一个新主了，此时选举结束，Candidate重新变为Follower，并同步自己的<code>currentTerm</code>与新主一致。<br> 假设先前是老Leader发生网络分区从而导致选举的产生，在新Leader产生后网络又恢复了。此时他收到了来自新Leader的心跳包。显然这个心跳包中的<code>rpc_term_id</code>比老Leader自己的<code>currentTerm</code>要大，根据任期的约束，老Leader知道了新Leader的存在，切回Follower状态并更新任期。如果老Leader在发现新Leader依然履行了一次职责，发送了一个<code>AppendEntriesRPC</code>。首先它会被Candidate和已经发现新Leader的节点拒绝，因为它们的任期号肯定比老Leader的要大。</li>
+<li>别人成为Leader<br> 对应于第一种情况，此时自己发现了大于等于自己的Leader传来的心跳，于是自己退出选举。</li>
+<li>没有Leader产生<br> 这发生在没有节点获得过半数的票的情境下，例如有很多Follower的timeout时间比较接近，在选举开始时都timeout变成了Candidate，这时候每个Candidate都会投给自己，所以没有Candidate能获得大多数。此时认为<code>currentTerm + 1</code>届的任期以没有Leader告终，节点们开始下一轮的election timeout。由于每个节点election timeout时间都是随机的，所以下一次出现timeout时间接近的可能性并不高。</li>
+</ol>
+<h2 id="投票原则"><a href="#投票原则" class="headerlink" title="投票原则"></a>投票原则</h2><p>在上一节中我们提到收到<code>RequestVoteRPC</code>请求的节点会根据一定规则进行投票，事实上这是非常重要的，因为我们需要维护领导人完全性的原则。在Raft原论文中，这一部分是放到Safety章节来说明的，因此有必要在阅读此部分时首先查看Log replication章节。</p>
+<p>Log replication部分的一个规则：当Leader创建的某日志条目被成功复制到过半数的服务器上时，Leader才能提交该条目。那么，一个Candidate必须得到过半数的节点的支持才能当选。因为这样才能保证每一个<strong>已经提交</strong>的日志条目必然存在在这里面至少一个节点上。</p>
+<p><strong>【如何比较日志新旧】</strong>下面进行另一个断言：</p>
+<ol>
+<li>如果两份日志最后的条目的term不同，那么<strong>term大的日志新</strong>。</li>
+<li>如果两份日志最后的条目term相同，那么<strong>日志长</strong>的那个就新。</li>
+<li>如果一个Candidate的日志和大多数的节点至少一样新，那么它一定持有了所有已经提交的日志条目。</li>
+</ol>
+<p>具体原因我们在稍后讨论，现在这个断言描述了给VoteFor某个<code>RequestVoteRPC</code>的条件：</p>
+<ol>
+<li>远端的<code>term</code>（也就是在<code>RequestVoteRPC</code>传递的）不能小于自己的<code>term</code></li>
+<li>远端的<code>lastLogTerm</code>不能小于自己的<code>lastLogTerm</code><br> 注意这个条件不能省略，因为脑裂的节点可以<strong>无限增加自己的<code>currentTerm</code><strong>，所以实际上仍然需要</strong>通过比较日志来决定谁是最新的</strong>。</li>
+<li>如果远端和自己的<code>lastLogTerm</code>相等，那么远端的<code>lastLogIndex</code>不能小于自己的<code>lastLogIndex</code></li>
+</ol>
+<p>注意，有时候一个刚竞选成功的Leader会收到同term的Candidate的Vote请求，而它会给一个Candidate投票。<a href="https://paste.ubuntu.com/p/zrz29bgFPk/" target="_blank" rel="noopener">参考下面的log</a>。这应该是一个错误的实现导致的，**当Leader竞选成功时，不需要重置其<code>vote_for</code>**。</p>
+<h1 id="Log-replication"><a href="#Log-replication" class="headerlink" title="Log replication"></a>Log replication</h1><p>一旦由<strong>当前Leader</strong>创建的某日志条目被成功复制到<strong>过半数</strong>的服务器上时，这个Leader可以Commit<strong>该条目</strong>及自己日志中<strong>该条目之前的所有条目</strong>（论文5.4.2节会提到一些细节证明）。这里要求至少过半数实际上为前面的选举投票顺利进行提供了保障，剩余的节点（可能因为宕机或者脑裂没收到）可以在后面慢慢AppendEntries。不需要全部成功复制的原因会在Safety中进行论证。有意思的是即使先前的条目可能是由其他Leader创建的，但这也不影响提交。马上可以看到，这种方式实际上是唯一正确提交较旧的term的日志条目的方法。</p>
+<p>在<code>AppendEntriesRPC</code>中，Leader还通过<code>leaderCommit</code>字段来告知所有的Follower自己当前的提交位置，每个服务器会试图在本地提交直到<code>commitIndex</code>的日志。注意到有的服务器可能在本地并没有这个<code>commitIndex</code>的日志，因此它只能提交到自己最新日志条目的index位置。在更新完后，每个节点会更新<code>lastApplied</code>，从而将新的<code>commitIndex</code>后面的日志条目应用到复制状态机上。在apply之后，Leader便可以向客户返回结果。</p>
+<h2 id="不能提交来自较旧任期的日志条目-论文5-4-2节"><a href="#不能提交来自较旧任期的日志条目-论文5-4-2节" class="headerlink" title="不能提交来自较旧任期的日志条目(论文5.4.2节)"></a>不能提交来自较旧任期的日志条目(论文5.4.2节)</h2><h3 id="Leader在commit了一条日志后，立刻宕机会怎么样呢？"><a href="#Leader在commit了一条日志后，立刻宕机会怎么样呢？" class="headerlink" title="Leader在commit了一条日志后，立刻宕机会怎么样呢？"></a>Leader在commit了一条日志后，立刻宕机会怎么样呢？</h3><p><a href="https://www.zhihu.com/question/357207584" target="_blank" rel="noopener">Leader在commit了一条日志后，立刻宕机会怎么样呢？</a>，我认为领导人完全性(Leader Completeness)要求如果某个日志条目在某个term中已经被提交，那么这个条目必然出现在所有具有更大的term的Leader中。因此不具备该entry的节点不可能被选举为新Leader。所以这个被commit的日志在后续的raft流程中肯定还是commit的。但是注意新Leader不能提交来自较旧任期的日志条目。</p>
+<p>另外，还需要注意commitIndex是volatile的。在紧随其后的一节中，将看到<strong>已经被存储到大多数节点中</strong>的<strong>较旧的</strong>日志条目也可能被未来的Leader所覆盖掉。但因为“不能提交来自较旧任期的日志条目”，所以在c阶段是不能Commit的。这就导致安全性并没有被破坏，<strong>如果不Commit和Apply，Client也就一直不知道成功还是失败</strong>，所以即使将来Commit的时候这个版本被覆盖掉，大不了就告诉Client失败了呗。</p>
+<h3 id="进一步讨论：论文5-4-2节"><a href="#进一步讨论：论文5-4-2节" class="headerlink" title="进一步讨论：论文5.4.2节"></a>进一步讨论：论文5.4.2节</h3><p>如果一个LogEntry已经出现在多数节点上，那么可以认为它已经被Commit了么？<br>上一章节已经知道不可以这样认为，因为<strong>已经被persist</strong>到<strong>majority</strong>节点中的<strong>较旧term</strong>的LogEntry也可能被未来的Leader所覆盖掉。因此，此时不能告诉客户端该LogEntry已经成功Commit了。</p>
+<p>通过这个性质，保证了两点：</p>
+<ol>
+<li>不会丢失数据<br> 领导人完全性要求不能丢失已经Commit的数据。为了满足这个性质，在这种情况下，我们就不Commit了。</li>
+<li>不会读未提交<br> 无论是通过写日志来读，还是ReadIndex，我们都有了一个参照，就是如果Noop被提交了，那么Noop之前的日志是已提交的。</li>
+</ol>
+<p>我们来看这个经典的对Figure8的讨论。</p>
+<p>下面的一张图来自原论文的Figure8，展示了当前Leader对具有较旧的term的日志条目进行提交时的一种情况。其中一个已经被存储到大多数节点中的较旧的日志条目(c阶段中的<code>term 2 index 2</code>)也会被未来的Leader(d <code>term 3 index 2</code>)覆盖掉。这也是在提到领导人完全性原则时我们强调了<strong>已提交</strong>三个字的原因。<br><img src="/img/fbs/raft/rzfg.png"></p>
+<ol>
+<li>(a)<br> 首先查看a阶段，此时S1是Leader（被粗黑框框中），生成一个黄色块的条目并复制给S2，此时由于未超过半数，所以S1不能进行提交。</li>
+<li>(b)<br> S1未能继续复制黄色条目而崩溃了，此时S5透过S3、S4和S5的选票成为Leader（此时S1已挂，而S2的<code>lastLogIndex</code>和<code>lastLogTerm</code>会让它反对S5）。S5紧接着创建了一个蓝色块条目放到了索引2处，此时如果S5继续复制它的蓝色方块，那么S1和S2的黄色方块肯定会被覆盖掉，不过在这个例子中S5都没来得及复制就挂掉了。</li>
+<li>(c)<br> S1恢复了，此时它的term是4，最大。S1因为<code>lastLogTerm</code>更大，所以可以得到S4的票。此外，它的<code>lastLogTerm</code>和S2的一样，且<code>lastLogIndex</code>也和S2一样，所以还能获得S2的票。因此S1成功当竞选。<br> 现在进入图上的c阶段，这时候S1继续它复制黄色log的未竞伟业，同时创建了一个红色块。S1将黄色log继续复制给S3，这时候如果假设可以提交较旧的条目，S1已经可以提交黄色块了。</li>
+<li>(d)<br> 如果S1又挂了，因此<strong>不仅没能成功提交黄色块，连红色块都没来得及复制</strong>，这就进入了d阶段。S5恢复了，此时它的<code>lastLogTerm</code>最大，因此通过S2、S3、S4当选。这时候它稳定了，于是覆盖了所有的黄色和红色LogEntry。<br> 可以深入看到这个不一致性，Index为2处的日志被覆盖式地提交了两次，分别是蓝色和黄色。</li>
+<li>(e)<br> 如果S1成功复制了日志到S2和S3，这就对应了e阶段。此时红色的LogEntry就能提交了。</li>
+</ol>
+<p>如何解决这个问题呢？Raft禁止提交一个较旧的term的条目，即使它已被复制到大部分节点。我们来看看这条规则是如何进行修复的：</p>
+<ol>
+<li>(c)<br> c阶段中，S1的term是4，但是它不能提交<code>term 2 index 2</code>这个日志。当然，它还是可以继续复制这条日志的。<br> 只有当<code>term 4 index 3</code>这条红色的Entry被复制到大多数之后，才可以提交。</li>
+<li>(d)<br> d阶段中，蓝色Log，即<code>term 3 index 2</code>已经被复制到所有机器上了，但是S5仍然不能哪怕是提交自己之前Append的日志。</li>
+</ol>
+<p>说说这里我的个人理解，我认为这个原因是因为一个冲突：</p>
+<ol>
+<li>Raft的投票原则是基于<code>lastLogTerm</code>和<code>lastLogIndex</code>的，也就是说谁大谁是Leader，才有尝试提交日志的权力。而Follower只能被动更新leaderCommit。</li>
+<li>一个被复制到大多数节点上的日志，未必具有一个最新的log term。那么新当选的Leader完全可以不respect这个日志。</li>
+</ol>
+<p>而新的Leader提交了一条日志，实际上就在日志层面固化了自己的“存在”。</p>
+<h3 id="为什么不-persist-commit-index？"><a href="#为什么不-persist-commit-index？" class="headerlink" title="为什么不 persist commit index？"></a>为什么不 persist commit index？</h3><p><strong>被复制到大多数节点</strong>，并不意味着<strong>被Commit</strong>，我们可以参考<strong>课后习题的第2题</strong>来进一步了解。Raft协议中并没有把<code>commitIndex</code>作为一个需要persist的内容，这是因为<code>commitIndex</code>作为一个易失字段并不影响Raft的正确性：</p>
+<ol>
+<li>如果一个新Leader“接盘”了，如何确定哪些log已经被提交了呢？<br> 很简单，添加一个no-op操作就行。</li>
+<li>其他节点可以读取leaderCommit来确定commit到的log位置<br> 注意某些Follower可能没有到<code>leaderCommit</code>的所有日志。</li>
+</ol>
+<p>再次强调，<code>commitIndex</code><strong>是不可能倒退的</strong>。虽然，在<a href="https://issues.apache.org/jira/browse/RATIS-352" target="_blank" rel="noopener">一些issue</a>中可以看到，保存<code>commitIndex</code>可以实现快速的恢复。但事实上，从<strong>课后习题的第2题</strong>中可以看到，在Leader切换的时候，很难精确判断哪些日志是能被Commit的，哪些是不行的。所以我们借助于提交一条Noop来避免这种模棱两可的情况。</p>
+<h3 id="幽灵复现"><a href="#幽灵复现" class="headerlink" title="幽灵复现"></a>幽灵复现</h3><p>在<a href="/2021/01/06/paxos">paxos</a>中，讲到了幽灵日志的问题。</p>
+<h2 id="对日志不一致问题的处理"><a href="#对日志不一致问题的处理" class="headerlink" title="对日志不一致问题的处理"></a>对日志不一致问题的处理</h2><p>下面关注Leader的复制请求的结果。其实通过前文已经知道，在正常情况下，Leader的日志始终是和Follower的一致的，所以来自Leader的<code>AppendEntriesRPC</code>始终会是成功的。但一旦Leader或者Follower出现崩溃或者网络发生脑裂，日志就会处于不一致状态。例如有些Follower会比Leader少条目或多条目，这时候就违背了日志匹配原则，导致失败，我们稍后看到这个失败实际上会被用来进行恢复一致性的工作。多条目看起来不可思议，但如下图所示，f就是一种情况，多出来的三个term为2的条目，这是可能是由于它是term为2时的Leader，并且添加了一些日志，但是在提交前崩溃了。</p>
+<p><img src="/img/fbs/raft/byzzt.png"></p>
+<p>对于这种不一致的状态，Raft有简单粗暴的方法来处理，就是强制Follower直接复制Leader的日志，这同时也是领导人只附加原则的要求。而这么做的保证则来自于根据领导人完全性原则，Leader能选举出来就意味着是具有完全的日志的。因此现在的思路就是把Follower一直删到满足日志匹配原则的点为止。</p>
+<p>在这个同步过程中，<code>nextIndex[]</code>和<code>matchIndex[]</code>就派上了用场。<code>nextIndex[]</code>维护了Leader下一个需要发送给Follower的日志序号，当Leader刚选举成功时，它是不知道各个Follower的日志相对于自己的情况的，因此默认<code>nextIndex[]</code>都为自己最后一条日志加一。但这样发出去的日志可能不会被接受，原因是根据之前提到过的日志匹配原则，如果Follower没有Leader的最后一条日志，那么它必然不能匹配Leader发送的<code>AppendEntriesRPC</code>中的<code>prevLogIndex</code>和<code>prevLogTerm</code>所标记。因此它会返回给Leader一个拒绝，此时Leader就会减小对应的<code>nextIndex</code>并重试。特别注意这个过程中Follower的日志有可能被Leader<strong>覆盖</strong>的。Raft论文指出这里可以进行优化（论文5.3节旁注），但这个优化并不是很必要的，因为现实中失败很少发生，而且也不大可能会造成很多的日志不一致的问题。</p>
+<p>容易看出，这种算法是非常优雅的，因为它把<strong>恢复一致性</strong>的过程和正常增加日志的过程统一起来了，我们不需要对恢复一致性过程额外进行设计，可想而知这个额外设计是相当麻烦的，因为还要考虑在回复一致性过程中出现失败的情况。</p>
+<h2 id="有关强制复制日志的细节"><a href="#有关强制复制日志的细节" class="headerlink" title="有关强制复制日志的细节"></a>有关强制复制日志的细节</h2><p>由于实现细节的问题，可能会导致<a href="https://pdos.csail.mit.edu/6.824/labs/lab-raft.html" target="_blank" rel="noopener">MIT 6.824 Lab2</a>的TestFigure8Unreliable2C过不了，可以查看<a href="https://github.com/CalvinNeo/Nuft/commit/c77e09149458072769a7278a402c167fb972015c" target="_blank" rel="noopener">代码的<code>on_append_entries_request</code>函数的847-881行(node.h)，对比下一个commit</a>。</p>
+<p>其实这里有个简单的场景，比如AppendEntries的发生了reorder。第一次收到的是<code>[1,2,3]</code>，第二次收到的是<code>[1,2]</code>，不能把3给删除掉。</p>
+<h1 id="Safety"><a href="#Safety" class="headerlink" title="Safety"></a>Safety</h1><p>这一部分的论述对应了原论文安全性论证部分，证明了上面的Leader election和Log replication的算法是可靠的。</p>
+<h2 id="有关领导人完全性的论述-论文5-4-3节"><a href="#有关领导人完全性的论述-论文5-4-3节" class="headerlink" title="有关领导人完全性的论述 论文5.4.3节"></a>有关领导人完全性的论述 论文5.4.3节</h2><p>利用反证法证明领导人完全性，也就是已经被提交的日志必定出现在 term 更大的 Leader 的日志中。<br>提出反命题：存在一个 term 为 T 的 Leader <strong>提交</strong>的日志条目没有被其后的某个 term 为 U 的 Leader 所拥有。不失普遍性地，假设中 U 是第一个没有这个日志条目的任期，也就是说所有这中间 term 的 Leader 都保有这个日志条目。<br>进行下面的推导：</p>
+<ol>
+<li>根据领导人只附加原则，这个记录在 U 竞选时就不存在在 U 的日志中。</li>
+<li>考虑到这个日志条目已经被提交，所以 Leader T 一定已经把它复制到过半数的集群上了；同时考虑到 Leader U 当选，所以它也收到了过半数的票。因此至少有一个节点它既拥有 Leader T 的日志条目又投票给了 Leader U。</li>
+<li>现在考虑这个投票者。它必然在投票给 Leader U 前接受了来自这个 Leader T 的日志。<br> 如果它在投票后才接受到来自 Leader T 的 <code>AppendEntriesRPC</code>，那么它肯定会拒绝这条RPC。因为当收到来自 Leader U 的 <code>RequestVoteRPC</code> 时，这个投票者就已经更新自己的 <code>currentTerm</code> 了。因此现在它的 <code>currentTerm</code> 肯定大于 RPC 中的 <code>rpc_term_id</code>，即 T。</li>
+<li>这个投票者在投票时也保留了这个来自 Leader T 的日志。<br> 而 Follower 只有在日志和 Leader 冲突时才会丢日志。</li>
+<li>既然这个投票者给 Leader U 投票，那么 Leader U 的日志必然不会比投票者的日志要旧。接下来从 index 更大和 term 更新两种情况来讨论。</li>
+<li>首先，假如投票者和 Leader U 当前的 term 是相同的，那么 Leader U 就会拥有更大的 index，也就是日志更长。既然如此 Leader U 应当具有投票者当前所有的日志。推出矛盾。</li>
+<li>其次，如果 Leader U 的最后一条日志的 term 要比投票者的最后一条日志大。并且是要大于 T 的，因为投票者的最后一条日志的 term 至少是 T，因为投票者拥有那一条 Leader T 在任期内提交的日志。现在，Leader U 的最后一条日志一定来自于一个 T 之后的 Leader，因为 term 更大。而这个 Leader 一定拥有 T 这个日志，<strong>这是根据我们的假设</strong>。那么根据日志匹配原则的要求，Leader U 也应当包含这个日志条目。推出矛盾。</li>
+</ol>
+<h2 id="有关非Leader节点故障的讨论-论文5-5节"><a href="#有关非Leader节点故障的讨论-论文5-5节" class="headerlink" title="有关非Leader节点故障的讨论 论文5.5节"></a>有关非Leader节点故障的讨论 论文5.5节</h2><p>Follower 和 Candidate 节点的故障是相对简单的：</p>
+<ol>
+<li>如果还未完成 RPC 就宕机<br> 在重启后，可以继续完成。</li>
+<li>如果完成了，但还没有回复<br> 在重启后，仍然会收到相同的 RPC。因为这个是幂等的。</li>
+</ol>
+<h2 id="有关可用性的讨论-论文5-6节"><a href="#有关可用性的讨论-论文5-6节" class="headerlink" title="有关可用性的讨论 论文5.6节"></a>有关可用性的讨论 论文5.6节</h2><ol>
+<li>RPC 的 broadcast time 应该远小于选举超时时间。</li>
+<li>选举超时时间应该远小于 MTBF<br> MTBF 指的是一个 Server 每一次 Fail 的时间间隔。这是为了使得整个集群能向前推进，因为当 Leader 挂掉之后，系统至少会 unavailable 一个选举超时。</li>
+</ol>
+<h2 id="有关脑裂和网络分区的讨论"><a href="#有关脑裂和网络分区的讨论" class="headerlink" title="有关脑裂和网络分区的讨论"></a>有关脑裂和网络分区的讨论</h2><p>由于某些节点的失效，部分节点的网络连接会断开，并形成一个与原集群一样名字的集群，这种情况称为集群脑裂(split-brain)现象。这个问题非常危险，因为两个新形成的集群会同时读取和修改集群的数据。Raft 能够解决由于网络分区导致的脑裂，从脑裂过程中和脑裂恢复后两个阶段来讨论。</p>
+<ol>
+<li>在脑裂过程中，Raft 仍然保证了至少 $N/2+1$ 的共识。特别地，当网络分区多于两块的时候，会不会存在有两个分区中都选出了新的 term 相同的 Leader 呢？这是不可能的，因为成为 Leader 必须达到全局多数 $N/2+1$ 张票，最多只能有一个。所以当分区较多的时候，很可能无法选出新 Leader。另外某节点也不容易去“获得当前分区的多数票”，因为它也无法界定当前分区的范围。</li>
+<li>脑裂恢复遵循 Raft 选举，所以不会导致日志出错。</li>
+</ol>
+<p>尽管如此，老 Leader 可能会给客户端返回老数据。例如老 Leader 被分在了少数派中，多数派中可以选出一个新 Leader，并提交一些新的日志。这时候老 Leader 还是可以响应用户请求的，毕竟它不知道新 Leader 的产生，也就无法转发请求给新 Leader。这样老 Leader 就返回了旧的数据给用户。这里强一致被破坏了，可以通过下面的方式来解决：</p>
+<ol>
+<li>Leader 需要提交一个日志才能返回读请求。</li>
+<li>ReadIndex 或者 LeaseRead。</li>
+</ol>
+<h1 id="Membership-changes"><a href="#Membership-changes" class="headerlink" title="Membership changes"></a>Membership changes</h1><h2 id="Joint-Consensus"><a href="#Joint-Consensus" class="headerlink" title="Joint Consensus"></a>Joint Consensus</h2><p>相比整体下线集群在重新启动的方法，Raft提供另一个方案。为了保障安全性，我们需要在新旧配置的过渡期间确保四个基本原则的基石之一，Leader与term一一对应不会被打破。论文指出直接做切换时不现实的，如下图所示，当集群规模从3变为5时，存在时间点使得集群分划为两个部分，其中绿色部分使用旧配置$C_{old}$进行选举，蓝色部分使用新配置$C_{new}$进行选举。因此Raft使用两个阶段实现配置转换。<br><img src="/img/fbs/raft/f10.png"><br>两阶段的转换有很多种方法，例如可以在第一阶段禁用旧配置，然后在新阶段启用新配置，这样在两个阶段之间系统不能响应客户请求。Raft的解决方案是第一阶段切换到一个过渡的称为joint consensus的配置上，当joint consensus被提交之后，系统再转换到新配置上，这样就不会存在新老配置共存的问题。joint consensus阶段要求如下：</p>
+<ol>
+<li>日志条目应当被复制到对应到新旧两种配置的所有机器上。</li>
+<li>两种配置中的任意服务器都可以作为Leader。</li>
+<li>选举和提交日志的共识必须同时经由两种配置的多数同意。也就是说要得到两种配置下各自的过半票数。</li>
+</ol>
+<p>在下图中，虚线部分表示已创建未提交的日志配置条目，实现部分表示被提交的配置条目。可以看到配置转换过程被分为三个阶段：<br><img src="/img/fbs/raft/f11.png"></p>
+<ol>
+<li>从Leader收到配置变更请求到在$C_{old, new}$被提交前<br> 此时单独根据$C_{old}$决议。<br> 首先，Leader在收到配置变更请求后，生成一个表示$C_{old, new}$这个配置的日志条目，并按照通常的方式AppendEntry。一旦这个日志提交成功，集群进入joint consensus状态。特别地，节点<strong>只要收到新配置的AppendEntry就会切换到新配置</strong>，无论这个AppendEntry有没有被提交。因此提交成功只是说明进入了joint consensus状态，此时很多节点已经切换到了配置$C_{old, new}$。<br> 当Leader提交了配置$C_{old, new}$对应的日志条目时，它一定是使用的这个配置进行的决议。当Leader在这一阶段崩溃时，新选举的Leader可能是$C_{old, new}$，也可能是$C_{old}$。</li>
+<li>在$C_{new}$被提交后到配置变更完成<br> 此时单独根据$C_{new}$决议。<br> 特别地，如果Leader使用$C_{new}$配置的话，这个时间节点可以提前到$C_{new}$被创建。</li>
+<li>在1和2的中间阶段，即joint consensus状态<br> 在这一阶段配置$C_{old, new}$已被<strong>提交</strong>，此时$C_{old}$退出舞台。由于Leader已被提交，所以领导人完全性原则保证了没有$C_{old, new}$的Candidate注定选举失败。此时Leader节点可以安全地去AppendEntry配置$C_{new}$的条目了。</li>
+</ol>
+<h3 id="几个-Issue"><a href="#几个-Issue" class="headerlink" title="几个 Issue"></a>几个 Issue</h3><ol>
+<li>刚加入的新节点没有日志<br> 这里指的是计算多数的时候不考虑新节点的投票权。此时它们仅接受日志的复制，不参与包括 commit、vote 之类的投票。<br> 当然，对于 vote 而言，就算计算票数，这些落后的节点也应该投赞成票。<br> 对于复制 log 场景，通常的实现会引入 Learner 机制，让节点先追上日志，再 promote 成为 Voter。但这个优化一定是需要的么？我想未必。因为 Leader 只要在新旧 quorum 中都达到多数就可以 commit 了。</li>
+<li>Leader 不在新配置里面<br> 当 Leader 提交完 $C_{new}$ 后，就要 Step Down 回到 Follower 状态。这也说明了有一段时间 Leader 会去管理一个不包含自己的集群。</li>
+<li>删除节点<br> 被删除的节点不会收到来自 Leader 的 RPC 了，因此可能会超时，继而发送 RequestVoteRPC 来竞选，从而影响可用性。为了解决这个问题，所有节点可以忽略这些投票请求，直到他们认为现在存在一个 Leader。</li>
+<li>只要收到并持久化完新配置的 Entry 后，该节点就要以新配置执行，而无论配置是否已经提交<br> 这是因为只有当每个节点在 AppendEntry 完之后生效，才能保证 Leader 在 Commit 完这个 Entry 之后知道这个配置生效了。如果等到 Commit 之后再生效，那么 Leader 就没有机会知道什么时候生效了。</li>
+</ol>
+<h3 id="实现"><a href="#实现" class="headerlink" title="实现"></a>实现</h3><p>liblogcabin的实现方案是列出一个<code>Configuration</code>类，这个类包含以下几个关键信息</p>
+<ol>
+<li><code>Configuration::State state</code><br> 这是个enum类型，包含四种可能值<code>BLANK</code>、<code>STABLE</code>、<code>STAGING</code>、<code>TRANSITIONAL</code>。分别对应于集群初始化、正常运行、Issue1的解决方案和joint consensus状态。</li>
+<li><code>quorumAll()</code><br> 是否获得当前配置下的多数票，这里需要根据<code>TRANSITIONAL</code>分类讨论。</li>
+</ol>
+<h2 id="一定需要两步么？"><a href="#一定需要两步么？" class="headerlink" title="一定需要两步么？"></a>一定需要两步么？</h2><p>有一种单步变更方案，也就是每一次只添加或者删除一个节点，从而避免 joint consensus。这个方案的直觉是每次只修改一个节点，那么 $C_{new}$ 和 $C_{old}$ 不可能形成两个不相交的多数派。</p>
+<p>但很遗憾这种方式是存在漏洞的，并且构造很简单。不妨假设按照  $C_{new}$ 来提交 confchange entry，也就是 confchange entry 提交需要的 quorum 包含被添加的节点。这个构造比较简单，类似于 Figure8：</p>
+<ol>
+<li>假设需要往集群中先后加入两个节点 u 和 v，当 term=0 的 Leader 即下面的 <code>ori_0</code> 添加完 u 节点后，它可能只将这个 confchange entry 复制给了 u，然后就宕机了。</li>
+<li>然后新选举出的 term=1 的 Leader 即下面的 <code>ori_1</code> 添加节点 v，这个时候它将 confchange entry 复制给了包括 v 在内的节点，并且正好达到 quorum。比如假设原集群大小为 4，添加 v 之后大小为 5，那么 <code>{ori_1, ori_2, v}</code> 就是这样的一个 quorum。然后它可以提交一些日志，然后它也宕机了。</li>
+<li>之后，term=0 的 Leader，即 <code>ori_0</code> 又重启了，显然它并没有收到 term=1 的 Leader 的任何 entry，包括添加 v 在内的 entry。但是它依然可以被选举为 term=2 的 Leader。比如在上面的例子中，它可以通过 <code>{ori_0, ori_3, u}</code> 选举成功。</li>
+<li>容易看出，这就是一个 Figure8 的 case 了。因为 term=2 的 Leader 并没有 term=1 的 Leader 已经提交的 entry，所以它会命令 <code>{ori_1, ori_2}</code> 将它们删除。因此，添加 v 节点的这条日志就被删除了。</li>
+</ol>
+<p>解决方案很简单，就是和 Figure8 一样，新 Leader 必须先提交一条日志之后，再进行成员变更。</p>
+<p>问题来了，如果按照 $C_{old}$ 老配置来提交，会避免这个问题么？我认为答案是肯定的。但这会导致减少成员时，需要更大的 quorum。比如从 4 个节点变为 3 个节点，那么用 $C_{new}$ 则 quorum 会从 3 变成 2，而用 $C_{old}$ 则 quorum 始终是 3。</p>
+<h1 id="Log-compaction"><a href="#Log-compaction" class="headerlink" title="Log compaction"></a>Log compaction</h1><p>Raft采用了Snapshot的方法来实现日志压缩，具体来说是每个Follower自己做Snapshot。这种方法是独立于Raft的Strong Leader的原则的，这是由于每个节点的Snapshot的状态对Leader来说是透明的。<br>论文中指出这样做是合乎情理的，这是由于用来做Snapshot的东西都是从状态机跑出来的，是经过一致性检验的，不会存在冲突。Snapshot只是Follower去reorganize自己数据的行为。此外，由Leader创建日志而非Follower创建日志有以下的弊端：</p>
+<ol>
+<li>网络开销<br> 这是因为Leader要将Snapshot复制到每个Follower，而这是冗余的，因为Follower实际上有全部信息。</li>
+<li>实现复杂</li>
+</ol>
+<h2 id="InstallSnapshot"><a href="#InstallSnapshot" class="headerlink" title="InstallSnapshot"></a>InstallSnapshot</h2><p>当 Leader 发现 Follower[i] 的 <code>next_index</code> 已经严重落后，落到了自己的 Snapshot 里面，即满足 <code>next_index[i] &lt;= get_base_index()</code> 时，就应当发送 InstallSnapshot RPC 催促其补上。这个 RPC 应当包含 Leader 自己持久化的 log，并且应该是已经提交了的。</p>
+<p>当 Follower 收到这个 RPC 时首先进行例行判断，例如 term 是否大于等于自己的 <code>current_term</code> 并更新，否则拒绝。如果自己是 Candidate 要切换回 Follower，重新超时等等。接着直接 dump 下来 Leader 的 Snapshot。</p>
+<p>一个 Snapshot 表示 state machine 到 <code>last_included_index</code> 为止的状态，因此 <code>last_included_index</code> 必须位于已 <strong>apply</strong> （而不是 commit ）的日志。在创建 Snapshot 之后，可以将直到 <code>last_included_index</code> 的所有日志压缩成一个日志。</p>
+<h1 id="持久化"><a href="#持久化" class="headerlink" title="持久化"></a>持久化</h1><p>我们需要区分持久化persist和快照snapshot技术。persist指持久化论文Figure2列出的<code>vote_for</code>、<code>current_term</code>和<code>logs</code>三个状态。特别注意诸如<code>commit_index</code>是volatile的。</p>
+<h2 id="使用什么引擎持久化？"><a href="#使用什么引擎持久化？" class="headerlink" title="使用什么引擎持久化？"></a>使用什么引擎持久化？</h2><p>TiKV 经历了 RocksDB -&gt; Dedicated RocksDB -&gt; RaftEngine 的阶段。</p>
+<p>此外，对于 Cloud 版本，设计会不一样。</p>
+<h2 id="关于持久化的问题"><a href="#关于持久化的问题" class="headerlink" title="关于持久化的问题"></a>关于持久化的问题</h2><h3 id="为什么必须要持久化voteFor"><a href="#为什么必须要持久化voteFor" class="headerlink" title="为什么必须要持久化voteFor"></a>为什么必须要持久化voteFor</h3><p>见习题6</p>
+<h3 id="为什么必须要持久化term"><a href="#为什么必须要持久化term" class="headerlink" title="为什么必须要持久化term"></a>为什么必须要持久化term</h3><p>显然，恢复后简单设置 term 为 0 肯定是不行的。<br>那么如果我们设置 term 为 log 里面最新的 term，是否可以呢？答案肯定也是不可以。<br>在这里<a href="https://www.zhihu.com/question/382888510" target="_blank" rel="noopener">修改了知乎上一个例子</a>。假设有机器 S1、S2 和 S3，其中 S1 和 S2 是分区的。注意S1/S3，S2/S3 这两个是连通的。</p>
+<ol>
+<li>S1 成为 Leader<br> 显然，是通过 S3 的票上位的。S2 因为分区，并没有收到请求，因此保持 term 为0。</li>
+<li>S1 添加了 &lt;1,1,a&gt;，即 index 为 1，term 为 1，内容为 a</li>
+<li>S1 没有进行任何复制就宕机了，但没有恢复</li>
+<li>S3 也宕机并重启了<br> 因为 S3 没有缓存之前的 term 即 1，所以读取 log，发现为空，即 term 为 0</li>
+<li>在新一轮选举中 S3 成为 Leader<br> 是 S2 投票的。S1 这个时候还在宕机呢。</li>
+<li>S3 添加了 &lt;1,1,b&gt;，并且提交了</li>
+<li>S3 宕机了</li>
+<li>S1 和 S3 从宕机中恢复了<br> 此时，S1 的日志是 &lt;1,1,a&gt;，S2 和 S3 的日志是 &lt;1,1,b&gt;。那么原则上 S1 和 S3 都有可能成为 Leader。那么 &lt;1,1&gt; 处的日志到底是 a 还是 b 呢？</li>
+</ol>
+<h3 id="为什么必须要持久化-logs"><a href="#为什么必须要持久化-logs" class="headerlink" title="为什么必须要持久化 logs"></a>为什么必须要持久化 logs</h3><p>见习题 6。</p>
+<h3 id="为什么不需要持久化-commitIndex"><a href="#为什么不需要持久化-commitIndex" class="headerlink" title="为什么不需要持久化 commitIndex"></a>为什么不需要持久化 commitIndex</h3><p>见“有关领导人完全性的论述(论文5.4.3节)”。<br>持久化 commitIndex 的好处是在宕机重启后，能够知道可以 apply 到哪里。不然就得跑一轮算法才能更新到 commitIndex 了。</p>
+<h3 id="为什么不需要持久化-lastApplied"><a href="#为什么不需要持久化-lastApplied" class="headerlink" title="为什么不需要持久化 lastApplied"></a>为什么不需要持久化 lastApplied</h3><p>我认为这个取决于 fsm 的实现。<br>如果 fsm 做不到幂等，那我觉得重启之后 lastApplied 是0，再搞一遍，肯定就有问题。</p>
+<h1 id="其他问题"><a href="#其他问题" class="headerlink" title="其他问题"></a>其他问题</h1><h2 id="网络要求"><a href="#网络要求" class="headerlink" title="网络要求"></a>网络要求</h2><p>我目前认为 raft 可以跑在 reorder 的网络上，例如 udp。我确实遇到过一些 reorder 的问题，但后来被证明是实现所致，如 <a href="https://stackoverflow.com/questions/54310611/how-to-handle-reordered-rpc-in-raft" target="_blank" rel="noopener">下面这个问题</a></p>
+<p>Supposed order:</p>
+<ol>
+<li>Leader -&gt; A, entry 1</li>
+<li>Leader -&gt; A, heartbeat, prev_log_index = 1</li>
+<li>Leader -&gt; A, entry 2</li>
+<li>Leader crash</li>
+</ol>
+<p>Arrived order:</p>
+<ol>
+<li>Leader -&gt; A, entry 1</li>
+<li>Leader -&gt; A, entry 2</li>
+<li>Leader -&gt; A, heartbeat, prev_log_index = 1<br> Problem may arised if we mistakenly erased entry 2.</li>
+<li>Leader crash</li>
+</ol>
+<p>Note that entry 1 could already be committed, so in this case, we will mistakenly erase a committed entry.</p>
+<p>Peer A will only commit upto min(leaderCommit, lastLogIndex).</p>
+<h1 id="Raft的优化"><a href="#Raft的优化" class="headerlink" title="Raft的优化"></a>Raft的优化</h1><h2 id="优化选举"><a href="#优化选举" class="headerlink" title="优化选举"></a>优化选举</h2><h3 id="Prevote"><a href="#Prevote" class="headerlink" title="Prevote"></a>Prevote</h3><p>Prevote 是 Follower 在超时进入 Candidate 状态前的行为。此时 Follower 进入 PreCandidate 状态，进行一轮 Prevote。只有当 Prevote 获得大多数节点的赞同时，Follower 才会正式超时。Prevote 的引入减少了由于网络抖动等因素导致的主节点切换现象。</p>
+<h2 id="优化写日志"><a href="#优化写日志" class="headerlink" title="优化写日志"></a>优化写日志</h2><h3 id="减轻-Leader-压力"><a href="#减轻-Leader-压力" class="headerlink" title="减轻 Leader 压力"></a>减轻 Leader 压力</h3><p>Raft 要求 log 必须被持久化。其实在如 Kudu 的实现中，Leader 的日志未必要持久化。实际上只要有 Quorum 个节点持久化了日志，Leader 也可以提交，从而减少自己的磁盘负担。</p>
+<h3 id="Batch"><a href="#Batch" class="headerlink" title="Batch"></a>Batch</h3><p>Batch 策略指将多个来自客户端的请求打包到一个 Raft Log 中。这有点类似于 WriteBatch 写入。</p>
+<h3 id="异步-Append"><a href="#异步-Append" class="headerlink" title="异步 Append"></a>异步 Append</h3><p>这里的异步指的是可以先并行发送 log 给所有的 Follower，然后在 Append 给自己。</p>
+<h3 id="Pipeline"><a href="#Pipeline" class="headerlink" title="Pipeline"></a>Pipeline</h3><p>在有关复制状态机的介绍中已经介绍了有关 Pipeline 的机制。</p>
+<p>当 Leader 向 Follower 发送了一个 AppendEntries 请求之后，它需要等待返回才能更新 <code>next_index</code> 从而继续后面的流程。Pipeline 允许 Leader 在发送一个请求之后立即更新 <code>next_index</code>，从而不等待返回以发送后面的请求。这么做的原因是认为网络在大多数情况下是正常的。但如果不幸在过程中出了问题，就可能需要重新发送 log。</p>
+<p>在这样的实现中可以在 RPC 消息的回复中附带上 <code>last_log_index</code> 和 <code>last_log_term</code>。</p>
+<h2 id="优化存储"><a href="#优化存储" class="headerlink" title="优化存储"></a>优化存储</h2><h3 id="Witness"><a href="#Witness" class="headerlink" title="Witness"></a>Witness</h3><ul>
+<li>只参与选举<ul>
+<li>不需要全部日志，只需要保存 last log index 和 last log term，根据完全性原则，就可以参与选举了。</li>
+<li>在选举优先级上最低，即使当选 leader 后，也需要立即 transfer leader 给别人。</li>
+</ul>
+</li>
+<li>可以升级为 Follower</li>
+</ul>
+<p>对于 MultiRaft，可能需要考虑存储全部或者重要的 Log：</p>
+<ul>
+<li>部分 Admin Log 不能被回退，所以如果 Witness 宕机重启后，如果本地没有持久化 Meta，则需要从 Admin Log 恢复，此时 Admin Log 必须被持久化</li>
+</ul>
+<p>注意，加入 Witness 节点后，需要考虑 Raft Log 的持久性：</p>
+<ul>
+<li>当 Leader 宕机，而 Witness 被迫选为 Leader，通常意味着仅存的 Follower 没有足够的日志当选集群可能处于不可用状态</li>
+</ul>
+<h2 id="优化-Apply"><a href="#优化-Apply" class="headerlink" title="优化 Apply"></a>优化 Apply</h2><h3 id="异步-Apply"><a href="#异步-Apply" class="headerlink" title="异步 Apply"></a>异步 Apply</h3><p>使用一个新线程去 Apply 已经 Commit 的 log。<br>这么做的好处是，前面的 Append Log Entry 部分和 Apply 分离了，能提高吞吐量。<br>注意，因为 Raft 不允许日志空洞，以及顺序 Commit 的特性，导致可以认为已经 Commit 的日志就可以 Apply，但对于诸如 MultiPaxos 这样允许日志空洞的协议是不行的。</p>
+<h3 id="乱序-Apply"><a href="#乱序-Apply" class="headerlink" title="乱序 Apply"></a>乱序 Apply</h3><p>见<a href="/2017/09/21/distributed-consistency/">分布式一致性详解</a>中的“线性一致与提交顺序”。</p>
+<h3 id="乱序-Apply-和乱序-Commit"><a href="#乱序-Apply-和乱序-Commit" class="headerlink" title="乱序 Apply 和乱序 Commit"></a>乱序 Apply 和乱序 Commit</h3><p>乱序 Commit 类似于 <a href="/2021/12/04/epaxos/">epaxos</a>。</p>
+<h3 id="exact-once-语义"><a href="#exact-once-语义" class="headerlink" title="exact once 语义"></a>exact once 语义</h3><h2 id="优化-InstallSnapshot"><a href="#优化-InstallSnapshot" class="headerlink" title="优化 InstallSnapshot"></a>优化 InstallSnapshot</h2><h3 id="Follower-Snapshot"><a href="#Follower-Snapshot" class="headerlink" title="Follower Snapshot"></a>Follower Snapshot</h3><p>由 Follower 节点而非 Leader 节点发送 Snapshot。这种做法能够降低 Leader 的负担。</p>
+<p>见<a href="/2025/01/19/raft-learner/">Raft learner</a></p>
+<h3 id="增量-Snapshot"><a href="#增量-Snapshot" class="headerlink" title="增量 Snapshot"></a>增量 Snapshot</h3><p>在发送 Snapshot 时，不发送全部的数据，而是根据 Follower 当前存储中的数据版本，去发送增量的数据。</p>
+<h2 id="优化成员变更"><a href="#优化成员变更" class="headerlink" title="优化成员变更"></a>优化成员变更</h2><h3 id="成员变更的一阶段办法"><a href="#成员变更的一阶段办法" class="headerlink" title="成员变更的一阶段办法"></a>成员变更的一阶段办法</h3><p>需要被正确实现，见前面的论述。</p>
+<h3 id="Learner"><a href="#Learner" class="headerlink" title="Learner"></a>Learner</h3><p>刚加入的节点，需要追日志或者 Snapshot，从而才能赶上 Leader 的进度。这个过程可能对 Quorum 产生影响，从而影响可用性。例如，从 3 变成 4 时，Quorum 会从 2 变成 3。因为新增的节点在追日志，所以无法提供 commit 的票数，因此这要求老节点的三个 Node 一个都不能坏，实际降低的可用性。</p>
+<p>解决方案是新节点作为 Learner 追日志，不参与投票。</p>
+<h2 id="优化读"><a href="#优化读" class="headerlink" title="优化读"></a>优化读</h2><h3 id="ReadIndex-和线性一致"><a href="#ReadIndex-和线性一致" class="headerlink" title="ReadIndex 和线性一致"></a>ReadIndex 和线性一致</h3><p>见<a href="/2025/01/19/raft-learner/">Raft learner</a></p>
+<h3 id="Lease-Read、Follower-Learner-Read"><a href="#Lease-Read、Follower-Learner-Read" class="headerlink" title="Lease Read、Follower(Learner) Read"></a>Lease Read、Follower(Learner) Read</h3><p>见<a href="/2025/01/19/raft-learner/">Raft learner</a></p>
+<h4 id="Leader-的-ReadIndex"><a href="#Leader-的-ReadIndex" class="headerlink" title="Leader 的 ReadIndex"></a>Leader 的 ReadIndex</h4><p>Leader 在返回结果之前，需要询问一遍 quorum，确认自己此时还是 Leader。</p>
+<h4 id="Follower-Learner-的-ReadIndex"><a href="#Follower-Learner-的-ReadIndex" class="headerlink" title="Follower/Learner 的 ReadIndex"></a>Follower/Learner 的 ReadIndex</h4><p>当上层支持事务时，Follower Read 可以变为给定事务的 start_ts，提供事务对应 write 记录的 commit_index。</p>
+<p>注意，即使 apply index 超过了之前请求的 commit index，那么也不破坏线性一致性。因为它没有破坏“一旦某个读操作返回了某个特定值，那么后续的读操作<strong>要么返回这个值，要么返回后面的写对应的值</strong>”。</p>
+<h3 id="Waitfree"><a href="#Waitfree" class="headerlink" title="Waitfree"></a>Waitfree</h3><h1 id="Raft-的缺陷的讨论"><a href="#Raft-的缺陷的讨论" class="headerlink" title="Raft 的缺陷的讨论"></a>Raft 的缺陷的讨论</h1><h2 id="日志和选举"><a href="#日志和选举" class="headerlink" title="日志和选举"></a>日志和选举</h2><p>Paxos 引入的 proposal number <code>n</code> 标注了 proposal value <code>v</code> 的版本。如果存在已知的 proposal value <code>v</code>，那么发送 accept 请求时必须带上已知的最大的 <code>v</code>。</p>
+<p>可以看到，Paxos 对 <code>v</code> 的决议过程和 Leader 是没有关系的。在 Ongaro 等的 MultiPaxos 构造中可以看到，他们使用了 firstUnchosenIndex 来记录某个 Server 已知的第一个没有被 chosen 的 entry，Leader 会首先推动这个 entry 上的 Paxos 算法。换句话说，如果像 MultiPaxos 那样管理日志，就可以看做启动多个 instance 去决议多个 <code>v</code>。那么并不一定需要一个 Leader，就更不用说什么“领导人完全性”原则了。</p>
+<p>但如果把决议 <code>v</code> 的值不看做是某个日志条目，而是选出后续负责管理日志复制任务的 Leader 的 id（比如像 Palf 那样选出后续 clog Leader），就可以发现 Paxos 的“选举”是多阶段的，而 Raft 的选举是一阶段的。Paxos 之所以这样做，是为了引入 order，让 proposal number 更大的 <code>v</code> 能够 override 掉比它小的，最终胜出的就是被 chosen 的值。</p>
+<p>除此之外，可以看出，Raft 本身相对于 Basix Paxos 多了定序的功能。它之所以能够定序，是因为有了 Leader。Leader 通过日志将 Order 持久化了。</p>
+<p>Raft 则不一样。首先我们不在讨论 term，因为它是用来比较两次不同的选举的。那么决定一个 Leader 是否能当选，不再是它用什么样的 <code>n</code> 去发送 Prepare 请求，而是它自己日志的新旧程度，这是一个确定值。Raft 的四个原则统一起来，起到的作用之一就是让日志可以作为比较节点新旧的工具。 换句话说，Raft 选举的实质是谁状态更新，谁就更容易当选。这个方案目前来看，无论是否效果最优，但确实代价比较大。</p>
+<h2 id="Leader-or-not"><a href="#Leader-or-not" class="headerlink" title="Leader or not?"></a>Leader or not?</h2><p>Basic Paxos 和 EPaxos 实际上是不需要一个 Leader 的。但在工业界，选择一个 Leader，让它去协调所有的决议，会是一个更加简便快速的方案。共识算法未必要服务于所有决议的决策过程，这也是 Onganro 等在博士论文中指出的那样。</p>
+<h1 id="Raft习题讲解"><a href="#Raft习题讲解" class="headerlink" title="Raft习题讲解"></a>Raft习题讲解</h1><h2 id="MIT6-824"><a href="#MIT6-824" class="headerlink" title="MIT6.824"></a>MIT6.824</h2><p>见<a href="/2018/12/29/MIT6.824note/">MIT 6.824做题笔记</a>。</p>
+<h2 id="官方习题"><a href="#官方习题" class="headerlink" title="官方习题"></a>官方习题</h2><p>本习题来自于<a href="https://ongardie.net/static/raft/userstudy/quizzes.html" target="_blank" rel="noopener">作者的博客</a>，知乎<a href="https://zhuanlan.zhihu.com/p/268571088" target="_blank" rel="noopener">提供了中文版</a>。</p>
+<h3 id="1"><a href="#1" class="headerlink" title="1"></a>1</h3><p>下面四幅图中，哪些 Server Configuation 在 Raft 中是合法的呢？<br><img src="/img/fbs/raft_exam/1.png"><br>a 是不合法的，这是因为 term 应该是递增的。创建 <code>index=4</code> 的 Leader 一定是从一个 term 大于等于 3 的 Leader 中获得 <code>index=3</code> 的条目的，我认为，AppendEntriesRPC 附有当前 Leader 的 term，当 <code>index=4</code> 的 Leader 在添加 index=3 的条目时候，它的 term 必然不会小于当前 Leader 的 term，即 3。<br>d 是不合法的，Raft 日志不允许空洞，但 Paxos 允许。</p>
+<h3 id="2"><a href="#2" class="headerlink" title="2"></a>2</h3><p>下面哪些日志是可能被安全地 <strong>apply</strong> 的？我们把机器从上到小编号为 S1 到 S5。<br><img src="/img/fbs/raft_exam/2.png"></p>
+<p>首先，我们现在的 term 是4。在这个任期中，Leader 创建了一个&lt;7,4&gt;，没有达到 quorum，这个肯定是提交不了的。<br>用类似的办法，通过比较 quorum，可以排除到只剩下面5个条目，用 <code>&lt;Index,Term&gt;</code> 表示如下。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">&lt;1,1&gt;, &lt;2,1&gt;, &lt;3,2&gt;, &lt;4,2&gt;, &lt;5,2&gt;</span><br></pre></td></tr></table></figure>
+
+<p>我们知道，“当Leader创建的某日志条目被成功复制到过半数的服务器上时，Leader可以提交该条目”，但我们不能忽略Figure8的情况，即“不能提交来自较旧任期的日志条目”，所以要等到&lt;7,4&gt;被提交之后，才能安全提交S1的1到5的日志。<br>后来看答案发现，题目不是这个意思，比如说<strong>commitIndex是volatile的</strong>，没啥讨论的意义。所以题目的意思是，从一个全局的视野，<strong>根据Log判断哪些Entry是可以被安全地commit的</strong>。实际上，虽然我们有了Leader for term 4，但由于这个Leader可能没来得及提交&lt;7,4&gt;就Fail，导致重新选举，到时候新Leader可能就不是它了。所以这个问题等价于<strong>从日志判断讨论Leader可能是谁</strong>，然后我们假设这些节点分别成为了Leader，可能移除掉哪些Entry。<br>S1：LastLogTerm为4，秒杀所有，足够quorum。<br>S2：LastLogTerm秒杀除S1外所有，足够quorum。<br>S3：它的LastLogTerm比S4要大，有1票；它的LastLogTerm和S5一样，此时需要比较LastLogIndex，这个比不过S5，因此总共2票，不够quorum。<br>S4：它的LastLogTerm比S1/S2/S3/S4要小，只有1票，不够quorum。<br>S5：它的LastLogTerm比S4要大，有1票；它的LastLogTerm和S3一样，但是LastLogIndex比S3大，因此总共3票，足够quorum。</p>
+<p>下面，我们就要在S1、S2和S5中间取一个交集。特别地，如果S2当选，可能会移除掉S1现有的从index=3开始的所有条目。这也对应了我们“已经被存储到大多数节点中的较旧的日志条目也可能被未来的Leader所覆盖掉”的论述。<br>综上，只有1和2是可以safely applied的。</p>
+<p>从这个case可以看出，不能通过判断Leader的Majorty的matchIndex来判断哪些日志是可以提交的。例如，我们可以假设S1短暂成为Leader，此时matchIndex为3的节点有S1、S3、S5三个。但我们不能认为&lt;3,2&gt;就可以被提交了，因为可能S1马上挂掉，然后S2选举成功，把这些日志全部干掉了。</p>
+<h3 id="3"><a href="#3" class="headerlink" title="3"></a>3</h3><p>下图显示了一个6台服务器集群中的日志，此时刚刚选出term为7的新Leader。对于图中每一个Follower，给定的日志是否可能在一个正常运行的Raft系统中存在？<br>首先，我们确定一点，就是index=1和2的日志条目是已经被提交了的。<br>a是不合法的，因为违背了日志匹配原则。事实上因为a的&lt;5,3&gt;和选出的Leader是Match的，因此它前面index=3和4的term也应该和Leader是Match的，即都是3。<br>b是不合法的，原因类似于a。<br>我认为c是不合法的，因为此时Leader的term才是5，怎么可能会出现一个term为6的条目呢？但是我这里做错了，c是合法的，而且我看错了，现在Leader的term是7。例如，当大家都只具有日志<code>&lt;1,1&gt;, &lt;2,1&gt;</code>的时候（但不一定就是这个条件），其实c可能自己是term为6的Server，它在还没有来得及复制自己任期内的日志的情况下就挂掉了。<br>d是不合法的，因为term没有单调递增，可以参考第一条。<br>e是合法的，原因类似于c，其实它可以看做是最一开始的Leader，然后被分区了。</p>
+<p><img src="/img/fbs/raft_exam/3.png"></p>
+<h3 id="4"><a href="#4" class="headerlink" title="4"></a>4</h3><p>假设硬件或软件错误破坏了 Leader 为某个特定 Follower 存储的<code>nextIndex</code>值。这是否会影响系统的安全？<br>我认为是不会的，因为<code>nextIndex</code>的设计就是volatile的。<br>事实上，如果<code>nextIndex</code>太小，相当于Leader发送了多余的日志，AppendEntriesRPC会返回一个成功，此时Leader就会增加<code>nextIndex</code>，这样通过有限次AppendEntriesRPC，<code>nextIndex</code>就会重新收敛到准确值。<br>如果<code>nextIndex</code>太大，AppendEntriesRPC会返回一个失败，此时Leader会减小<code>nextIndex</code>。<br>事实上，当一个Leader新被选举出时，他就是通过这种机制得知每个Follower的<code>nextIndex</code>的。<br>当然，我们也没必要每次逐一递增或者递减，我们在正文部分提到过一些优化点。</p>
+<h3 id="5"><a href="#5" class="headerlink" title="5"></a>5</h3><p>假设你实现了Raft，并将它部署在同一个数据中心的所有服务器上。现在假设你要将系统部署到分布在世界各地的不同数据中心的每台服务器，与单数据中心版本相比，多数据中心的Raft需要做哪些更改？为什么？<br>这个题目我还真不知道怎么回答，贴一下标准答案。<br>We’d need to set the election timeouts higher: my expected broadcast time is higher, and the election timeout should be much higher than the broadcast time so that candidates have a chance to complete an election before timing out again. The rest of the algorithm does not require any changes, since it does not depend on timing.</p>
+<h3 id="6"><a href="#6" class="headerlink" title="6"></a>6</h3><p>【这一条主要考察Raft三个持久化项目的原因】</p>
+<p>每个Follower都在其磁盘上存储了3个信息：当前任期（currentTerm）、最近的投票（votedFor）、以及所有接受的日志记录（log[]）。</p>
+<p>a. 假设Follower崩溃了，并且当它重启时，它最近的投票信息已丢失。该Follower重新加入集群是否安全（假设未对算法做任何修改）？ </p>
+<p>这个是不安全的，事实上我也犯过类似的错误，即Leader election/投票原则 这个章节列出的问题。7104成了Leader，但是重置了<code>voteFor</code>，导致后面投票给了7103，从而出现了两个Leader。<br>其实还有一个节点S2会既投票给S1又投票给S3的场景，假设一个容量为3的集群，即S1和S2票了S1成为Leader，但是S2迅速重启，并且忘了投票给S1，此时S2收到了S3的投票请求，并投票给了S3，此时S3也会称为Leader。</p>
+<p>b. 现在，假设崩溃期间Follower的日志被截断（truncated）了，日志丢失了最后的一些记录。该Follower重新加入集群是否安全（假设未对算法做任何修改）？</p>
+<p>这个是不安全的。容易发现，丢失最后一些记录的影响是有可能成为Majority的日志条目达不到Majority了。而又因为根据题目2的思路，我们可以（也只能）单纯通过日志判断哪些日志条目是可以被安全提交的，所以这些达不到Majority的日志可能在丢失前已经被提交，但在丢失后被认为没有提交。</p>
+<p>在答案中，还举例解释了可能的后果，即这会导致这些被提交的entry被覆盖。同样地，对于一个3节点的集群：<br>S1作为term2的Leader，添加了index=1的条目&lt;1,2,X&gt;，X是这个条目的内容。稍后，由于这个记录已经被复制到了S1和S2，所以它被成功提交。<br>此后，S2重启，并丢失了所有记录。<br>后面由于一些网络抖动的因素，S1被分区，S3变成了term3的Leader（通过S2和S3的票，因为他们的LogEntries都是空），然后它添加了index=1的条目&lt;1,3,Y&gt;，这个条目同样可以被提交。那么此时index=1处的值既被提交为了X又被提交为了Y，不一致性发生了。</p>
+<h3 id="7"><a href="#7" class="headerlink" title="7"></a>7</h3><p>即使其它服务器认为Leader 崩溃并选出了新Leader后，老Leader依然可能继续运行。新的 Leader 将与集群中的多数派联系并更新它们的term，因此，老的Leader将在与多数派中的任何一台服务器通信后立即下台。<br>然而在此期间，它也可以继续充当Leader，并向尚未被新Leader联系到的Follower发出请求；此外，客户端可以继续向老的Leader发送请求。<br>我们知道，在选举结束后，老的Leader不能commit任何新的Log Entry，因为这样做获得多数派中的至少一台服务器的认可。但是，老的Leader是否有可能执行一个成功AppendEntries RPC，从而完成对<strong>选举开始前</strong>收到的旧日志记录的提交？如果可以，这是否会给Raft协议带来问题？</p>
+<p>这个题目描述的场景我没有真实遇到过，所以只能分析。首先老Leader的RPC只能发给少数派Follower，这些Follower也并未知晓新Leader的产生。但是如果新选出的Leader有包含老Leader的旧日志的话，那么其实这些旧日志是能够达到Majority的要求的。但对于是否会被覆盖这一点，我并没有什么结论。</p>
+<p>看答案，实际上是可能存在这种情况的，这也发生在新Leader包含了老Leader这一部分的日志。<br>在答案中给了一个具体的例子，涉及到一个5个节点的集群。<br>S1，日志为空，通过S1、S2和S3的票成为了term2的Leader。稍后，它添加日志<code>&lt;1,2,X&gt;</code>，并且复制到S2。<br>此后，这个S2通过S2、S4、S5的票成为了Leader。这里按照投票原则，S3也应该会投票的啊？其实S3和S1被分区了。<br>在这之后，S1完成发送&lt;1,2,X&gt;到S3，在此时，S1完成了&lt;1,2,X&gt;的提交，即使它不再是这个term的Leader了。这个论述其实和我上面的论述是一致的，而下面给出了为啥不会被覆盖的论证。</p>
+<p>这个是安全的，因为新Leader也具有老Leader提交的Entry，这会导致这个Entry被持久化，这是因为：<br>这Entry肯定也在一些给新Leader L投票的机器S上存在，并且必须在S投票之前就存在。log completeness check要求在投票时检查对端的lastLogTerm和lastLogIndex必须至少都大于等于自己的。下面我们分类讨论：<br>如果L是S之后的第一个Leader，那么必然有<code>L.lastLogTerm == S.lastLogTerm &amp;&amp; L.lastLogIndex &gt;= S.lastLogIndex</code>，即L拥有S拥有的所有Entry，包括我们担心的那一条。<br>如果L是S之后的第二个Leader，那么如果他从前一个Leader M中收到了Entry，那么必然有<code> L.lastLogTerm &gt; S.lastLogTerm</code>，但是M肯定在复制自己的Entry之前，就已经将我们担心的那一条日志复制给了L，因此这也是安全的。由此扩展，我们可以推论到任何其他的Leader。</p>
+<h3 id="8"><a href="#8" class="headerlink" title="8"></a>8</h3><p>在配置变更过程中，如果当前Leader不在C-new中，一旦C-new的日志记录被提交，它就会下台。然而，这意味着有一段时间，Leader不属于它所领导的集群（Leader上存储的当前配置条目是C-new，C-new不包括 Leader）。假设修改协议，如果C-new不包含Leader，则使Leader在其日志存储了C-new时就立即下台。这种方法可能发生的最坏情况是什么？</p>
+<p>首先，下台意味着什么呢？在C-new之前，C-old已经结束使命，配置C-joint已被提交，任何决议的提交都需要经过new和old的过半数的同意才行。那么下台意味着只要C-new日志被Leader存储，它就立即变成Follower，那么这个集群不再具有Leader，从而会发生选举，选举也是按照C-joint来选举的。考虑如果选出一个在C-old中的Leader，那么它会重复之前的流程，增加一个C-new，然后下台。这个流程会一直重复到C-old中的Majority都得到了C-new日志，这样剩余没有C-new日志的C-old机器也不能被选举为Leader了。这里注意，我们在讨论一个最坏的情况，就是每一次选举都是C-old中被选中，并且也不进行任何复制，因此所有C-new中的所有机器都没有收到C-new的日志。所以产生的结果就是最坏会有|C-old/2|次冗余选举。</p>
+<h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
+<li><a href="https://mp.weixin.qq.com/s?__biz=MzIzOTU0NTQ0MA==&amp;mid=2247494453&amp;idx=1&amp;sn=17b8a97fe9490d94e14b6a0583222837&amp;scene=21#wechat_redirect" target="_blank" rel="noopener">https://mp.weixin.qq.com/s?__biz=MzIzOTU0NTQ0MA==&amp;mid=2247494453&amp;idx=1&amp;sn=17b8a97fe9490d94e14b6a0583222837&amp;scene=21#wechat_redirect</a><br> 有关幽灵日志的相关内容</li>
+<li><a href="https://github.com/ongardie/raft.tla/blob/master/raft.tla" target="_blank" rel="noopener">https://github.com/ongardie/raft.tla/blob/master/raft.tla</a><br> 关于Raft的TLA的内容</li>
+<li><a href="https://www.zhihu.com/question/382888510" target="_blank" rel="noopener">https://www.zhihu.com/question/382888510</a><br> 讲解了为什么currentTerm需要持久化</li>
+<li><a href="https://zhuanlan.zhihu.com/p/47025699" target="_blank" rel="noopener">https://zhuanlan.zhihu.com/p/47025699</a><br> 有关幽灵日志的讨论</li>
+<li><a href="http://oceanbase.org.cn/" target="_blank" rel="noopener">http://oceanbase.org.cn/</a><br> 郁白在OB的实践</li>
+<li><a href="http://oceanbase.org.cn/?p=160" target="_blank" rel="noopener">http://oceanbase.org.cn/?p=160</a><br> 成员变更</li>
+<li><a href="https://thesquareplanet.com/blog/students-guide-to-raft/" target="_blank" rel="noopener">https://thesquareplanet.com/blog/students-guide-to-raft/</a><blockquote>
+<p>The if here is crucial. If the follower has all the entries the leader sent, the follower MUST NOT truncate its log.</p>
+</blockquote>
+</li>
+</ol>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/分布式/" rel="tag"># 分布式</a>
+          
+            <a href="/tags/raft/" rel="tag"># raft</a>
+          
+            <a href="/tags/论文阅读/" rel="tag"># 论文阅读</a>
+          
+            <a href="/tags/一致性/" rel="tag"># 一致性</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2019/02/20/jepsen/" rel="next" title="Jepsen使用">
+                <i class="fa fa-chevron-left"></i> Jepsen使用
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2019/03/12/2pc-3pc/" rel="prev" title="2PC和3PC">
+                2PC和3PC <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">262</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">154</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Raft基础概念"><span class="nav-number">1.</span> <span class="nav-text">Raft基础概念</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#状态"><span class="nav-number">1.1.</span> <span class="nav-text">状态</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#共有状态"><span class="nav-number">1.1.1.</span> <span class="nav-text">共有状态</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Leader专用状态"><span class="nav-number">1.1.2.</span> <span class="nav-text">Leader专用状态</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#任期"><span class="nav-number">1.2.</span> <span class="nav-text">任期</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#一个有趣的问题（一个离题的讨论）"><span class="nav-number">1.2.1.</span> <span class="nav-text">一个有趣的问题（一个离题的讨论）</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#日志与日志约束"><span class="nav-number">1.3.</span> <span class="nav-text">日志与日志约束</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#选举限制-论文5-4-1节"><span class="nav-number">1.3.1.</span> <span class="nav-text">选举限制(论文5.4.1节)</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#RPC"><span class="nav-number">1.4.</span> <span class="nav-text">RPC</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#AppendEntriesRPC"><span class="nav-number">1.4.1.</span> <span class="nav-text">AppendEntriesRPC</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#AppendEntriesRPC-Response"><span class="nav-number">1.4.2.</span> <span class="nav-text">AppendEntriesRPC Response</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#RequestVoteRPC"><span class="nav-number">1.4.3.</span> <span class="nav-text">RequestVoteRPC</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#RequestVoteRPC-Response"><span class="nav-number">1.4.4.</span> <span class="nav-text">RequestVoteRPC Response</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Leader-election"><span class="nav-number">2.</span> <span class="nav-text">Leader election</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#投票过程"><span class="nav-number">2.1.</span> <span class="nav-text">投票过程</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#投票原则"><span class="nav-number">2.2.</span> <span class="nav-text">投票原则</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Log-replication"><span class="nav-number">3.</span> <span class="nav-text">Log replication</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#不能提交来自较旧任期的日志条目-论文5-4-2节"><span class="nav-number">3.1.</span> <span class="nav-text">不能提交来自较旧任期的日志条目(论文5.4.2节)</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Leader在commit了一条日志后，立刻宕机会怎么样呢？"><span class="nav-number">3.1.1.</span> <span class="nav-text">Leader在commit了一条日志后，立刻宕机会怎么样呢？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#进一步讨论：论文5-4-2节"><span class="nav-number">3.1.2.</span> <span class="nav-text">进一步讨论：论文5.4.2节</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#为什么不-persist-commit-index？"><span class="nav-number">3.1.3.</span> <span class="nav-text">为什么不 persist commit index？</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#幽灵复现"><span class="nav-number">3.1.4.</span> <span class="nav-text">幽灵复现</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#对日志不一致问题的处理"><span class="nav-number">3.2.</span> <span class="nav-text">对日志不一致问题的处理</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#有关强制复制日志的细节"><span class="nav-number">3.3.</span> <span class="nav-text">有关强制复制日志的细节</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Safety"><span class="nav-number">4.</span> <span class="nav-text">Safety</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#有关领导人完全性的论述-论文5-4-3节"><span class="nav-number">4.1.</span> <span class="nav-text">有关领导人完全性的论述 论文5.4.3节</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#有关非Leader节点故障的讨论-论文5-5节"><span class="nav-number">4.2.</span> <span class="nav-text">有关非Leader节点故障的讨论 论文5.5节</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#有关可用性的讨论-论文5-6节"><span class="nav-number">4.3.</span> <span class="nav-text">有关可用性的讨论 论文5.6节</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#有关脑裂和网络分区的讨论"><span class="nav-number">4.4.</span> <span class="nav-text">有关脑裂和网络分区的讨论</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Membership-changes"><span class="nav-number">5.</span> <span class="nav-text">Membership changes</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Joint-Consensus"><span class="nav-number">5.1.</span> <span class="nav-text">Joint Consensus</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#几个-Issue"><span class="nav-number">5.1.1.</span> <span class="nav-text">几个 Issue</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#实现"><span class="nav-number">5.1.2.</span> <span class="nav-text">实现</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#一定需要两步么？"><span class="nav-number">5.2.</span> <span class="nav-text">一定需要两步么？</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Log-compaction"><span class="nav-number">6.</span> <span class="nav-text">Log compaction</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#InstallSnapshot"><span class="nav-number">6.1.</span> <span class="nav-text">InstallSnapshot</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#持久化"><span class="nav-number">7.</span> <span class="nav-text">持久化</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#使用什么引擎持久化？"><span class="nav-number">7.1.</span> <span class="nav-text">使用什么引擎持久化？</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#关于持久化的问题"><span class="nav-number">7.2.</span> <span class="nav-text">关于持久化的问题</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#为什么必须要持久化voteFor"><span class="nav-number">7.2.1.</span> <span class="nav-text">为什么必须要持久化voteFor</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#为什么必须要持久化term"><span class="nav-number">7.2.2.</span> <span class="nav-text">为什么必须要持久化term</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#为什么必须要持久化-logs"><span class="nav-number">7.2.3.</span> <span class="nav-text">为什么必须要持久化 logs</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#为什么不需要持久化-commitIndex"><span class="nav-number">7.2.4.</span> <span class="nav-text">为什么不需要持久化 commitIndex</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#为什么不需要持久化-lastApplied"><span class="nav-number">7.2.5.</span> <span class="nav-text">为什么不需要持久化 lastApplied</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#其他问题"><span class="nav-number">8.</span> <span class="nav-text">其他问题</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#网络要求"><span class="nav-number">8.1.</span> <span class="nav-text">网络要求</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Raft的优化"><span class="nav-number">9.</span> <span class="nav-text">Raft的优化</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#优化选举"><span class="nav-number">9.1.</span> <span class="nav-text">优化选举</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Prevote"><span class="nav-number">9.1.1.</span> <span class="nav-text">Prevote</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#优化写日志"><span class="nav-number">9.2.</span> <span class="nav-text">优化写日志</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#减轻-Leader-压力"><span class="nav-number">9.2.1.</span> <span class="nav-text">减轻 Leader 压力</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Batch"><span class="nav-number">9.2.2.</span> <span class="nav-text">Batch</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#异步-Append"><span class="nav-number">9.2.3.</span> <span class="nav-text">异步 Append</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Pipeline"><span class="nav-number">9.2.4.</span> <span class="nav-text">Pipeline</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#优化存储"><span class="nav-number">9.3.</span> <span class="nav-text">优化存储</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Witness"><span class="nav-number">9.3.1.</span> <span class="nav-text">Witness</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#优化-Apply"><span class="nav-number">9.4.</span> <span class="nav-text">优化 Apply</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#异步-Apply"><span class="nav-number">9.4.1.</span> <span class="nav-text">异步 Apply</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#乱序-Apply"><span class="nav-number">9.4.2.</span> <span class="nav-text">乱序 Apply</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#乱序-Apply-和乱序-Commit"><span class="nav-number">9.4.3.</span> <span class="nav-text">乱序 Apply 和乱序 Commit</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#exact-once-语义"><span class="nav-number">9.4.4.</span> <span class="nav-text">exact once 语义</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#优化-InstallSnapshot"><span class="nav-number">9.5.</span> <span class="nav-text">优化 InstallSnapshot</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Follower-Snapshot"><span class="nav-number">9.5.1.</span> <span class="nav-text">Follower Snapshot</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#增量-Snapshot"><span class="nav-number">9.5.2.</span> <span class="nav-text">增量 Snapshot</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#优化成员变更"><span class="nav-number">9.6.</span> <span class="nav-text">优化成员变更</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#成员变更的一阶段办法"><span class="nav-number">9.6.1.</span> <span class="nav-text">成员变更的一阶段办法</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Learner"><span class="nav-number">9.6.2.</span> <span class="nav-text">Learner</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#优化读"><span class="nav-number">9.7.</span> <span class="nav-text">优化读</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#ReadIndex-和线性一致"><span class="nav-number">9.7.1.</span> <span class="nav-text">ReadIndex 和线性一致</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Lease-Read、Follower-Learner-Read"><span class="nav-number">9.7.2.</span> <span class="nav-text">Lease Read、Follower(Learner) Read</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#Leader-的-ReadIndex"><span class="nav-number">9.7.2.1.</span> <span class="nav-text">Leader 的 ReadIndex</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Follower-Learner-的-ReadIndex"><span class="nav-number">9.7.2.2.</span> <span class="nav-text">Follower/Learner 的 ReadIndex</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Waitfree"><span class="nav-number">9.7.3.</span> <span class="nav-text">Waitfree</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Raft-的缺陷的讨论"><span class="nav-number">10.</span> <span class="nav-text">Raft 的缺陷的讨论</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#日志和选举"><span class="nav-number">10.1.</span> <span class="nav-text">日志和选举</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Leader-or-not"><span class="nav-number">10.2.</span> <span class="nav-text">Leader or not?</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Raft习题讲解"><span class="nav-number">11.</span> <span class="nav-text">Raft习题讲解</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#MIT6-824"><span class="nav-number">11.1.</span> <span class="nav-text">MIT6.824</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#官方习题"><span class="nav-number">11.2.</span> <span class="nav-text">官方习题</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1"><span class="nav-number">11.2.1.</span> <span class="nav-text">1</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2"><span class="nav-number">11.2.2.</span> <span class="nav-text">2</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3"><span class="nav-number">11.2.3.</span> <span class="nav-text">3</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4"><span class="nav-number">11.2.4.</span> <span class="nav-text">4</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#5"><span class="nav-number">11.2.5.</span> <span class="nav-text">5</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#6"><span class="nav-number">11.2.6.</span> <span class="nav-text">6</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#7"><span class="nav-number">11.2.7.</span> <span class="nav-text">7</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#8"><span class="nav-number">11.2.8.</span> <span class="nav-text">8</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">12.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2019/03/12/raft-algorithm/';
+          this.page.identifier = '2019/03/12/raft-algorithm/';
+          this.page.title = 'Raft共识算法';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+  
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Config({
+        tex2jax: {
+          inlineMath: [ ['$','$'], ["\\(","\\)"]  ],
+          processEscapes: true,
+          skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+        }
+      });
+    </script>
+
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax(), i;
+        for (i=0; i < all.length; i += 1) {
+          all[i].SourceElement().parentNode.className += ' has-jax';
+        }
+      });
+    </script>
+    <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+  
+
+
+  
+
+  
+
+</body>
+</html>

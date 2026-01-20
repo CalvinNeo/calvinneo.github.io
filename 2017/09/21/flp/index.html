@@ -1,0 +1,1241 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="分布式,raft,论文阅读,paxos,一致性," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="论文Impossibility of Distributed Consensus with One Faulty Process证明了在异步系统中，哪怕只允许非拜占庭错误，只要有一个进程出错，那么系统就不一定能达成共识，也就是不满足 termination 要求。而在同步系统中，即使是拜占庭条件下却能够达成。">
+<meta name="keywords" content="分布式,raft,论文阅读,paxos,一致性">
+<meta property="og:type" content="article">
+<meta property="og:title" content="FLP 定理">
+<meta property="og:url" content="http://www.calvinneo.com/2017/09/21/flp/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="论文Impossibility of Distributed Consensus with One Faulty Process证明了在异步系统中，哪怕只允许非拜占庭错误，只要有一个进程出错，那么系统就不一定能达成共识，也就是不满足 termination 要求。而在同步系统中，即使是拜占庭条件下却能够达成。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:image" content="http://www.calvinneo.com/img/fbs/flp/flpf1.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/fbs/flp/flpf2.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/fbs/flp/flpf3.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/fbs/flp/flp4.png">
+<meta property="og:updated_time" content="2024-11-18T18:27:07.695Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="FLP 定理">
+<meta name="twitter:description" content="论文Impossibility of Distributed Consensus with One Faulty Process证明了在异步系统中，哪怕只允许非拜占庭错误，只要有一个进程出错，那么系统就不一定能达成共识，也就是不满足 termination 要求。而在同步系统中，即使是拜占庭条件下却能够达成。">
+<meta name="twitter:image" content="http://www.calvinneo.com/img/fbs/flp/flpf1.png">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2017/09/21/flp/"/>
+
+
+
+
+
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5487541356791902"
+     crossorigin="anonymous"></script>
+  <title>FLP 定理 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2017/09/21/flp/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                FLP 定理
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2017-09-21T13:33:22+08:00">
+                2017-09-21
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>论文<a href="https://groups.csail.mit.edu/tds/papers/Lynch/jacm85.pdf" target="_blank" rel="noopener">Impossibility of Distributed Consensus with One Faulty Process</a>证明了在异步系统中，哪怕只允许非拜占庭错误，只要有一个进程出错，那么系统就不一定能达成共识，也就是不满足 termination 要求。而在同步系统中，即使是拜占庭条件下却能够达成。</p>
+<a id="more"></a>
+
+<h1 id="论文概要"><a href="#论文概要" class="headerlink" title="论文概要"></a>论文概要</h1><h2 id="定义一个异步系统"><a href="#定义一个异步系统" class="headerlink" title="定义一个异步系统"></a>定义一个异步系统</h2><p>首先，FLP 定义了一个异步系统，它应该满足如下的特点：</p>
+<ol>
+<li>非拜占庭的 Fail-stop 模型</li>
+<li>最多一个进程失败</li>
+<li>可靠通信、原子广播<br> 即通信最终会被送达，且仅被送达和西欧s一次。但是消息可任意延迟、可乱序。例如基于 TCP 的通信并不满足这个条件，因为 TCP 承载的消息是不可以乱序的。</li>
+<li>异步通信<br> 没有时钟、不能时间同步、不能使用超时。<br> 此外，进程之间还不能探测失败，因为无法判定一个异步进程到底是宕机了还是只是算得太慢。</li>
+</ol>
+<p>系统中包含一系列进程，进程之间通过全局消息队列，称为 message buffer 进行通信。例如进程 <code>p1</code> 可以用 <code>send(p2, m)</code> 向进程 <code>p2</code> 发送消息 <code>m</code>，进程 <code>p2</code> 通过持续不断 <code>receive(p2)</code> 来获取自己的消息，并 <code>event(p2, m)</code> 来执行这个消息。以上的过程称为一个 <strong>step</strong>，一系列连续的 step 组成一个 run。</p>
+<p>如果一个进程 <code>p</code> 在一个 run 中能运行无数个 step，那么它是非故障的。</p>
+<p>定义一个 configuration 为当前所有进程和 message buffer 的状态，也就是整个系统的状态。那么一个 step 就会使得系统从一个 configuration 到达另一个 configuration。当然，在上面的例子中，如果 <code>p2</code> 由于分区等原因接受不到消息，这时候就表示为 <code>m</code> 为 NULL，即 <code>event(p2, NULL)</code>。</p>
+<p>一个 initial configuration 指的是所有进程从某个初始状态启动，并且 message buffer 为空。</p>
+<p>这里的 p 可以看做 deterministic 的 transition function。这意味着每个进程后续进入什么状态，完全取决于它从 message buffer 中取到什么消息。</p>
+<p>假定所有进程试图达成一个 <code>{0, 1}</code> 的某个值上达成一个决议，并输出到寄存器 <code>yp</code>。<code>yp</code> 的值为 <code>{b, 0, 1}</code>，其中 <code>b</code> 表示未产生表决结果的初始状态。一旦 <code>yp</code> 从 <code>b</code> 变为 0 或 1，这个值就不再可以被修改。这些进程可以从各自的寄存器 <code>xp</code> 中读取初始值，这些初始值是 <code>{0, 1}</code>。</p>
+<p>C 上的一个 schedule 是有限或无限的 event 的序列 σ，这个序列可以被依次应用到 C 上。由它产生的一系列 step 称为 run。如果σ 是有限的，得到的新的 configuration 称为从 C 是 reachable 的。定义能从初始 configuration 到达的 configuration 是 accessible 的。</p>
+<p>某个 configuration C 能 reachable (后面也会说“可达”)的所有 configuration 中的 decision value 的集合是 <code>V</code>。这里的 decision value 就是 0 或者 1。<br>定义 <code>v</code> 是 <code>V</code> 的势，可以说这个 configuration 是 <code>v</code>-valent 的。这里的 valent 在化学中被翻译为“价”，比如三价铁，四价铬。如果 V 中只有一个元素，那么就是 univalent。根据这个元素是什么，可以分为 0-valent 和 1-valent。如果 V 中有两个元素，就是 bivalent。</p>
+<p>我们期望所有的正常进程最终都能达成正确的决议，但实际上 FLP 定理的证明中构造了一种情况，即使某些进程能够最终进入 univalent 的这一点都无法保证。</p>
+<p>A configuration C has decision value v if some process p is in a decision state with y_p = v。<br>一个共识算法是部分正确的，当</p>
+<ol>
+<li>所有 accessible 的 configuration 都有相同的 decision value。</li>
+<li>所有 accessible 的 configuration 里面不能只有 0 或者 1，不然这样我搞一个系统永远输出 0，那不是永远部分正确了么？不考虑这样的平凡解。</li>
+</ol>
+<p>定义一个共识算法是完全正确的，当它是部分正确的，此外还能满足终止条件。</p>
+<p>整个的 FLP 定理的证明分为三个引理。</p>
+<p>第二三引理类似于归纳法：</p>
+<ol>
+<li>引理二先证明任意共识算法 P 都不能保证 initial configuration 都是 univalent。</li>
+<li>然后引理三证明从 bivalent 能得到 bivalent。</li>
+</ol>
+<p>这个归纳法我觉得很妙。另外，第三个引理的构造也很妙。</p>
+<h2 id="第一个引理"><a href="#第一个引理" class="headerlink" title="第一个引理"></a>第一个引理</h2><p>第一个引理很直观，从 C 开始有两个 schedule σ1 和 σ2，执行它们分别得到 C1 和 C2。我们再假定执行 σ1 和 σ2 的进程集合是不相交的，那么 σ2 又可以被应用到 C1 上，σ1 也可以被引用到 C2 上，这会导致得到相同的 configuation C3。</p>
+<p><img src="/img/fbs/flp/flpf1.png"></p>
+<p>证明很简单，因为 σ1 和 σ2 彼此独立没有交集，这个对 Lamport 时钟有了解的都能够想明白。</p>
+<h2 id="第二个引理"><a href="#第二个引理" class="headerlink" title="第二个引理"></a>第二个引理</h2><p>首先，定义一个 run 是 admissible 的，如果最多一个进程故障了，并且所有其他非故障的进程都收到了所有的消息。</p>
+<p>第二引理证明了<strong>在有一个进程失败的系统中</strong>，对于任意的共识算法 P，一定存在一个 bivalent initial configuration。这就是在说这样的系统中，同样的 initial configuration 可能运行出不同的结果。</p>
+<p>证明用到了构建相邻环的思路，用大白话讲一下就是反证法假设系统从某个 univalent 开始，根据部分正确的条件2，要求有两个 configuration 为 C0 和 C1 分别是 0/1-valent 的。论文中指出，必然存在 decision value 为 0 的系统 C0 和为 1 的系统 C1 只差一个进程 <code>p</code> 。</p>
+<p>例如三个进程的初始状态 <code>xp = {1, 1, 0}</code> 和 <code>xp = {1, 0, 0}</code> 就只差一个 <code>p2</code>。然后假设通过某个 Quorum 的共识算法，前者是 1-valent，后者是 0-valent。当然这里也可以用其他的算法让前者 0-valent，后者 1-valent，虽然这样很反直觉，但其目的主要是说明这样的 <code>p2</code> 是存在的。</p>
+<p>现在假设 <code>p2</code> 故障了，也就是它不能运行哪怕一个 step，或者说不能 send 或者 receive 任何消息了。这样 C0 和 C1 在排除掉这个 <code>p2</code> 之后其实是一样的。</p>
+<p>然后尝试以 C0 或 C1 为 initial configuration 来进行 admissible deciding run。那么 C0 和 C1 必然会进入同一个值，假如令它为 1，那么 <code>C0</code> 这个原本 0-valent 的 configuration 中的 decision value 就是 <code>{0, 1}</code> 了。这样 C0 就不是 univalent 的了，从而推出矛盾。</p>
+<p>总而言之，第二个引理描述了对于任意的共识算法 P，一定存在 0-valent 的 configuration 和 1-valent 的 configuration 只差一个进程，令这个进程故障，那么就会得到一个 bivalent。所以对于 P，只要考虑一个故障节点，它就不能保证 initial configuration 都是 0-valent 和 1-valent 的。</p>
+<h2 id="第三个引理"><a href="#第三个引理" class="headerlink" title="第三个引理"></a>第三个引理</h2><p>第三个引理承接了第二个引理。它证明了从一个不确定的状态开始，也会得到不确定的状态。也就是说，在某种情况下，如果 <code>C</code> 是 bivalent 的，那么从它可达的所有 configuration 的集合 <code>D</code> 中包含一个 bivalent 的 configuration。</p>
+<p>这个证明也分为两个小步骤。但整体上，依旧是使用反证法的：</p>
+<ol>
+<li>证明 <code>D</code> 中包含了 0-valent configuration 和 1-valent configuration。</li>
+<li>证明 <code>D</code> 中包含一个 bivalent 的 configuration。</li>
+</ol>
+<p>首先定义事件 <code>e=(p,m)</code>，它可以被 apply 到 <code>C</code> 上。那就可以分出：</p>
+<ol>
+<li><strong>集合1</strong>：不对 <code>C</code> 应用 <code>e</code> 可达的 configuration 的集合 <code>E</code>。</li>
+<li><strong>集合2</strong>：对 <code>E</code> 中的 configuration 应用 <code>e</code> 可达的 configuration 的集合 <code>D</code>。</li>
+</ol>
+<p>【Q】这里，原文中使用花体字 D 和 E 来代表这里我说的 D 和 E。非花体字的 D 和 E 表示里面的一个 configuration，但实际上没有多大的作用，所以我就省略了。对于特定的元素 Di 或者 Ei，我还是使用了原文中的写法。</p>
+<p>注意到，因为 <code>e</code> 能应用到 <code>C</code>，并且可以被任意延迟，所以它肯定也能应用到 <code>E</code>。</p>
+<p>使用反证法，假设 <code>D</code> 中不含有 bivalent 的 configuration，也就是它里面的每个 configuration 都是 univalent 的。</p>
+<p>现在假设，<code>Ei</code> 是从 <code>Ci</code> 可以 reachable 的某个 i-valent 的 configuration。由于 <code>Ci</code> 是 bivalent 的，所以 <code>E0</code> 和 <code>E1</code> 肯定是存在的。现在讨论 <code>Ei</code>：</p>
+<ol>
+<li>如果 <code>Ei</code> 属于 <code>E</code>，那么对它应用 <code>e</code> 得到 <code>Fi</code>，则根据 <strong>集合2</strong> 的特性，<code>Fi</code> 肯定就属于 <code>D</code> 了。</li>
+<li>如果 <code>Ei</code> 不属于 <code>E</code>，说明 <code>Ei</code> 已经在之前收到过消息 <code>e</code> 了。那么它会先到达一个同样属于 <code>D</code> 的 configuration <code>Fi</code>，然后再到达 <code>Ei</code>。</li>
+</ol>
+<p>总而言之，无论走那条路，得到的 <code>Fi</code> 的 configuration 都是落在集合 <code>D</code> 中的。并且 <code>Fi</code> 是 i-valent 的，因为 <code>Fi</code> 属于 <code>D</code>，而根据假设，<code>D</code> 又不是 bivalent 的。</p>
+<p>那既然开始的集合 <code>C</code> 是 bivalent 的，最后又都会落到同一个集合中，那么 <code>D</code> 中肯定既有 0-valent 又有 1-valent 的 configuration。这里为止和假设还是不矛盾的，因为我们需要证明 <code>D</code> 中包含一个 bivalent 的 configuration。注意这里的区别，valent 的概念是对 configuration 说的，而 <code>D</code> 是 configuration 的集合。</p>
+<p>定义两个 configuration 相邻，如果第一个 configuration 可以通过一个 step 得到另一个。</p>
+<p>简单的推导可知，<code>E</code> 中一定存在相邻的两个 <code>C0</code> 和 <code>C1</code>，对于这两个 <code>Ci</code>，<code>D0=e(C0)</code> 是 0-valent，<code>D1=e(C1)</code>是 1-valent 的。不失一般性地，设 <code>C1=e&#39;(C0)</code>，其中 <code>e&#39;=(p&#39;,m&#39;)</code>，当然反过来假设也可以。回顾前文，这里的 p 表示进程 process。</p>
+<p>我们可以得到一个如下图中<strong>实线</strong>所表示的有向图，但是否有虚线所示的关系是不确定的，所以要展开讨论<br><img src="/img/fbs/flp/flpf2.png"></p>
+<ol>
+<li>如果 <code>p</code> 不等 <code>p&#39;</code>，可以将它们划分到两个不相交集合中。所以根据<strong>引理1</strong>，可以得到 <code>D1=e&#39;(D0)</code> （上图中的虚线）。那么这也就意味着从一个 0-valent 的节点到达一个 1-valent 的节点，而这是不可能的，因为 0-valent 的后继只能是 0-valent 的。</li>
+<li>如果 <code>p</code> 等于 <code>p&#39;</code> 了，考虑任意从 C0 开始的 finite deciding run，并且在这其中 p takes no steps。<br> 我理解这里的 p takes no steps 就是假设 p 宕机了。但是从 <code>C0</code> 到 <code>D0</code> 和从 <code>C0</code> 到 <code>C1</code> 都要源于 p 去进行的 step。<br> 假定这个 run 对应的 schedule 是 <code>σ</code>。那么从 <code>C0</code> 就能通过 <code>σ</code> 到达一个 <code>A</code> configuration。<br> 看图的左下部分，对于这个 <code>A</code> 状态应用 <code>e</code>，可以到达 <code>E0</code>。因为根据<strong>引理1</strong>，因为 p 和 D0 中的进程是不相交的，所以对 <code>D0</code> 应用 <code>σ</code> 得到 <code>E0</code>。同理，可以构造右边的一个 <code>E1</code>，从而发现 <code>A</code> 既可以变到 <code>E0</code> 又可以变到 <code>E1</code> ，A 是 bivalent 的。但是一开始我们说 A 是 deciding 的，所以它一定是 univalent 的。</li>
+</ol>
+<p><img src="/img/fbs/flp/flpf3.png"></p>
+<blockquote>
+<p>Any deciding run from a bivalent initial configuration goes to a univalent configuration, so there must be some single step that goes from a bivalent to a univalent configuration. Such a step determines the eventual decision value. We now show that it is always possible to run the system in a way that avoids such steps, leading to an admissible nondeciding run.  </p>
+</blockquote>
+<p><img src="/img/fbs/flp/flp4.png"></p>
+<h1 id="FLP-定理的现实意义"><a href="#FLP-定理的现实意义" class="headerlink" title="FLP 定理的现实意义"></a>FLP 定理的现实意义</h1><p>FLP 定理使用的异步模型是很严格的。它假设了确定性的算法中不能使用任何时钟或者超时来判断可能的崩溃节点。实际上引入这些方法进行检测，哪怕检测结果可能有时是错误的，那么共识问题就是有解的。</p>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/分布式/" rel="tag"># 分布式</a>
+          
+            <a href="/tags/raft/" rel="tag"># raft</a>
+          
+            <a href="/tags/论文阅读/" rel="tag"># 论文阅读</a>
+          
+            <a href="/tags/paxos/" rel="tag"># paxos</a>
+          
+            <a href="/tags/一致性/" rel="tag"># 一致性</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2017/09/21/distributed-consistency/" rel="next" title="分布式一致性详解">
+                <i class="fa fa-chevron-left"></i> 分布式一致性详解
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2017/09/23/HDU2089不要62/" rel="prev" title="HDU 2089 不要62 数位DP">
+                HDU 2089 不要62 数位DP <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">262</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">154</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#论文概要"><span class="nav-number">1.</span> <span class="nav-text">论文概要</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#定义一个异步系统"><span class="nav-number">1.1.</span> <span class="nav-text">定义一个异步系统</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#第一个引理"><span class="nav-number">1.2.</span> <span class="nav-text">第一个引理</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#第二个引理"><span class="nav-number">1.3.</span> <span class="nav-text">第二个引理</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#第三个引理"><span class="nav-number">1.4.</span> <span class="nav-text">第三个引理</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#FLP-定理的现实意义"><span class="nav-number">2.</span> <span class="nav-text">FLP 定理的现实意义</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2017/09/21/flp/';
+          this.page.identifier = '2017/09/21/flp/';
+          this.page.title = 'FLP 定理';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>

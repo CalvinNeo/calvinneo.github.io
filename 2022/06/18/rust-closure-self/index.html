@@ -1,0 +1,1194 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="函数式,Rust," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="在不动点组合子Y-Combinator中介绍了如何借助 Y-Combinator 和 Z-Combinator 实现在闭包中引用自己。">
+<meta name="keywords" content="函数式,Rust">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Rust闭包实现递归">
+<meta property="og:url" content="http://www.calvinneo.com/2022/06/18/rust-closure-self/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="在不动点组合子Y-Combinator中介绍了如何借助 Y-Combinator 和 Z-Combinator 实现在闭包中引用自己。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2026-01-04T17:25:17.518Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Rust闭包实现递归">
+<meta name="twitter:description" content="在不动点组合子Y-Combinator中介绍了如何借助 Y-Combinator 和 Z-Combinator 实现在闭包中引用自己。">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2022/06/18/rust-closure-self/"/>
+
+
+
+
+
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5487541356791902"
+     crossorigin="anonymous"></script>
+  <title>Rust闭包实现递归 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2022/06/18/rust-closure-self/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                Rust闭包实现递归
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2022-06-18T20:28:29+08:00">
+                2022-06-18
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>在<a href="/2017/07/28/Y-Combinator/">不动点组合子Y-Combinator</a>中介绍了如何借助 Y-Combinator 和 Z-Combinator 实现在闭包中引用自己。</p>
+<a id="more"></a>
+
+<h1 id="基于-Y-Combinator-的方案"><a href="#基于-Y-Combinator-的方案" class="headerlink" title="基于 Y-Combinator 的方案"></a>基于 Y-Combinator 的方案</h1><p>回忆一下 Y-Combinator 的定义</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Y = λf.(λx.f (x x)) (λx.f (x x))</span><br></pre></td></tr></table></figure>
+
+<h2 id="Fn"><a href="#Fn" class="headerlink" title="Fn"></a>Fn</h2><p>这里的 <code>X</code> 是为了实现 Y-Combinator 中的 <code>x x</code> 这样的结构。从<a href="/2017/07/28/Y-Combinator/">不动点组合子Y-Combinator</a>中可以知道 x 实际上是个递归类型。</p>
+<p>容易看出，这里很多东西都是一样的，例如 <code>Rc&lt;dyn Fn(A) -&gt; O&gt;</code> 和 <code>impl Fn(A) -&gt; O</code> 都表示的是 F：</p>
+<ol>
+<li>返回值可以用 impl 做静态分发，当然写成 <code>Box&lt;dyn Fn(A) -&gt; O&gt;</code> 返回也是没问题的</li>
+<li>impl 本身也不能作为 closure 的参数<br> <code>impl Trait</code> only allowed in function and inherent method return types, not in closure param<br> 但是可以在普通函数中用 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// Error</span></span><br><span class="line"><span class="keyword">let</span> fi = |i:<span class="built_in">i32</span>| -&gt; <span class="built_in">i32</span> &#123; i + <span class="number">1</span> &#125;;</span><br><span class="line"><span class="keyword">let</span> f1 = |f: <span class="keyword">impl</span> <span class="built_in">Fn</span>(<span class="built_in">i32</span>) -&gt; <span class="built_in">i32</span>| -&gt; <span class="built_in">i32</span> &#123; f(<span class="number">1</span>) &#125;;</span><br><span class="line"><span class="comment">// OK</span></span><br><span class="line"><span class="function"><span class="keyword">fn</span> <span class="title">fi</span></span>(i:<span class="built_in">i32</span>) -&gt; <span class="built_in">i32</span> &#123; i + <span class="number">1</span> &#125;</span><br><span class="line"><span class="function"><span class="keyword">fn</span> <span class="title">f1</span></span>(f: <span class="keyword">impl</span> <span class="built_in">Fn</span>(<span class="built_in">i32</span>) -&gt; <span class="built_in">i32</span>) -&gt; <span class="built_in">i32</span> &#123; f(<span class="number">1</span>) &#125;</span><br></pre></td></tr></table></figure></li>
+</ol>
+<p>整个实现如下所示，简单介绍下：</p>
+<ol>
+<li><code>(|x: X&lt;F&gt;| x.call(x.clone()))(x)</code><br> 实际上就是 <code>x x</code>，这里用 eta-conversion 来避免了立即求值。</li>
+<li>那么 <code>inner1</code> 就应该是 <code>(λx.f (x x))</code>了</li>
+</ol>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">fn</span> <span class="title">y</span></span>&lt;A, O, F&gt;(f: Rc&lt;dyn <span class="built_in">Fn</span>(Rc&lt;dyn <span class="built_in">Fn</span>(A) -&gt; O&gt;) -&gt; F&gt;) -&gt; <span class="keyword">impl</span> <span class="built_in">Fn</span>(A) -&gt; O</span><br><span class="line">    <span class="keyword">where</span></span><br><span class="line">        F: <span class="built_in">Fn</span>(A) -&gt; O,</span><br><span class="line">        F: <span class="symbol">'static</span>,</span><br><span class="line">        A: <span class="symbol">'static</span>,</span><br><span class="line">        O: <span class="symbol">'static</span>,</span><br><span class="line">&#123;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">X</span></span>&lt;F&gt;(Rc&lt;dyn <span class="built_in">Fn</span>(X&lt;F&gt;) -&gt; F&gt;);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">impl</span>&lt;F&gt; <span class="built_in">Clone</span> <span class="keyword">for</span> X&lt;F&gt; &#123;</span><br><span class="line">        <span class="function"><span class="keyword">fn</span> <span class="title">clone</span></span>(&amp;<span class="keyword">self</span>) -&gt; <span class="keyword">Self</span> &#123;</span><br><span class="line">            <span class="keyword">Self</span>(Rc::clone(&amp;<span class="keyword">self</span>.<span class="number">0</span>))</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">impl</span>&lt;F&gt; X&lt;F&gt; &#123;</span><br><span class="line">        <span class="function"><span class="keyword">fn</span> <span class="title">call</span></span>(&amp;<span class="keyword">self</span>, x: <span class="keyword">Self</span>) -&gt; F &#123;</span><br><span class="line">            (<span class="keyword">self</span>.<span class="number">0</span>)(x)</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">let</span> inner = Rc::new(<span class="keyword">move</span> |x: X&lt;F&gt;| f(</span><br><span class="line">            Rc::new(<span class="keyword">move</span> |a| (x.call(x.clone())) (a))</span><br><span class="line">        ));</span><br><span class="line">    <span class="keyword">let</span> x = X(inner);</span><br><span class="line">    (|x: X&lt;F&gt;| x.call(x.clone()))(x)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="FnMut"><a href="#FnMut" class="headerlink" title="FnMut"></a>FnMut</h2><figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">use</span> std::rc::Rc;</span><br><span class="line"><span class="keyword">use</span> std::cell::RefCell;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">fn</span> <span class="title">y_mut</span></span>&lt;A, O, F&gt;(f: Rc&lt;RefCell&lt;</span><br><span class="line">                        dyn <span class="built_in">FnMut</span>(</span><br><span class="line">                            Rc&lt;RefCell&lt;dyn <span class="built_in">FnMut</span>(A) -&gt; O&gt;&gt;</span><br><span class="line">                        ) -&gt; F</span><br><span class="line">                     &gt;&gt;) -&gt; <span class="keyword">impl</span> <span class="built_in">FnMut</span>(A) -&gt; O</span><br><span class="line">    <span class="keyword">where</span></span><br><span class="line">        F: <span class="built_in">FnMut</span>(A) -&gt; O,</span><br><span class="line">        F: <span class="symbol">'static</span>,</span><br><span class="line">        A: <span class="symbol">'static</span>,</span><br><span class="line">        O: <span class="symbol">'static</span>,</span><br><span class="line">&#123;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">X</span></span>&lt;F&gt;(Rc&lt;RefCell&lt;dyn <span class="built_in">FnMut</span>(X&lt;F&gt;) -&gt; F&gt;&gt;);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">impl</span>&lt;F&gt; <span class="built_in">Clone</span> <span class="keyword">for</span> X&lt;F&gt; &#123;</span><br><span class="line">        <span class="function"><span class="keyword">fn</span> <span class="title">clone</span></span>(&amp;<span class="keyword">self</span>) -&gt; <span class="keyword">Self</span> &#123;</span><br><span class="line">            <span class="keyword">Self</span>(Rc::clone(&amp;<span class="keyword">self</span>.<span class="number">0</span>))</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">impl</span>&lt;F&gt; X&lt;F&gt; &#123;</span><br><span class="line">        <span class="function"><span class="keyword">fn</span> <span class="title">call</span></span>(&amp;<span class="keyword">self</span>, x: <span class="keyword">Self</span>) -&gt; F &#123;</span><br><span class="line">            ((*<span class="keyword">self</span>.<span class="number">0</span>).borrow_mut())(x)</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">let</span> ff = Rc::new(RefCell::new(<span class="keyword">move</span> |x: X&lt;F&gt;| &#123;</span><br><span class="line">        <span class="keyword">let</span> <span class="keyword">mut</span> ff_borrowd = (*f).borrow_mut();</span><br><span class="line">        ff_borrowd(Rc::new(RefCell::new(<span class="keyword">move</span> |a| (x.call(x.clone()))(a))))</span><br><span class="line">    &#125;));</span><br><span class="line">    <span class="keyword">let</span> x = X(ff);</span><br><span class="line">    (|x: X&lt;F&gt;| x.call(x.clone()))(x)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这个函数如下使用，其中:</p>
+<ul>
+<li><code>f</code> 是递归函数本身，它的类型是 <code>Rc&lt;RefCell&lt;dyn FnMut(A) -&gt; O&gt;&gt;</code>，对应的 arg 是第一个闭包。</li>
+<li><code>A</code> 的类型是 usize，对应的 arg 是 <code>i</code>。</li>
+</ul>
+<p>此外：</p>
+<ul>
+<li>第一个闭包返回的是第二个闭包。</li>
+</ul>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">fn</span> <span class="title">main</span></span>() &#123;</span><br><span class="line">    <span class="keyword">let</span> a = Rc::new(RefCell::new(<span class="built_in">vec!</span>[<span class="number">0</span>; <span class="number">5</span>]));</span><br><span class="line">    <span class="keyword">let</span> n: <span class="built_in">usize</span> = (*a).borrow_mut().len();</span><br><span class="line"></span><br><span class="line">    y_mut(Rc::new(RefCell::new(&#123;</span><br><span class="line">        <span class="keyword">let</span> a = Rc::clone(&amp;a);</span><br><span class="line">        <span class="comment">// dyn FnMut(</span></span><br><span class="line">        <span class="comment">//     Rc&lt;RefCell&lt;dyn FnMut(A) -&gt; O&gt;&gt;</span></span><br><span class="line">        <span class="comment">// ) -&gt; F</span></span><br><span class="line">        <span class="keyword">move</span> |f: Rc&lt;RefCell&lt;dyn <span class="built_in">FnMut</span>(<span class="built_in">usize</span>)&gt;&gt;| &#123;</span><br><span class="line">            <span class="keyword">let</span> a = Rc::clone(&amp;a);</span><br><span class="line">            <span class="comment">// dyn FnMut(A) -&gt; O</span></span><br><span class="line">            <span class="keyword">move</span> |i| &#123;</span><br><span class="line">                <span class="keyword">if</span> i &lt; n &#123;</span><br><span class="line">                    (*a).borrow_mut()[i] = i;</span><br><span class="line">                    ((*f).borrow_mut())(i + <span class="number">1</span>);</span><br><span class="line">                &#125;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;)))(<span class="number">0</span>);</span><br><span class="line">    <span class="built_in">println!</span>(<span class="string">"a is &#123;:?&#125;"</span>, a.borrow());</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>输出的是</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">a is [0, 1, 2, 3, 4]</span><br></pre></td></tr></table></figure>
+
+<h1 id="其他方案"><a href="#其他方案" class="headerlink" title="其他方案"></a>其他方案</h1><ol>
+<li>struct 包 closure</li>
+<li>在 fn 定义 fn<br> 但不能捕获任何变量了</li>
+<li><a href="https://stackoverflow.com/questions/16946888/is-it-possible-to-make-a-recursive-closure-in-rust" target="_blank" rel="noopener">一个神奇的办法</a><br> 这个做法很有趣，它实际上是先顶一个 placeholder 的 fact 函数即 <code>weak_holder</code>，在真正的 fact 函数被定义时，调用 myself。在 fact 函数定义结束后，再把 fact 函数赋给 placeholder 的 weak_holder。 <figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">use</span> std::&#123;</span><br><span class="line">    cell::RefCell,</span><br><span class="line">    rc::&#123;Rc, Weak&#125;,</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">fn</span> <span class="title">main</span></span>() &#123;</span><br><span class="line">    <span class="keyword">let</span> weak_holder: Rc&lt;RefCell&lt;Weak&lt;dyn <span class="built_in">Fn</span>(<span class="built_in">u32</span>) -&gt; <span class="built_in">u32</span>&gt;&gt;&gt; =</span><br><span class="line">        Rc::new(RefCell::new(Weak::&lt;<span class="function"><span class="keyword">fn</span></span>(<span class="built_in">u32</span>) -&gt; <span class="built_in">u32</span>&gt;::new()));</span><br><span class="line">    <span class="keyword">let</span> weak_holder2 = weak_holder.clone();</span><br><span class="line">    <span class="keyword">let</span> fact: Rc&lt;dyn <span class="built_in">Fn</span>(<span class="built_in">u32</span>) -&gt; <span class="built_in">u32</span>&gt; = Rc::new(<span class="keyword">move</span> |x| &#123;</span><br><span class="line">        <span class="keyword">let</span> myself = weak_holder2.borrow().upgrade().unwrap();</span><br><span class="line">        <span class="keyword">if</span> x == <span class="number">0</span> &#123;</span><br><span class="line">            <span class="number">1</span></span><br><span class="line">        &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">            x * myself(x - <span class="number">1</span>)</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;);</span><br><span class="line">    weak_holder.replace(Rc::downgrade(&amp;fact));</span><br><span class="line"></span><br><span class="line">    <span class="built_in">println!</span>(<span class="string">"&#123;&#125;"</span>, fact(<span class="number">5</span>)); <span class="comment">// prints "120"</span></span><br><span class="line">    <span class="built_in">println!</span>(<span class="string">"&#123;&#125;"</span>, fact(<span class="number">6</span>)); <span class="comment">// prints "720"</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></li>
+</ol>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/函数式/" rel="tag"># 函数式</a>
+          
+            <a href="/tags/Rust/" rel="tag"># Rust</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2022/03/19/exception_cpp/" rel="next" title="C++中的异常">
+                <i class="fa fa-chevron-left"></i> C++中的异常
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2022/06/21/linux-fs/" rel="prev" title="Linux 的文件系统">
+                Linux 的文件系统 <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">262</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">154</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#基于-Y-Combinator-的方案"><span class="nav-number">1.</span> <span class="nav-text">基于 Y-Combinator 的方案</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Fn"><span class="nav-number">1.1.</span> <span class="nav-text">Fn</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#FnMut"><span class="nav-number">1.2.</span> <span class="nav-text">FnMut</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#其他方案"><span class="nav-number">2.</span> <span class="nav-text">其他方案</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2022/06/18/rust-closure-self/';
+          this.page.identifier = '2022/06/18/rust-closure-self/';
+          this.page.title = 'Rust闭包实现递归';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>

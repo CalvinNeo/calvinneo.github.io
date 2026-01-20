@@ -1,0 +1,1381 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="Rust," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="介绍 Rust 的 Borrow Checker 的原理。">
+<meta name="keywords" content="Rust">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Rust 的 Borrow Checker">
+<meta property="og:url" content="http://www.calvinneo.com/2024/04/07/rust-borrow-checker/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="介绍 Rust 的 Borrow Checker 的原理。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2024-07-15T09:44:29.134Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Rust 的 Borrow Checker">
+<meta name="twitter:description" content="介绍 Rust 的 Borrow Checker 的原理。">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2024/04/07/rust-borrow-checker/"/>
+
+
+
+
+
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5487541356791902"
+     crossorigin="anonymous"></script>
+  <title>Rust 的 Borrow Checker | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2024/04/07/rust-borrow-checker/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                Rust 的 Borrow Checker
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2024-04-07T15:46:32+08:00">
+                2024-04-07
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>介绍 Rust 的 Borrow Checker 的原理。</p>
+<a id="more"></a>
+
+<h1 id="前期知识：High-level-Compiler-Architecture"><a href="#前期知识：High-level-Compiler-Architecture" class="headerlink" title="前期知识：High-level Compiler Architecture"></a>前期知识：High-level Compiler Architecture</h1><h2 id="Queries-demand-driven-compilation"><a href="#Queries-demand-driven-compilation" class="headerlink" title="Queries: demand-driven compilation"></a>Queries: demand-driven compilation</h2><p>正在从 pass-based 转变为 demand-driven 模式：</p>
+<blockquote>
+<p>Instead of entirely independent passes (parsing, type-checking, etc.), a set of function-like queries compute information about the input source. For example, there is a query called <code>type_of</code> that, given the <code>DefId</code> of some item, will compute the type of that item and return it to you.</p>
+</blockquote>
+<p>上面的这些 query 是可以被记忆化的，所以在第一次被计算后，剩余的查询就可以从一个 hash table 中被检索出来。这对 Incremental Computation 是非常友好的。</p>
+<p>最终，we want the entire compiler control-flow to be query driven. 也就是对于每个 crate，会运行一个 top-level 的 query 即 <code>compile</code>。这会链式地触发后续的各种计算，比如:</p>
+<ul>
+<li>The compile query might demand to get a list of codegen-units，比如需要被 LLVM 编译的模块列表</li>
+<li>但为了计算这些 codegen-units 就需要使用一个 subquery 计算 Rust 源码中定义的 module 列表</li>
+<li>这个 subquery 就需要触发 HIR 的计算</li>
+<li>This keeps going further and further back until we wind up doing the actual parsing.</li>
+</ul>
+<h3 id="How-the-compiler-executes-a-query"><a href="#How-the-compiler-executes-a-query" class="headerlink" title="How the compiler executes a query"></a>How the compiler executes a query</h3><h3 id="Providers"><a href="#Providers" class="headerlink" title="Providers"></a>Providers</h3><p>If, however, the query is not in the cache, then the compiler will try to find a suitable provider. A provider is a function that has been defined and linked into the compiler somewhere that contains the code to compute the result of the query.</p>
+<h3 id="How-providers-are-setup"><a href="#How-providers-are-setup" class="headerlink" title="How providers are setup"></a>How providers are setup</h3><h2 id="Memory-Management-in-Rustc"><a href="#Memory-Management-in-Rustc" class="headerlink" title="Memory Management in Rustc"></a>Memory Management in Rustc</h2><h1 id="前期知识：Source-Code-Representation"><a href="#前期知识：Source-Code-Representation" class="headerlink" title="前期知识：Source Code Representation"></a>前期知识：Source Code Representation</h1><h2 id="Intermediate-representations-综述"><a href="#Intermediate-representations-综述" class="headerlink" title="Intermediate representations 综述"></a>Intermediate representations 综述</h2><p>Instead most compilers, including rustc, build some sort of IR out of the source code which is easier to analyze. rustc has a few IRs, each optimized for different purposes:</p>
+<ul>
+<li>Token stream: the lexer produces a stream of tokens directly from the source code. This stream of tokens is easier for the parser to deal with than raw text.</li>
+<li>Abstract Syntax Tree (AST): the abstract syntax tree is built from the stream of tokens produced by the lexer. It represents pretty much exactly what the user wrote. It helps to do some syntactic sanity checking (e.g. checking that a type is expected where the user wrote one).</li>
+<li>High-level IR (HIR): This is a sort of desugared AST. It’s still close to what the user wrote syntactically, but it includes some implicit things such as some elided lifetimes, etc. This IR is amenable to type checking.</li>
+<li>Typed HIR (THIR) formerly High-level Abstract IR (HAIR): This is an intermediate between HIR and MIR. It is like the HIR but it is fully typed and a bit more desugared，比如方法调用和隐式解引用都会被显式化. As a result, it is easier to lower to MIR from THIR than from HIR.</li>
+<li>Middle-level IR (MIR): This IR is basically a Control-Flow Graph (CFG). A CFG is a type of diagram that shows the basic blocks of a program and how control flow can go between them. Likewise, MIR also has a bunch of basic blocks with simple typed statements inside them (e.g. assignment, simple computations, etc) and control flow edges to other basic blocks (e.g., calls, dropping values). MIR is used for borrow checking and other important dataflow-based checks, such as checking for uninitialized values. It is also used for a series of optimizations and for constant evaluation (via MIRI). Because MIR is still generic, we can do a lot of analyses here more efficiently than after monomorphization.</li>
+<li>LLVM-IR: This is the standard form of all input to the LLVM compiler. LLVM-IR is a sort of typed assembly language with lots of annotations. It’s a standard format that is used by all compilers that use LLVM (e.g. the clang C compiler also outputs LLVM-IR). LLVM-IR is designed to be easy for other compilers to emit and also rich enough for LLVM to run a bunch of optimizations on it.</li>
+</ul>
+<h2 id="HIR"><a href="#HIR" class="headerlink" title="HIR"></a>HIR</h2><p>HIR – “High-Level Intermediate Representation”，是编译期友好的 AST。只会进行 parse、宏展开和 name resolution 的转化。<br>可以通过第一行的语句得到 HIR 表示，通过第二行的语句得到更为接近原文的 HIR 表示。</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">cargo rustc -- -Z unpretty=hir-tree</span><br><span class="line">cargo rustc -- -Z unpretty=hir</span><br></pre></td></tr></table></figure>
+
+<h3 id="HIR-Bodies"><a href="#HIR-Bodies" class="headerlink" title="HIR Bodies"></a>HIR Bodies</h3><p>A <code>rustc_hir::Body</code> represents some kind of executable code, such as the body of a function/closure or the definition of a constant. Bodies are associated with an owner, which is typically some kind of item (e.g. an <code>fn()</code> or <code>const</code>), but could also be a closure expression (e.g. <code>|x, y| x + y</code>). You can use the HIR map to find the body associated with a given def-id (maybe_body_owned_by) or to find the owner of a body (body_owner_def_id).</p>
+<h2 id="THIR"><a href="#THIR" class="headerlink" title="THIR"></a>THIR</h2><p>THIR 也就是 Typed High-Level Intermediate Representation，从前叫 “High-Level Abstract IR。它在 type checking 后生成，被用来构造 MIR，exhaustiveness checking，以及 unsafety checking。</p>
+<p>THIR 在 HIR 更下层。在 type checking 完成后，就能填入所有的 type。HIR 具有下面的特性：</p>
+<ol>
+<li>类似于 MIR，THIR 只表示 “bodies”。其中包含 function bodies，const initializers 等。换句话说，THIR 中没有 struct 或者 trait 的表示。</li>
+<li>THIR 的 body 只是临时被存储，并且在不需要的时候就会被 drop 掉。对应的，HIR 的会存储到编译过程的结束。</li>
+<li>THIR 会有更多的 desugar。比如 automatic references and dereferences 会变得显式。method calls 和 overloaded operators 会转换为 plain function call。Destruction scopes 会显式。<br> 这个我理解是因为 THIR 中已经没有 struct 了。</li>
+<li>Statements、expressions、match arms 会分开存储。</li>
+</ol>
+<p>The THIR lives in <code>rustc_mir_build::thir</code>. To construct a <code>thir::Expr</code>, you can use the <code>thir_body</code> function, passing in the memory arena where the THIR will be allocated. Dropping this arena will result in the THIR being destroyed, which is useful to keep peak memory in check. Having a THIR representation of all bodies of a crate in memory at the same time would be very heavy.</p>
+<p>You can get a debug representation of the THIR by passing the <code>-Zunpretty=thir-tree</code> flag to rustc.</p>
+<p>下面的代码</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">fn</span> <span class="title">main</span></span>() &#123;</span><br><span class="line">    <span class="keyword">let</span> x = <span class="number">1</span> + <span class="number">2</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>对应的 THIR</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br><span class="line">130</span><br><span class="line">131</span><br><span class="line">132</span><br><span class="line">133</span><br><span class="line">134</span><br><span class="line">135</span><br><span class="line">136</span><br><span class="line">137</span><br><span class="line">138</span><br><span class="line">139</span><br><span class="line">140</span><br><span class="line">141</span><br><span class="line">142</span><br><span class="line">143</span><br><span class="line">144</span><br><span class="line">145</span><br><span class="line">146</span><br><span class="line">147</span><br><span class="line">148</span><br><span class="line">149</span><br><span class="line">150</span><br><span class="line">151</span><br><span class="line">152</span><br><span class="line">153</span><br><span class="line">154</span><br><span class="line">155</span><br><span class="line">156</span><br><span class="line">157</span><br><span class="line">158</span><br><span class="line">159</span><br><span class="line">160</span><br><span class="line">161</span><br><span class="line">162</span><br><span class="line">163</span><br><span class="line">164</span><br><span class="line">165</span><br><span class="line">166</span><br><span class="line">167</span><br><span class="line">168</span><br><span class="line">169</span><br><span class="line">170</span><br><span class="line">171</span><br><span class="line">172</span><br><span class="line">173</span><br><span class="line">174</span><br><span class="line">175</span><br><span class="line">176</span><br><span class="line">177</span><br><span class="line">178</span><br><span class="line">179</span><br><span class="line">180</span><br><span class="line">181</span><br><span class="line">182</span><br><span class="line">183</span><br><span class="line">184</span><br><span class="line">185</span><br><span class="line">186</span><br><span class="line">187</span><br><span class="line">188</span><br><span class="line">189</span><br><span class="line">190</span><br><span class="line">191</span><br><span class="line">192</span><br><span class="line">193</span><br><span class="line">194</span><br><span class="line">195</span><br><span class="line">196</span><br><span class="line">197</span><br><span class="line">198</span><br><span class="line">199</span><br><span class="line">200</span><br><span class="line">201</span><br><span class="line">202</span><br><span class="line">203</span><br><span class="line">204</span><br><span class="line">205</span><br></pre></td><td class="code"><pre><span class="line">Thir &#123;</span><br><span class="line">    // no match arms</span><br><span class="line">    arms: [],</span><br><span class="line">    exprs: [</span><br><span class="line">        // expression 0, a literal with a value of 1</span><br><span class="line">        Expr &#123;</span><br><span class="line">            ty: i32,</span><br><span class="line">            temp_lifetime: Some(</span><br><span class="line">                Node(1),</span><br><span class="line">            ),</span><br><span class="line">            span: oneplustwo.rs:2:13: 2:14 (#0),</span><br><span class="line">            kind: Literal &#123;</span><br><span class="line">                lit: Spanned &#123;</span><br><span class="line">                    node: Int(</span><br><span class="line">                        1,</span><br><span class="line">                        Unsuffixed,</span><br><span class="line">                    ),</span><br><span class="line">                    span: oneplustwo.rs:2:13: 2:14 (#0),</span><br><span class="line">                &#125;,</span><br><span class="line">                neg: false,</span><br><span class="line">            &#125;,</span><br><span class="line">        &#125;,</span><br><span class="line">        // expression 1, scope surrounding literal 1</span><br><span class="line">        Expr &#123;</span><br><span class="line">            ty: i32,</span><br><span class="line">            temp_lifetime: Some(</span><br><span class="line">                Node(1),</span><br><span class="line">            ),</span><br><span class="line">            span: oneplustwo.rs:2:13: 2:14 (#0),</span><br><span class="line">            kind: Scope &#123;</span><br><span class="line">                // reference to expression 0 above</span><br><span class="line">                region_scope: Node(3),</span><br><span class="line">                lint_level: Explicit(</span><br><span class="line">                    HirId &#123;</span><br><span class="line">                        owner: DefId(0:3 ~ oneplustwo[6932]::main),</span><br><span class="line">                        local_id: 3,</span><br><span class="line">                    &#125;,</span><br><span class="line">                ),</span><br><span class="line">                value: e0,</span><br><span class="line">            &#125;,</span><br><span class="line">        &#125;,</span><br><span class="line">        // expression 2, literal 2</span><br><span class="line">        Expr &#123;</span><br><span class="line">            ty: i32,</span><br><span class="line">            temp_lifetime: Some(</span><br><span class="line">                Node(1),</span><br><span class="line">            ),</span><br><span class="line">            span: oneplustwo.rs:2:17: 2:18 (#0),</span><br><span class="line">            kind: Literal &#123;</span><br><span class="line">                lit: Spanned &#123;</span><br><span class="line">                    node: Int(</span><br><span class="line">                        2,</span><br><span class="line">                        Unsuffixed,</span><br><span class="line">                    ),</span><br><span class="line">                    span: oneplustwo.rs:2:17: 2:18 (#0),</span><br><span class="line">                &#125;,</span><br><span class="line">                neg: false,</span><br><span class="line">            &#125;,</span><br><span class="line">        &#125;,</span><br><span class="line">        // expression 3, scope surrounding literal 2</span><br><span class="line">        Expr &#123;</span><br><span class="line">            ty: i32,</span><br><span class="line">            temp_lifetime: Some(</span><br><span class="line">                Node(1),</span><br><span class="line">            ),</span><br><span class="line">            span: oneplustwo.rs:2:17: 2:18 (#0),</span><br><span class="line">            kind: Scope &#123;</span><br><span class="line">                region_scope: Node(4),</span><br><span class="line">                lint_level: Explicit(</span><br><span class="line">                    HirId &#123;</span><br><span class="line">                        owner: DefId(0:3 ~ oneplustwo[6932]::main),</span><br><span class="line">                        local_id: 4,</span><br><span class="line">                    &#125;,</span><br><span class="line">                ),</span><br><span class="line">                // reference to expression 2 above</span><br><span class="line">                value: e2,</span><br><span class="line">            &#125;,</span><br><span class="line">        &#125;,</span><br><span class="line">        // expression 4, represents 1 + 2</span><br><span class="line">        Expr &#123;</span><br><span class="line">            ty: i32,</span><br><span class="line">            temp_lifetime: Some(</span><br><span class="line">                Node(1),</span><br><span class="line">            ),</span><br><span class="line">            span: oneplustwo.rs:2:13: 2:18 (#0),</span><br><span class="line">            kind: Binary &#123;</span><br><span class="line">                op: Add,</span><br><span class="line">                // references to scopes surronding literals above</span><br><span class="line">                lhs: e1,</span><br><span class="line">                rhs: e3,</span><br><span class="line">            &#125;,</span><br><span class="line">        &#125;,</span><br><span class="line">        // expression 5, scope surronding expression 4</span><br><span class="line">        Expr &#123;</span><br><span class="line">            ty: i32,</span><br><span class="line">            temp_lifetime: Some(</span><br><span class="line">                Node(1),</span><br><span class="line">            ),</span><br><span class="line">            span: oneplustwo.rs:2:13: 2:18 (#0),</span><br><span class="line">            kind: Scope &#123;</span><br><span class="line">                region_scope: Node(5),</span><br><span class="line">                lint_level: Explicit(</span><br><span class="line">                    HirId &#123;</span><br><span class="line">                        owner: DefId(0:3 ~ oneplustwo[6932]::main),</span><br><span class="line">                        local_id: 5,</span><br><span class="line">                    &#125;,</span><br><span class="line">                ),</span><br><span class="line">                value: e4,</span><br><span class="line">            &#125;,</span><br><span class="line">        &#125;,</span><br><span class="line">        // expression 6, block around statement</span><br><span class="line">        Expr &#123;</span><br><span class="line">            ty: (),</span><br><span class="line">            temp_lifetime: Some(</span><br><span class="line">                Node(9),</span><br><span class="line">            ),</span><br><span class="line">            span: oneplustwo.rs:1:11: 3:2 (#0),</span><br><span class="line">            kind: Block &#123;</span><br><span class="line">                body: Block &#123;</span><br><span class="line">                    targeted_by_break: false,</span><br><span class="line">                    region_scope: Node(8),</span><br><span class="line">                    opt_destruction_scope: None,</span><br><span class="line">                    span: oneplustwo.rs:1:11: 3:2 (#0),</span><br><span class="line">                    // reference to statement 0 below</span><br><span class="line">                    stmts: [</span><br><span class="line">                        s0,</span><br><span class="line">                    ],</span><br><span class="line">                    expr: None,</span><br><span class="line">                    safety_mode: Safe,</span><br><span class="line">                &#125;,</span><br><span class="line">            &#125;,</span><br><span class="line">        &#125;,</span><br><span class="line">        // expression 7, scope around block in expression 6</span><br><span class="line">        Expr &#123;</span><br><span class="line">            ty: (),</span><br><span class="line">            temp_lifetime: Some(</span><br><span class="line">                Node(9),</span><br><span class="line">            ),</span><br><span class="line">            span: oneplustwo.rs:1:11: 3:2 (#0),</span><br><span class="line">            kind: Scope &#123;</span><br><span class="line">                region_scope: Node(9),</span><br><span class="line">                lint_level: Explicit(</span><br><span class="line">                    HirId &#123;</span><br><span class="line">                        owner: DefId(0:3 ~ oneplustwo[6932]::main),</span><br><span class="line">                        local_id: 9,</span><br><span class="line">                    &#125;,</span><br><span class="line">                ),</span><br><span class="line">                value: e6,</span><br><span class="line">            &#125;,</span><br><span class="line">        &#125;,</span><br><span class="line">        // destruction scope around expression 7</span><br><span class="line">        Expr &#123;</span><br><span class="line">            ty: (),</span><br><span class="line">            temp_lifetime: Some(</span><br><span class="line">                Node(9),</span><br><span class="line">            ),</span><br><span class="line">            span: oneplustwo.rs:1:11: 3:2 (#0),</span><br><span class="line">            kind: Scope &#123;</span><br><span class="line">                region_scope: Destruction(9),</span><br><span class="line">                lint_level: Inherited,</span><br><span class="line">                value: e7,</span><br><span class="line">            &#125;,</span><br><span class="line">        &#125;,</span><br><span class="line">    ],</span><br><span class="line">    stmts: [</span><br><span class="line">        // let statement</span><br><span class="line">        Stmt &#123;</span><br><span class="line">            kind: Let &#123;</span><br><span class="line">                remainder_scope: Remainder &#123; block: 8, first_statement_index: 0&#125;,</span><br><span class="line">                init_scope: Node(1),</span><br><span class="line">                pattern: Pat &#123;</span><br><span class="line">                    ty: i32,</span><br><span class="line">                    span: oneplustwo.rs:2:9: 2:10 (#0),</span><br><span class="line">                    kind: Binding &#123;</span><br><span class="line">                        mutability: Not,</span><br><span class="line">                        name: &quot;x&quot;,</span><br><span class="line">                        mode: ByValue,</span><br><span class="line">                        var: LocalVarId(</span><br><span class="line">                            HirId &#123;</span><br><span class="line">                                owner: DefId(0:3 ~ oneplustwo[6932]::main),</span><br><span class="line">                                local_id: 7,</span><br><span class="line">                            &#125;,</span><br><span class="line">                        ),</span><br><span class="line">                        ty: i32,</span><br><span class="line">                        subpattern: None,</span><br><span class="line">                        is_primary: true,</span><br><span class="line">                    &#125;,</span><br><span class="line">                &#125;,</span><br><span class="line">                initializer: Some(</span><br><span class="line">                    e5,</span><br><span class="line">                ),</span><br><span class="line">                else_block: None,</span><br><span class="line">                lint_level: Explicit(</span><br><span class="line">                    HirId &#123;</span><br><span class="line">                        owner: DefId(0:3 ~ oneplustwo[6932]::main),</span><br><span class="line">                        local_id: 6,</span><br><span class="line">                    &#125;,</span><br><span class="line">                ),</span><br><span class="line">            &#125;,</span><br><span class="line">            opt_destruction_scope: Some(</span><br><span class="line">                Destruction(1),</span><br><span class="line">            ),</span><br><span class="line">        &#125;,</span><br><span class="line">    ],</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="Control-flow-Graph-CFG"><a href="#Control-flow-Graph-CFG" class="headerlink" title="Control-flow Graph (CFG)"></a>Control-flow Graph (CFG)</h2><p>A control-flow graph is structured as a set of basic blocks connected by edges. The key idea of a basic block is that it is a set of statements that execute “together” – that is, whenever you branch to a basic block, you start at the first statement and then execute all the remainder. Only at the end of the block is there the possibility of branching to more than one place (in MIR, we call that final statement the terminator):</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">bb0: &#123;</span><br><span class="line">    statement0;</span><br><span class="line">    statement1;</span><br><span class="line">    statement2;</span><br><span class="line">    ...</span><br><span class="line">    terminator;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>总而言之，basic block 是一个执行的整体。在 block 内部，不会有 branching。可以参考 <a href="/2023/12/17/patmc/">Basic block placement</a> 这个章节。</p>
+<h2 id="MIR"><a href="#MIR" class="headerlink" title="MIR"></a>MIR</h2><p>MIR is Rust’s Mid-level Intermediate Representation. It is constructed from HIR. MIR was introduced in RFC 1211. It is a radically simplified form of Rust that is used for certain flow-sensitive safety checks – notably the borrow checker! – and also for optimization and code generation.</p>
+<h3 id="Key-MIR-vocabulary"><a href="#Key-MIR-vocabulary" class="headerlink" title="Key MIR vocabulary"></a>Key MIR vocabulary</h3><p>This section introduces the key concepts of MIR, summarized here:</p>
+<ul>
+<li>Basic blocks<br>  见上文对 Basic block 的说明。</li>
+<li>Locals<br>  Memory locations allocated on the stack (conceptually, at least), such as function arguments, local variables, and temporaries.<br>  These are identified by an index, written with a leading underscore, like <code>_1</code>. There is also a special “local” (<code>_0</code>) allocated to store the return value.</li>
+<li>Places: expressions that identify a location in memory, like <code>_1</code> or <code>_1.f</code>.</li>
+<li>Rvalues: expressions that produce a value. The “R” stands for the fact that these are the “right-hand side” of an assignment.<ul>
+<li>Operands: the arguments to an rvalue, which can either be a constant (like 22) or a place (like <code>_1</code>).</li>
+</ul>
+</li>
+</ul>
+<p>Some statements like StorageLive are removed in optimization. This happens because the compiler notices the value is never accessed in the code. 可以通过 <code>rustc [filename].rs -Z mir-opt-level=0 --emit mir</code> 显示没有被优化过的 MIR。</p>
+<h3 id="一个样例"><a href="#一个样例" class="headerlink" title="一个样例"></a>一个样例</h3><figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">fn</span> <span class="title">main</span></span>() &#123;</span><br><span class="line">    <span class="keyword">let</span> <span class="keyword">mut</span> vec = <span class="built_in">Vec</span>::new();</span><br><span class="line">    vec.push(<span class="number">1</span>);</span><br><span class="line">    vec.push(<span class="number">2</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>下面是 MIR</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br></pre></td><td class="code"><pre><span class="line">// WARNING: This output format is intended for human consumers only</span><br><span class="line">// and is subject to change without notice. Knock yourself out.</span><br><span class="line">fn main() -&gt; () &#123;</span><br><span class="line">    let mut _0: ();                      // return place in scope 0 at main.rs:1:11: 1:11</span><br><span class="line">    let mut _1: std::vec::Vec&lt;i32&gt;;      // in scope 0 at main.rs:2:9: 2:16</span><br><span class="line">    let _2: ();                          // in scope 0 at main.rs:3:5: 3:16</span><br><span class="line">    let mut _3: &amp;mut std::vec::Vec&lt;i32&gt;; // in scope 0 at main.rs:3:5: 3:16</span><br><span class="line">    let _4: ();                          // in scope 0 at main.rs:4:5: 4:16</span><br><span class="line">    let mut _5: &amp;mut std::vec::Vec&lt;i32&gt;; // in scope 0 at main.rs:4:5: 4:16</span><br><span class="line">    scope 1 &#123;</span><br><span class="line">        debug vec =&gt; _1;                 // in scope 1 at main.rs:2:9: 2:16</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    bb0: &#123;</span><br><span class="line">        StorageLive(_1);                 // scope 0 at main.rs:2:9: 2:16</span><br><span class="line">        _1 = Vec::&lt;i32&gt;::new() -&gt; bb1;   // scope 0 at main.rs:2:19: 2:29</span><br><span class="line">                                         // mir::Constant</span><br><span class="line">                                         // + span: main.rs:2:19: 2:27</span><br><span class="line">                                         // + user_ty: UserType(0)</span><br><span class="line">                                         // + literal: Const &#123; ty: fn() -&gt; Vec&lt;i32&gt; &#123;Vec::&lt;i32&gt;::new&#125;, val: Value(&lt;ZST&gt;) &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    bb1: &#123;</span><br><span class="line">        StorageLive(_2);                 // scope 1 at main.rs:3:5: 3:16</span><br><span class="line">        StorageLive(_3);                 // scope 1 at main.rs:3:5: 3:16</span><br><span class="line">        _3 = &amp;mut _1;                    // scope 1 at main.rs:3:5: 3:16</span><br><span class="line">        _2 = Vec::&lt;i32&gt;::push(move _3, const 1_i32) -&gt; [return: bb2, unwind: bb5]; // scope 1 at main.rs:3:5: 3:16</span><br><span class="line">                                         // mir::Constant</span><br><span class="line">                                         // + span: main.rs:3:9: 3:13</span><br><span class="line">                                         // + literal: Const &#123; ty: for&lt;&apos;a&gt; fn(&amp;&apos;a mut Vec&lt;i32&gt;, i32) &#123;Vec::&lt;i32&gt;::push&#125;, val: Value(&lt;ZST&gt;) &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    bb2: &#123;</span><br><span class="line">        StorageDead(_3);                 // scope 1 at main.rs:3:15: 3:16</span><br><span class="line">        StorageDead(_2);                 // scope 1 at main.rs:3:16: 3:17</span><br><span class="line">        StorageLive(_4);                 // scope 1 at main.rs:4:5: 4:16</span><br><span class="line">        StorageLive(_5);                 // scope 1 at main.rs:4:5: 4:16</span><br><span class="line">        _5 = &amp;mut _1;                    // scope 1 at main.rs:4:5: 4:16</span><br><span class="line">        _4 = Vec::&lt;i32&gt;::push(move _5, const 2_i32) -&gt; [return: bb3, unwind: bb5]; // scope 1 at main.rs:4:5: 4:16</span><br><span class="line">                                         // mir::Constant</span><br><span class="line">                                         // + span: main.rs:4:9: 4:13</span><br><span class="line">                                         // + literal: Const &#123; ty: for&lt;&apos;a&gt; fn(&amp;&apos;a mut Vec&lt;i32&gt;, i32) &#123;Vec::&lt;i32&gt;::push&#125;, val: Value(&lt;ZST&gt;) &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    bb3: &#123;</span><br><span class="line">        StorageDead(_5);                 // scope 1 at main.rs:4:15: 4:16</span><br><span class="line">        StorageDead(_4);                 // scope 1 at main.rs:4:16: 4:17</span><br><span class="line">        _0 = const ();                   // scope 0 at main.rs:1:11: 5:2</span><br><span class="line">        drop(_1) -&gt; [return: bb4, unwind: bb6]; // scope 0 at main.rs:5:1: 5:2</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    bb4: &#123;</span><br><span class="line">        StorageDead(_1);                 // scope 0 at main.rs:5:1: 5:2</span><br><span class="line">        return;                          // scope 0 at main.rs:5:2: 5:2</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    bb5 (cleanup): &#123;</span><br><span class="line">        drop(_1) -&gt; bb6;                 // scope 0 at main.rs:5:1: 5:2</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    bb6 (cleanup): &#123;</span><br><span class="line">        resume;                          // scope 0 at main.rs:1:1: 5:2</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>debug vec =&gt; _1;</code> 提供了 debug 信息。</p>
+<p><code>StorageLive(_1);</code> 表示 variable <code>_1</code> is “live” 的，也就是稍后还会被使用，直到遇到一个 <code>StorageDead(_1)</code>。这些标记被 LLVM 来分配栈空间。</p>
+<p><code>&lt;Place&gt; = &lt;Rvalue&gt;</code> 这样的是赋值语句。</p>
+<ol>
+<li>A place is an expression like <code>_3</code>, <code>_3.f</code> or <code>*_3</code> – it denotes a location in memory.</li>
+<li>An Rvalue is an expression that creates a value: in this case, the rvalue is a mutable borrow expression, which looks like <code>&amp;mut &lt;Place&gt;</code>. So we can kind of define a grammar for rvalues like so: <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">&lt;Rvalue&gt;  = &amp; (mut)? &lt;Place&gt;</span><br><span class="line">      | &lt;Operand&gt; + &lt;Operand&gt;</span><br><span class="line">      | &lt;Operand&gt; - &lt;Operand&gt;</span><br><span class="line">      | ...</span><br><span class="line"></span><br><span class="line">&lt;Operand&gt; = Constant</span><br><span class="line">          | copy Place</span><br><span class="line">          | move Place</span><br></pre></td></tr></table></figure></li>
+</ol>
+<p>When you use a place, we indicate whether we are copying it (which requires that the place have a type T where T: Copy) or moving it (which works for a place of any type).</p>
+<h1 id="有关-Rust-的类型系统及其-Analysis"><a href="#有关-Rust-的类型系统及其-Analysis" class="headerlink" title="有关 Rust 的类型系统及其 Analysis"></a>有关 Rust 的类型系统及其 Analysis</h1><h2 id="ty-模块"><a href="#ty-模块" class="headerlink" title="ty 模块"></a>ty 模块</h2><h3 id="ty-Ty"><a href="#ty-Ty" class="headerlink" title="ty::Ty"></a>ty::Ty</h3><p>The specific Ty we are referring to is <code>rustc_middle::ty::Ty</code> (and not <code>rustc_hir::Ty</code>). The distinction is important, so we will discuss it first before going into the details of <code>ty::Ty</code>.</p>
+<p>In contrast, <code>ty::Ty</code> represents the semantics of a type, that is, the meaning of what the user wrote. For example, <code>rustc_hir::Ty</code> would record the fact that a user used the name <code>u32</code> twice in their program, but the <code>ty::Ty</code> would record the fact that both usages refer to the same type.</p>
+<h4 id="Demo"><a href="#Demo" class="headerlink" title="Demo"></a>Demo</h4><figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">fn</span> <span class="title">foo</span></span>(x: <span class="built_in">u32</span>) → <span class="built_in">u32</span> &#123; x &#125;</span><br></pre></td></tr></table></figure>
+
+<p>In this function, we see that <code>u32</code> appears twice. We know that that is the same type, i.e. the function takes an argument and returns an argument of the same type, but from the point of view of the HIR, there would be two distinct type instances because these are occurring in two different places in the program. That is, they have two different Spans (locations).</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">fn</span> <span class="title">foo</span></span>(x: &amp;<span class="built_in">u32</span>) -&gt; &amp;<span class="built_in">u32</span></span><br></pre></td></tr></table></figure>
+
+<p>进一步的，HIR 可能会丢弃一些信息。比如 <code>&amp;u32</code> 是一个 incomplete 的类型，因为它还缺少一个 lifetime。但我们并不需要写这些 lifetime，因为一些 elision rules 的缘故。其最终的表示类似于 <code>fn foo&lt;&#39;a&gt;(x: &amp;&#39;a u32) -&gt; &amp;&#39;a u32</code>。</p>
+<p>在 HIR 级别，这样的表示并没有被生成，所以我们可以说类型是 incomplete 的。但是在 <code>ty::Ty</code> 级别，这些信息会被补足，所以现在类型是 complete 了。进一步的，对于每一个类型，只会有一个 <code>ty::Ty</code>。比如一个 u32 的 <code>ty::Ty</code> 会在整个程序中都被 share。这不同于 <code>rustc_hir::Ty</code>。</p>
+<h3 id="Order"><a href="#Order" class="headerlink" title="Order"></a>Order</h3><p>HIR is built directly from the AST, so it happens before any <code>ty::Ty</code> is produced. After HIR is built, some basic type inference and type checking is done. During the type inference, we figure out what the <code>ty::Ty</code> of everything is and we also check if the type of something is ambiguous. The <code>ty::Ty</code> is then used for type checking while making sure everything has the expected type. </p>
+<p>The <code>hir_ty_lowering</code> module is where the code responsible for lowering a <code>rustc_hir::Ty</code> to a <code>ty::Ty</code> is located. The main routine used is <code>lower_ty</code>.</p>
+<h3 id="How-semantics-drive-the-two-instances-of-Ty"><a href="#How-semantics-drive-the-two-instances-of-Ty" class="headerlink" title="How semantics drive the two instances of Ty"></a>How semantics drive the two instances of Ty</h3><p>从类型推断的观点来说，HIR 去对类型进行更少的假设。我们假设两个类型是不同的，除非随后它们被证明是相同的。换句话说，知道的越少，假设就越少。</p>
+<p>考虑 <code>fn foo&lt;T&gt;(x: T) -&gt; u32</code>. 考虑调用了 <code>foo::&lt;u32&gt;(0)</code>. 此时，T 和 u32 最终都是同一个类型，所以最终使用同一个 <code>ty::Ty</code>，但 rustc_hir::Ty 还是不同的。当然这个例子有点过于简单了，因为在 type checking 的时候，会 check the function generically and would still have a T distinct from u32。在后续的 code generation 的时候，才会进行 monomorphized，也就是对于泛型函数的每个版本生成对应的替换掉泛型变量的函数。</p>
+<h3 id="ty-Ty-implementation"><a href="#ty-Ty-implementation" class="headerlink" title="ty::Ty implementation"></a>ty::Ty implementation</h3><p><code>rustc_middle::ty::Ty</code> is actually a wrapper around <code>Interned&lt;WithCachedTypeInfo&lt;TyKind&gt;&gt;</code>. Interned 可以忽略，它还起到一个指针的作用，反正解引用也可以被折叠。<code>TyKind</code> is a big enum with variants to represent many different Rust types，比如原始类型、引用、ADT、泛型以及 lifetime 等。 <code>WithCachedTypeInfo</code> has a few cached values like flags and <code>outer_exclusive_binder</code>. They are convenient hacks for efficiency and summarize information about the type that we may want to know, but they don’t come into the picture as much here. </p>
+<h3 id="Allocating-and-working-with-types"><a href="#Allocating-and-working-with-types" class="headerlink" title="Allocating and working with types"></a>Allocating and working with types</h3><p>To allocate a new type, you can use the various new_* methods defined on Ty. These have names that correspond mostly to the various kinds of types. For example:</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">let</span> array_ty = Ty::new_array_with_const_len(tcx, ty, count);</span><br></pre></td></tr></table></figure>
+
+<p>类似的方法返回一个 <code>Ty&lt;&#39;tcx&gt;</code>。注意获得的 lifetime 是 tctx 所访问的哪个 arena 的 lifetime。Types are always canonicalized and interned (so we never allocate exactly the same type twice).</p>
+<h3 id="Comparing-types"><a href="#Comparing-types" class="headerlink" title="Comparing types"></a>Comparing types</h3><h3 id="ty-TyKind-Variants"><a href="#ty-TyKind-Variants" class="headerlink" title="ty::TyKind Variants"></a>ty::TyKind Variants</h3><h3 id="ADTs-Representation"><a href="#ADTs-Representation" class="headerlink" title="ADTs Representation"></a>ADTs Representation</h3><h2 id="Bound-vars-and-parameters"><a href="#Bound-vars-and-parameters" class="headerlink" title="Bound vars and parameters"></a>Bound vars and parameters</h2><h2 id="Type-inference"><a href="#Type-inference" class="headerlink" title="Type inference"></a>Type inference</h2><p>下面代码中的 <code>things</code> 的类型被推断为 <code>Vec&lt;&amp;str&gt;</code>，因为我们往 things 中加入了 <code>&amp;str</code>。</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">fn</span> <span class="title">main</span></span>() &#123;</span><br><span class="line">    <span class="keyword">let</span> <span class="keyword">mut</span> things = <span class="built_in">vec!</span>[];</span><br><span class="line">    things.push(<span class="string">"thing"</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>The type inference is based on the standard Hindley-Milner (HM) type inference algorithm, but extended in various way to accommodate subtyping, region inference, and higher-ranked types.</p>
+<h3 id="Inference-variables"><a href="#Inference-variables" class="headerlink" title="Inference variables"></a>Inference variables</h3><p>inference context 的主要目的是容纳一系列的 inference variable。这些表示那些具体值还没有被确定的 type 或者 region。这些值会在 type-checking 的时候被计算得到。</p>
+<p>如果了解 HM 类型系统或者像 Prolog 的逻辑语言就能理解类似的概念。</p>
+<p>All told, the inference context stores five kinds of inference variables (as of March 2023):</p>
+<p>inference context 存放 5 种 inference variable：</p>
+<ul>
+<li>Type variables, which come in three varieties:<ul>
+<li>General type variables (the most common). These can be unified with any type.</li>
+<li>Integral type variables, which can only be unified with an integral type, and arise from an integer literal expression like <code>22</code>.</li>
+<li>Float type variables, which can only be unified with a float type, and arise from a float literal expression like <code>22.0</code>.</li>
+</ul>
+</li>
+<li>Region variables, which represent lifetimes, and arise all over the place.</li>
+<li>Const variables, which represent constants.</li>
+</ul>
+<p>All the type variables work in much the same way: you can create a new type variable, and what you get is <code>Ty&lt;&#39;tcx&gt;</code> representing an unresolved type <code>?T</code>. Then later you can apply the various operations that the inferencer supports, such as equality or subtyping, and it will possibly instantiate (or bind) that <code>?T</code> to a specific value as a result.</p>
+<p>对于 Region variable 情况不同，会在稍后 Region constraints 中讨论。</p>
+<h3 id="补充说明：lexical-region-和-non-lexical-region"><a href="#补充说明：lexical-region-和-non-lexical-region" class="headerlink" title="补充说明：lexical region 和 non-lexical region"></a>补充说明：lexical region 和 non-lexical region</h3><p><a href="https://stackoverflow.com/questions/50251487/what-are-non-lexical-lifetimes" target="_blank" rel="noopener">如下所示</a>，在 non-lexical lifetime 出现之前，下面的代码会编译失败。</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">fn</span> <span class="title">main</span></span>() &#123;</span><br><span class="line">    <span class="keyword">let</span> <span class="keyword">mut</span> scores = <span class="built_in">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>];</span><br><span class="line">    <span class="keyword">let</span> score = &amp;scores[<span class="number">0</span>];</span><br><span class="line">    scores.push(<span class="number">4</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>编译报错如下，当然我发现现如今的 rust 已经无法复现了</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">error[E0502]: cannot borrow `scores` as mutable because it is also borrowed as immutable</span><br><span class="line"> --&gt; src/main.rs:4:5</span><br><span class="line">  |</span><br><span class="line">3 |     let score = &amp;scores[0];</span><br><span class="line">  |                  ------ immutable borrow occurs here</span><br><span class="line">4 |     scores.push(4);</span><br><span class="line">  |     ^^^^^^ mutable borrow occurs here</span><br><span class="line">5 | &#125;</span><br><span class="line">  | - immutable borrow ends here</span><br></pre></td></tr></table></figure>
+
+<p>这里报错的原因是 score 是通过 <a href="https://en.wikipedia.org/wiki/Scope_(computer_science)#Lexical_scoping" target="_blank" rel="noopener">lexical</a> 的方式 borrow 的 scores 的。</p>
+<h3 id="Region-constraints"><a href="#Region-constraints" class="headerlink" title="Region constraints"></a>Region constraints</h3><p>Regions are inferenced somewhat differently from types. Rather than eagerly unifying things, we simply collect constraints as we go, but make (almost) no attempt to solve regions. These constraints have the form of an “outlives” constraint:</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="symbol">'a</span>: <span class="symbol">'b</span></span><br></pre></td></tr></table></figure>
+
+<p>实际上这个代码将 <code>&#39;a</code> 和 <code>&#39;b</code> 视作了 subregion 的关系，但实际上是一个意思</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="symbol">'b</span> &lt;= <span class="symbol">'a</span></span><br></pre></td></tr></table></figure>
+
+<p>(There are various other kinds of constraints, such as “verifys”; see the <code>region_constraints</code> module for details.)</p>
+<p>但是依然有一个常见，我们会做一些 eager unification。也就是如果有一个 equality constraint between two regions，如</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="symbol">'a</span> = <span class="symbol">'b</span></span><br></pre></td></tr></table></figure>
+
+<p>那么我们就会将这个事实记录在一个 unification table 中。可以使用 <code>opportunistic_resolve_var</code> to convert <code>&#39;b</code> to <code>&#39;a</code>，或者反过来也可以. This is sometimes needed to ensure termination of fixed-point algorithms.</p>
+<h3 id="Solving-region-constraints"><a href="#Solving-region-constraints" class="headerlink" title="Solving region constraints"></a>Solving region constraints</h3><p>Region constraints are only solved at the very end of typechecking, once all other constraints are known and all other obligations have been proven. There are two ways to solve region constraints right now: lexical and non-lexical. Eventually there will only be one.</p>
+<p>An exception here is the leak-check which is used during trait solving and relies on region constraints containing higher-ranked regions. Region constraints in the root universe (i.e. not arising from a <code>for&lt;&#39;a&gt;</code>) must not influence the trait system, as these regions are all erased during codegen.</p>
+<p>To solve lexical region constraints, you invoke <code>resolve_regions_and_report_errors</code>. This “closes” the region constraint process and invokes the <code>lexical_region_resolve</code> code. Once this is done, any further attempt to equate or create a subtyping relationship will yield an ICE.</p>
+<p>The NLL solver (actually, the MIR type-checker) does things slightly differently. It uses canonical queries for trait solving which use <code>take_and_reset_region_constraints</code> at the end. This extracts all of the outlives constraints added during the canonical query. This is required as the NLL solver must not only know what regions outlive each other, but also where. Finally, the NLL solver invokes <code>take_region_var_origins</code>, providing all region variables to the solver.</p>
+<h3 id="Lexical-region-resolution"><a href="#Lexical-region-resolution" class="headerlink" title="Lexical region resolution"></a>Lexical region resolution</h3><p>Lexical region resolution is done by initially assigning each region variable to an empty value. We then process each outlives constraint repeatedly, growing region variables until a fixed-point is reached. Region variables can be grown using a least-upper-bound relation on the region lattice in a fairly straightforward fashion.</p>
+<p><a href="https://internals.rust-lang.org/t/how-does-region-inference-work/7511/3" target="_blank" rel="noopener">https://internals.rust-lang.org/t/how-does-region-inference-work/7511/3</a></p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">Constraints | Ordering | Region-lattice </span><br><span class="line">------------|----------|--------------</span><br><span class="line">  &apos;a:&apos;b+&apos;c  | &apos;a &lt;= &apos;b |      &apos;d      Join, LUB (Most Specific Supertype)</span><br><span class="line">  &apos;b:&apos;d     | &apos;a &lt;= &apos;c |      / \     </span><br><span class="line">  &apos;c:&apos;d     | &apos;b &lt;= &apos;d |    &apos;b  &apos;c    </span><br><span class="line">  &apos;d        | &apos;c &lt;= &apos;d |      \ /     </span><br><span class="line">            |          |      &apos;a      Meet, GLB (Most Common Subtype)</span><br></pre></td></tr></table></figure>
+
+<h1 id="有关-Borrow-checker"><a href="#有关-Borrow-checker" class="headerlink" title="有关 Borrow checker"></a>有关 Borrow checker</h1><p>The borrow checker operates on the MIR. An older implementation operated on the HIR. Doing borrow checking on MIR has several advantages:</p>
+<ol>
+<li>The MIR is far less complex than the HIR; the radical desugaring helps prevent bugs in the borrow checker. (If you’re curious, you can see a list of bugs that the MIR-based borrow checker fixes here.)</li>
+<li>Even more importantly, using the MIR enables “non-lexical lifetimes”, which are regions derived from the control-flow graph.</li>
+</ol>
+<h2 id="Tracking-moves-and-initialization"><a href="#Tracking-moves-and-initialization" class="headerlink" title="Tracking moves and initialization"></a>Tracking moves and initialization</h2><p>其作用如下，检查哪些变量是 uninitialized 的状态。</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">fn</span> <span class="title">foo</span></span>() &#123;</span><br><span class="line">    <span class="keyword">let</span> a: (<span class="built_in">Vec</span>&lt;<span class="built_in">u32</span>&gt;, <span class="built_in">Vec</span>&lt;<span class="built_in">u32</span>&gt;) = (<span class="built_in">vec!</span>[<span class="number">22</span>], <span class="built_in">vec!</span>[<span class="number">44</span>]);</span><br><span class="line">    <span class="comment">// a.0 and a.1 are both initialized</span></span><br><span class="line">    <span class="keyword">let</span> b = a.<span class="number">0</span>; <span class="comment">// moves a.0</span></span><br><span class="line">    <span class="comment">// a.0 is not initialized, but a.1 still is</span></span><br><span class="line">    <span class="keyword">let</span> c = a.<span class="number">0</span>; <span class="comment">// ERROR</span></span><br><span class="line">    <span class="keyword">let</span> d = a.<span class="number">1</span>; <span class="comment">// OK</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>因为 Rust 现在允许只 move 一个 field 比如 <code>a.0</code> 了，所以 trace local variable 是不够的。Rust 根据 move path 为粒度去 trace。<br>A <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_dataflow/move_paths/struct.MovePath.html" target="_blank" rel="noopener">MovePath</a> represents some location that the user can initialize, move, etc. So e.g. there is a move-path representing the local variable a, and there is a move-path representing a.0. Move paths roughly correspond to the concept of a Place from MIR, but they are indexed in ways that enable us to do move analysis more efficiently.</p>
+<p>所有的 <code>MovePath</code> 存储在一个 vector 中，我们通过 <code>MovePathIndex</code> 去访问。</p>
+<p>One of the first things we do in the MIR borrow check is to construct the set of move paths. This is done as part of the <code>MoveData::gather_moves</code> function. This function uses a MIR visitor called <code>Gatherer</code> to walk the MIR and look at how each <code>Place</code> within is accessed. For each such <code>Place</code>, it constructs a corresponding <code>MovePathIndex</code>. It also records when/where that particular move path is moved/initialized, but we’ll get to that in a later section.</p>
+<p>We don’t actually create a move-path for every <code>Place</code> that gets used. In particular, if it is illegal to move from a <code>Place</code>, then there is no need for a <code>MovePathIndex</code>. Some examples:</p>
+<ul>
+<li>You cannot move from a static variable, so we do not create a <code>MovePathIndex</code> for static variables.</li>
+<li>You cannot move an individual element of an array, so if we have e.g. <code>foo: [String; 3]</code>, there would be no move-path for <code>foo[1]</code>.</li>
+<li>You cannot move from inside of a borrowed reference, so if we have e.g. <code>foo: &amp;String</code>, there would be no move-path for <code>*foo</code>.</li>
+</ul>
+<p>These rules are enforced by the <code>move_path_for</code> function, which converts a <code>Place</code> into a <code>MovePathIndex</code>。在诸如上面的错误的场景下，返回错误 <code>Err</code>。这也说明了我们并不需要 track 这些 <code>Place</code> 是否已经 initialized 了，从而减少了开销.</p>
+<p>If you have a <code>Place</code> and you would like to convert it to a <code>MovePathIndex</code>, you can do that using the <code>MovePathLookup</code> structure found in the <code>rev_lookup</code> field of <code>MoveData</code>. There are two different methods:</p>
+<ol>
+<li><code>find_local</code>, which takes a <code>mir::Local</code> representing a local variable. This is the easier method, because we always create a <code>MovePathIndex</code> for every local variable.</li>
+<li><code>find</code>, 可以处理任意的 <code>Place</code>。所以，只会返回一个 <code>LookupResult</code>，表示最近的 path。例如对 <code>foo[1]</code> 返回 <code>foo</code>。</li>
+</ol>
+<p>As we noted above, move-paths are stored in a big vector and referenced via their <code>MovePathIndex</code>. 但是在这个 vector 中，它们也被构建为一棵树。例如 if you have the <code>MovePathIndex</code> for <code>a.b.c</code>, you can go to its parent move-path <code>a.b</code>. 也可以遍历所有的 child path。比如对于 <code>a.b</code>, you might iterate to find the path <code>a.b.c</code> (here you are iterating just over the paths that are <strong>actually referenced</strong> in the source, not all <strong>possible</strong> paths that could have been referenced). These references are used for example in the <code>find_in_move_path_or_its_descendants</code> function, which determines whether a move-path (e.g., <code>a.b</code>) or any child of that move-path (e.g.,<code>a.b.c</code>) matches a given predicate.</p>
+<h2 id="The-MIR-type-check"><a href="#The-MIR-type-check" class="headerlink" title="The MIR type-check"></a>The MIR type-check</h2><p>A key component of the borrow check is the MIR type-check. This check walks the MIR and does a complete “type check” – the same kind you might find in any other language. In the process of doing this type-check, we also uncover the region constraints that apply to the program.</p>
+<h3 id="User-types"><a href="#User-types" class="headerlink" title="User types"></a>User types</h3><p>在 MIR type check 的开始，we replace all regions in the body with new unconstrained regions. However, this would cause us to accept the following program:</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">fn</span> <span class="title">foo</span></span>&lt;<span class="symbol">'a</span>&gt;(x: &amp;<span class="symbol">'a</span> <span class="built_in">u32</span>) &#123;</span><br><span class="line">    <span class="keyword">let</span> y: &amp;<span class="symbol">'static</span> <span class="built_in">u32</span> = x;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>By erasing the lifetimes in the type of <code>y</code> we no longer know that it is supposed to be <code>&#39;static</code>, ignoring the intentions of the user.</p>
+<p>To deal with this we remember all places where the user explicitly mentioned a type during HIR type-check as <code>CanonicalUserTypeAnnotations</code>.</p>
+<p>There are two different annotations we care about:</p>
+<ol>
+<li>Explicit type ascriptions, 比如 <code>let y: &amp;&#39;static u32</code> 会产生 <code>UserType::Ty(&amp;&#39;static u32)</code>.</li>
+<li>Explicit generic arguments, 比如 <code>x.foo&lt;&amp;&#39;a u32, Vec&lt;String&gt;&gt;</code> 会产生 <code>UserType::TypeOf(foo_def_id, [&amp;&#39;a u32, Vec&lt;String&gt;])</code>.</li>
+</ol>
+<h2 id="Drop-Check"><a href="#Drop-Check" class="headerlink" title="Drop Check"></a>Drop Check</h2><h3 id="Implicit-drop"><a href="#Implicit-drop" class="headerlink" title="Implicit drop"></a>Implicit drop</h3><p>通常，只要 local 被使用，就必须要 local 的 type 是 well-formed 的。This includes proving the where-bounds of the local and also requires all regions used by it to be live.</p>
+<p>唯一的特例是在 value go out of scope 的时候，隐式 drop 掉 value，这不需要 value 是 live 的。<br>如下所示，x 在注释处已经 out of scope 了，并且这是在指向 y 的引用被 invalidate 之后。也就是说在 drop <code>x</code> 的时候，它的类型不是 well-formed 的。但这是个特例，实际上也是唯一 drop value 操作不需要访问任何 dead region 的情况。We check this by requiring the type of the value to be drop-live. The requirements for which are computed in fn <code>dropck_outlives</code>.</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">fn</span> <span class="title">main</span></span>() &#123;</span><br><span class="line">    <span class="keyword">let</span> x = <span class="built_in">vec!</span>[];</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">let</span> y = <span class="built_in">String</span>::from(<span class="string">"I am temporary"</span>);</span><br><span class="line">        x.push(&amp;y);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="comment">// `x` goes out of scope here, after the reference to `y`</span></span><br><span class="line">    <span class="comment">// is invalidated. This means that while dropping `x` its type</span></span><br><span class="line">    <span class="comment">// is not well-formed as it contain regions which are not live.</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="How-values-are-dropped"><a href="#How-values-are-dropped" class="headerlink" title="How values are dropped"></a>How values are dropped</h3><p>At its core, a value of type T is dropped by executing its “drop glue”. Drop glue is compiler generated and first calls<code> &lt;T as Drop&gt;::drop</code> and then recursively calls the drop glue of any recursively owned values.</p>
+<ul>
+<li>If T has an explicit Drop impl, call <code>&lt;T as Drop&gt;::drop</code>.</li>
+<li>Regardless of whether <code>T</code> implements <code>Drop</code>, recurse into all values owned by T:<ul>
+<li>references, raw pointers, function pointers, function items, trait objects1, and scalars do not own anything.<br>  对于 trait object，可以认为它有一个内置的 Drop 实现，该实现会直接调用 vtable 中的 <code>drop_in_place</code>。这个 Drop 实现需要所有它所有的 generic parameter 都是 alive 的。</li>
+<li>tuples, slices, and arrays consider their elements to be owned. For arrays of length zero we do not own any value of the element type.</li>
+<li>all fields (of all variants) of ADTs are considered owned. We consider all variants for enums.<br>  The exception here is <code>ManuallyDrop&lt;U&gt;</code> which is not considered to own U.<br>  <code>PhantomData&lt;U&gt;</code> also does not own anything.</li>
+<li>closures and generators own their captured upvars.</li>
+</ul>
+</li>
+</ul>
+<p>可以通过 <code>fn Ty::needs_drop</code> 判断是否一个类型是否有 drop glue。</p>
+<h3 id="Partially-dropping-a-local"><a href="#Partially-dropping-a-local" class="headerlink" title="Partially dropping a local"></a>Partially dropping a local</h3><p>如果一个 type 没有实现 Drop，就可以在 drop 掉剩下的成员前 move 掉一些其他的成员。此时，只有那些没有被 move 的成员会被触发 drop glue。</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">PrintOnDrop</span></span>&lt;<span class="symbol">'a</span>&gt;(&amp;<span class="symbol">'a</span> <span class="built_in">str</span>);</span><br><span class="line"><span class="keyword">impl</span>&lt;<span class="symbol">'a</span>&gt; <span class="built_in">Drop</span> <span class="keyword">for</span> PrintOnDrop&lt;<span class="symbol">'_</span>&gt; &#123;</span><br><span class="line">    <span class="function"><span class="keyword">fn</span> <span class="title">drop</span></span>(&amp;<span class="keyword">mut</span> <span class="keyword">self</span>) &#123;</span><br><span class="line">        <span class="built_in">println!</span>(<span class="string">"&#123;&#125;"</span>, <span class="keyword">self</span>.<span class="number">0</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">fn</span> <span class="title">main</span></span>() &#123;</span><br><span class="line">    <span class="keyword">let</span> <span class="keyword">mut</span> x = (PrintOnDrop(<span class="string">"third"</span>), PrintOnDrop(<span class="string">"first"</span>));</span><br><span class="line">    <span class="built_in">drop</span>(x.<span class="number">1</span>);</span><br><span class="line">    <span class="built_in">println!</span>(<span class="string">"second"</span>)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>但是如果遇到下面的代码，则会报错 <code>cannot move out of type Tup&lt;&#39;_&gt;, which implements the Drop trait</code>。</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">Tup</span></span>&lt;<span class="symbol">'a</span>&gt; &#123;</span><br><span class="line">    a: PrintOnDrop&lt;<span class="symbol">'a</span>&gt;,</span><br><span class="line">    b: PrintOnDrop&lt;<span class="symbol">'a</span>&gt;,</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">impl</span>&lt;<span class="symbol">'a</span>&gt; <span class="built_in">Drop</span> <span class="keyword">for</span> Tup&lt;<span class="symbol">'a</span>&gt; &#123;</span><br><span class="line">    <span class="function"><span class="keyword">fn</span> <span class="title">drop</span></span>(&amp;<span class="keyword">mut</span> <span class="keyword">self</span>) &#123;</span><br><span class="line">        </span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">fn</span> <span class="title">main</span></span>() &#123;</span><br><span class="line">    <span class="keyword">let</span> <span class="keyword">mut</span> x = Tup&#123;a: PrintOnDrop(<span class="string">"third"</span>), b: PrintOnDrop(<span class="string">"first"</span>)&#125;;</span><br><span class="line">    <span class="built_in">drop</span>(x.b);</span><br><span class="line">    <span class="built_in">println!</span>(<span class="string">"second"</span>)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>During MIR building we assume that a local may get dropped whenever it goes out of scope as long as its type needs drop.<br>Computing the exact drop glue for a variable happens after borrowck in the <code>ElaborateDrops</code> pass. 也就是说，即使 local 中的一些成员之前已经被 drop 了，dropck 依然需要这些 value 是 alive 的。</p>
+<p>如下所示，完全 move 了 local 的情况下也是这样。<code>x</code> borrow 了 temp，然后被 drop 了。但依然会有下面的报错。</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">fn</span> <span class="title">main</span></span>() &#123;</span><br><span class="line">    <span class="keyword">let</span> <span class="keyword">mut</span> x;</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">let</span> temp = <span class="built_in">String</span>::from(<span class="string">"I am temporary"</span>);</span><br><span class="line">        x = PrintOnDrop(&amp;temp);</span><br><span class="line">        <span class="built_in">drop</span>(x);</span><br><span class="line">    &#125;</span><br><span class="line">&#125; <span class="comment">//~ ERROR `temp` dropped here while still borrowed</span></span><br></pre></td></tr></table></figure>
+
+<h3 id="dropck-outlives"><a href="#dropck-outlives" class="headerlink" title="dropck_outlives"></a>dropck_outlives</h3><p>There are two distinct “liveness” computations that we perform:</p>
+<ul>
+<li>a value v is use-live at location L if it may be “used” later; a use here is basically anything that is not a drop</li>
+<li>a value v is drop-live at location L if it maybe dropped later</li>
+</ul>
+<p>When things are <code>use-live</code>, their entire type must be valid at L.<br>When they are <code>drop-live</code>, all regions that are required by dropck must be valid at L. The values dropped in the MIR are places.</p>
+<h2 id="Region-inference-Non-Lexical-Lifetime-NLL"><a href="#Region-inference-Non-Lexical-Lifetime-NLL" class="headerlink" title="Region inference (Non-Lexical Lifetime, NLL)"></a>Region inference (Non-Lexical Lifetime, NLL)</h2><p>The MIR-based region checking code is located in the <code>rustc_mir::borrow_check</code> module.</p>
+<p>The MIR-based region analysis consists of two major functions:</p>
+<ul>
+<li><code>replace_regions_in_mir</code>, invoked first, has two jobs:<ul>
+<li>First, it finds the set of regions that appear within the signature of the function (e.g., <code>&#39;a</code> in <code>fn foo&lt;&#39;a&gt;(&amp;&#39;a u32) { ... }</code>). These are called the “universal” or “free” regions – in particular, they are the regions that appear free in the function body.</li>
+<li>Second, it replaces all the regions from the function body with fresh inference variables. This is because (presently) those regions are the results of lexical region inference and hence are not of much interest. The intention is that – eventually – they will be “erased regions” (i.e., no information at all), since we won’t be doing lexical region inference at all.</li>
+</ul>
+</li>
+<li><code>compute_regions</code>, invoked second: this is given as argument the results of move analysis. It has the job of computing values for all the inference variables that <code>replace_regions_in_mir</code> introduced.<ul>
+<li>To do that, it first runs the MIR type checker. This is basically a normal type-checker but specialized to MIR, which is much simpler than full Rust, of course. Running the MIR type checker will however create various constraints between region variables, indicating their potential values and relationships to one another.</li>
+<li>After this, we perform constraint propagation by creating a <code>RegionInferenceContext</code> and invoking its solve method.</li>
+<li>The NLL RFC also includes fairly thorough (and hopefully readable) coverage.</li>
+</ul>
+</li>
+</ul>
+<h2 id="Universal-regions"><a href="#Universal-regions" class="headerlink" title="Universal regions"></a>Universal regions</h2><h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
+<li><a href="https://rustc-dev-guide.rust-lang.org/appendix/background.html" target="_blank" rel="noopener">https://rustc-dev-guide.rust-lang.org/appendix/background.html</a><br> 编译器的一些基础知识。</li>
+<li><a href="https://rustc-dev-guide.rust-lang.org/hir.html" target="_blank" rel="noopener">https://rustc-dev-guide.rust-lang.org/hir.html</a><br> HIR。</li>
+<li><a href="https://rustc-dev-guide.rust-lang.org/thir.html" target="_blank" rel="noopener">https://rustc-dev-guide.rust-lang.org/thir.html</a><br> THIR。</li>
+<li><a href="https://rustc-dev-guide.rust-lang.org/ty.html" target="_blank" rel="noopener">https://rustc-dev-guide.rust-lang.org/ty.html</a><br> 关于 rust 类型系统的介绍。</li>
+<li><a href="https://blog.logrocket.com/introducing-the-rust-borrow-checker/" target="_blank" rel="noopener">https://blog.logrocket.com/introducing-the-rust-borrow-checker/</a></li>
+<li><a href="https://rustc-dev-guide.rust-lang.org/borrow_check.html" target="_blank" rel="noopener">https://rustc-dev-guide.rust-lang.org/borrow_check.html</a><br> Rust Compiler Development Guide 上的讲解</li>
+<li><a href="https://www.zybuluo.com/darwin-yuan/note/424724" target="_blank" rel="noopener">https://www.zybuluo.com/darwin-yuan/note/424724</a><br> Hindley-Milner类型系统</li>
+</ol>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/Rust/" rel="tag"># Rust</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2024/03/08/database-paper-1/" rel="next" title="Database paper part 1">
+                <i class="fa fa-chevron-left"></i> Database paper part 1
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2024/05/26/C++-coroutine/" rel="prev" title="C++ Coroutine 介绍的翻译">
+                C++ Coroutine 介绍的翻译 <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">262</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">154</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#前期知识：High-level-Compiler-Architecture"><span class="nav-number">1.</span> <span class="nav-text">前期知识：High-level Compiler Architecture</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Queries-demand-driven-compilation"><span class="nav-number">1.1.</span> <span class="nav-text">Queries: demand-driven compilation</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#How-the-compiler-executes-a-query"><span class="nav-number">1.1.1.</span> <span class="nav-text">How the compiler executes a query</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Providers"><span class="nav-number">1.1.2.</span> <span class="nav-text">Providers</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#How-providers-are-setup"><span class="nav-number">1.1.3.</span> <span class="nav-text">How providers are setup</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Memory-Management-in-Rustc"><span class="nav-number">1.2.</span> <span class="nav-text">Memory Management in Rustc</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#前期知识：Source-Code-Representation"><span class="nav-number">2.</span> <span class="nav-text">前期知识：Source Code Representation</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Intermediate-representations-综述"><span class="nav-number">2.1.</span> <span class="nav-text">Intermediate representations 综述</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#HIR"><span class="nav-number">2.2.</span> <span class="nav-text">HIR</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#HIR-Bodies"><span class="nav-number">2.2.1.</span> <span class="nav-text">HIR Bodies</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#THIR"><span class="nav-number">2.3.</span> <span class="nav-text">THIR</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Control-flow-Graph-CFG"><span class="nav-number">2.4.</span> <span class="nav-text">Control-flow Graph (CFG)</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#MIR"><span class="nav-number">2.5.</span> <span class="nav-text">MIR</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Key-MIR-vocabulary"><span class="nav-number">2.5.1.</span> <span class="nav-text">Key MIR vocabulary</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#一个样例"><span class="nav-number">2.5.2.</span> <span class="nav-text">一个样例</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#有关-Rust-的类型系统及其-Analysis"><span class="nav-number">3.</span> <span class="nav-text">有关 Rust 的类型系统及其 Analysis</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#ty-模块"><span class="nav-number">3.1.</span> <span class="nav-text">ty 模块</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#ty-Ty"><span class="nav-number">3.1.1.</span> <span class="nav-text">ty::Ty</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#Demo"><span class="nav-number">3.1.1.1.</span> <span class="nav-text">Demo</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Order"><span class="nav-number">3.1.2.</span> <span class="nav-text">Order</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#How-semantics-drive-the-two-instances-of-Ty"><span class="nav-number">3.1.3.</span> <span class="nav-text">How semantics drive the two instances of Ty</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#ty-Ty-implementation"><span class="nav-number">3.1.4.</span> <span class="nav-text">ty::Ty implementation</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Allocating-and-working-with-types"><span class="nav-number">3.1.5.</span> <span class="nav-text">Allocating and working with types</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Comparing-types"><span class="nav-number">3.1.6.</span> <span class="nav-text">Comparing types</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#ty-TyKind-Variants"><span class="nav-number">3.1.7.</span> <span class="nav-text">ty::TyKind Variants</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#ADTs-Representation"><span class="nav-number">3.1.8.</span> <span class="nav-text">ADTs Representation</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Bound-vars-and-parameters"><span class="nav-number">3.2.</span> <span class="nav-text">Bound vars and parameters</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Type-inference"><span class="nav-number">3.3.</span> <span class="nav-text">Type inference</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Inference-variables"><span class="nav-number">3.3.1.</span> <span class="nav-text">Inference variables</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#补充说明：lexical-region-和-non-lexical-region"><span class="nav-number">3.3.2.</span> <span class="nav-text">补充说明：lexical region 和 non-lexical region</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Region-constraints"><span class="nav-number">3.3.3.</span> <span class="nav-text">Region constraints</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Solving-region-constraints"><span class="nav-number">3.3.4.</span> <span class="nav-text">Solving region constraints</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Lexical-region-resolution"><span class="nav-number">3.3.5.</span> <span class="nav-text">Lexical region resolution</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#有关-Borrow-checker"><span class="nav-number">4.</span> <span class="nav-text">有关 Borrow checker</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Tracking-moves-and-initialization"><span class="nav-number">4.1.</span> <span class="nav-text">Tracking moves and initialization</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#The-MIR-type-check"><span class="nav-number">4.2.</span> <span class="nav-text">The MIR type-check</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#User-types"><span class="nav-number">4.2.1.</span> <span class="nav-text">User types</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Drop-Check"><span class="nav-number">4.3.</span> <span class="nav-text">Drop Check</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Implicit-drop"><span class="nav-number">4.3.1.</span> <span class="nav-text">Implicit drop</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#How-values-are-dropped"><span class="nav-number">4.3.2.</span> <span class="nav-text">How values are dropped</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Partially-dropping-a-local"><span class="nav-number">4.3.3.</span> <span class="nav-text">Partially dropping a local</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#dropck-outlives"><span class="nav-number">4.3.4.</span> <span class="nav-text">dropck_outlives</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Region-inference-Non-Lexical-Lifetime-NLL"><span class="nav-number">4.4.</span> <span class="nav-text">Region inference (Non-Lexical Lifetime, NLL)</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Universal-regions"><span class="nav-number">4.5.</span> <span class="nav-text">Universal regions</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">5.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2024/04/07/rust-borrow-checker/';
+          this.page.identifier = '2024/04/07/rust-borrow-checker/';
+          this.page.title = 'Rust 的 Borrow Checker';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>

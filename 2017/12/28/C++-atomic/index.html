@@ -1,0 +1,1224 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="C++,并行计算,多线程,Linux,atomic," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="因为《并发编程重要概念及比较》文章过长，所以将其中无锁队列部分拆出来。">
+<meta name="keywords" content="C++,并行计算,多线程,Linux,atomic">
+<meta property="og:type" content="article">
+<meta property="og:title" content="C++ atomic 库">
+<meta property="og:url" content="http://www.calvinneo.com/2017/12/28/C++-atomic/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="因为《并发编程重要概念及比较》文章过长，所以将其中无锁队列部分拆出来。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2023-01-12T15:57:00.684Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="C++ atomic 库">
+<meta name="twitter:description" content="因为《并发编程重要概念及比较》文章过长，所以将其中无锁队列部分拆出来。">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2017/12/28/C++-atomic/"/>
+
+
+
+
+
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5487541356791902"
+     crossorigin="anonymous"></script>
+  <title>C++ atomic 库 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2017/12/28/C++-atomic/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                C++ atomic 库
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2017-12-28T22:34:20+08:00">
+                2017-12-28
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>因为《<a href="/2017/12/28/Concurrency-Programming-Compare/">并发编程重要概念及比较</a>》文章过长，所以将其中无锁队列部分拆出来。</p>
+<a id="more"></a>
+
+
+<h1 id="std-atomic-flag"><a href="#std-atomic-flag" class="headerlink" title="std::atomic_flag"></a>std::atomic_flag</h1><p><code>std::atomic_flag</code>是C++11原子库的一个基础设施，它被广泛地运用到下面的<code>std::atomic</code>类模板的实现中。<code>std::atomic_flag</code>基于TAS(test-and-set)操作维护了一个布尔量flag，<strong>提供了<code>test_and_set</code>和<code>clear</code>两个</strong>方法：</p>
+<ol>
+<li><code>test_and_set</code><br> 尝试原子设置为true，并且返回它持有的先前的值</li>
+<li><code>clear</code></li>
+</ol>
+<p><code>std::atomic_flag</code>可以保证对flag的写不会冲突，读不会脏读。由于<code>std::atomic_flag</code>原子地维护了一个flag，它<strong>常被用来实现自旋锁</strong>。下面的代码来自MSVC的atomic库，它在<code>std::atomic</code>的<code>_Atomic_copy</code>方法中被调用。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">inline</span> <span class="keyword">void</span> _Lock_spin_lock(</span><br><span class="line">    <span class="keyword">volatile</span> _Atomic_flag_t *_Flag)</span><br><span class="line">    &#123;</span><br><span class="line">    <span class="keyword">while</span> (_ATOMIC_FLAG_TEST_AND_SET(_Flag, memory_order_acquire))</span><br><span class="line">        _YIELD_PROCESSOR;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">inline</span> <span class="keyword">void</span> _Unlock_spin_lock(</span><br><span class="line">    <span class="keyword">volatile</span> _Atomic_flag_t *_Flag)</span><br><span class="line">    &#123;</span><br><span class="line">    _ATOMIC_FLAG_CLEAR(_Flag, memory_order_release);</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
+
+<p>上面的<code>_YIELD_PROCESSOR</code>取决于有没有<code>__yield</code>关键字，如果没有，就是空的。<br>此外，容易发现<strong>TAS操作</strong>也可以通过CAS实现，其代码很简单</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">return</span> InterlockedCompareExchange(&amp;flag, <span class="literal">true</span>, <span class="literal">false</span>);</span><br></pre></td></tr></table></figure>
+
+<p>在MSVC的标准库实现中<code>test_and_set</code>借助了Interlock互锁访问函数，保证了访问的原子性</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br></pre></td><td class="code"><pre><span class="line"> <span class="meta">#<span class="meta-keyword">if</span> defined(_M_ARM) || defined(_M_ARM64)</span></span><br><span class="line">  <span class="meta">#<span class="meta-keyword">define</span> _INTRIN_RELAXED(x)    _CONCAT(x, _nf)</span></span><br><span class="line">  <span class="meta">#<span class="meta-keyword">define</span> _INTRIN_ACQUIRE(x)    _CONCAT(x, _acq)</span></span><br><span class="line">  <span class="meta">#<span class="meta-keyword">define</span> _INTRIN_RELEASE(x)    _CONCAT(x, _rel)</span></span><br><span class="line">  <span class="meta">#<span class="meta-keyword">define</span> _INTRIN_SEQ_CST(x)    x</span></span><br><span class="line"> <span class="meta">#<span class="meta-keyword">else</span> <span class="comment">/* defined(_M_ARM) || defined(_M_ARM64) */</span></span></span><br><span class="line">  <span class="meta">#<span class="meta-keyword">define</span> _INTRIN_RELAXED(x)    x</span></span><br><span class="line">  <span class="meta">#<span class="meta-keyword">define</span> _INTRIN_ACQUIRE(x)    x</span></span><br><span class="line">  <span class="meta">#<span class="meta-keyword">define</span> _INTRIN_RELEASE(x)    x</span></span><br><span class="line">  <span class="meta">#<span class="meta-keyword">define</span> _INTRIN_SEQ_CST(x)    x</span></span><br><span class="line"> <span class="meta">#<span class="meta-keyword">endif</span> <span class="comment">/* defined(_M_ARM) || defined(_M_ARM64) */</span></span></span><br><span class="line"><span class="keyword">inline</span> <span class="keyword">int</span> _Atomic_flag_test_and_set(<span class="keyword">volatile</span> _Atomic_flag_t *_Flag,</span><br><span class="line">    memory_order _Order)</span><br><span class="line">    &#123;   <span class="comment">/* atomically test flag and set to true */</span></span><br><span class="line">    <span class="keyword">switch</span> (_Order)</span><br><span class="line">        &#123;</span><br><span class="line">        <span class="keyword">case</span> memory_order_relaxed:</span><br><span class="line">            <span class="keyword">return</span> (_INTRIN_RELAXED(_interlockedbittestandset)(_Flag, <span class="number">0</span>));</span><br><span class="line"></span><br><span class="line">        <span class="keyword">case</span> memory_order_consume:</span><br><span class="line">        <span class="keyword">case</span> memory_order_acquire:</span><br><span class="line">            <span class="keyword">return</span> (_INTRIN_ACQUIRE(_interlockedbittestandset)(_Flag, <span class="number">0</span>));</span><br><span class="line"></span><br><span class="line">        <span class="keyword">case</span> memory_order_release:</span><br><span class="line">            <span class="keyword">return</span> (_INTRIN_RELEASE(_interlockedbittestandset)(_Flag, <span class="number">0</span>));</span><br><span class="line"></span><br><span class="line">        <span class="keyword">case</span> memory_order_acq_rel:</span><br><span class="line">        <span class="keyword">case</span> memory_order_seq_cst:</span><br><span class="line">            <span class="keyword">return</span> (_INTRIN_SEQ_CST(_interlockedbittestandset)(_Flag, <span class="number">0</span>));</span><br><span class="line"></span><br><span class="line">        <span class="keyword">default</span>:</span><br><span class="line">            _INVALID_MEMORY_ORDER;</span><br><span class="line">            <span class="keyword">return</span> (<span class="number">0</span>);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"><span class="keyword">inline</span> <span class="keyword">void</span> _Atomic_flag_clear(<span class="keyword">volatile</span> _Atomic_flag_t *_Flag,</span><br><span class="line">    memory_order _Order)</span><br><span class="line">    &#123;   <span class="comment">/* atomically clear flag */</span></span><br><span class="line">    <span class="keyword">static_assert</span>(<span class="keyword">sizeof</span>(_Atomic_flag_t) == <span class="keyword">sizeof</span>(_Uint4_t),</span><br><span class="line">        <span class="string">"Unexpected _Atomic_flag_t size"</span>);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">switch</span> (_Order)</span><br><span class="line">        &#123;</span><br><span class="line">        <span class="keyword">case</span> memory_order_relaxed:</span><br><span class="line">        <span class="keyword">case</span> memory_order_release:</span><br><span class="line">        <span class="keyword">case</span> memory_order_seq_cst:</span><br><span class="line">            _Atomic_store_4((<span class="keyword">volatile</span> _Uint4_t *)_Flag, <span class="number">0</span>, _Order);</span><br><span class="line">            <span class="keyword">break</span>;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">default</span>:</span><br><span class="line">            _INVALID_MEMORY_ORDER;</span><br><span class="line">            <span class="keyword">break</span>;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
+
+<h1 id="std-atomic"><a href="#std-atomic" class="headerlink" title="std::atomic"></a>std::atomic</h1><p>我们已经明白C++中的基本类型并不保证是原子的，例如<code>a++</code>这样的并不一定是原子的，除非编译器愿意实现为<code>lock inc</code>，可是谁会愿意这样锁总线呢？</p>
+<p>所以<code>std::atomic&lt;T&gt;</code>定义了一系列具有<strong>原子行为</strong>的<strong>类型</strong>。</p>
+<h2 id="对typename-T的限制"><a href="#对typename-T的限制" class="headerlink" title="对typename T的限制"></a>对typename T的限制</h2><p><code>std::atomic</code><strong>禁用了复制构造函数和复制赋值运算符</strong>，相当于不允许复制语义。同时，atomic也是不允许移动的。这是由于这两个操作发生在两个对象间，势必要破坏原子性，而一个<code>std::atomic</code>的所有操作都是原子的。</p>
+<p>对于用户自定义类型(UDT)<code>typename T</code>，<code>std::atomic</code>的<strong>主模板</strong>要求<code>T</code><strong>满足<a href="http://zh.cppreference.com/w/cpp/atomic/atomic" target="_blank" rel="noopener">standard layout、trivial default constructor和trivial destructor</a><strong>，即编译器可以使用<code>memcpy</code>等进行bitwise的复制并使用<code>memcmp</code>进行bitwise的比较。在CAS操作的实现中调用了<code>memcpy</code>和<code>memcmp</code>。这看起来限制很大，我们希望有用户自定义的复制构造函数，这样我们就可以进行member-wise的操作了，对此想法，<em>C++ Concurrency in Action</em>一书中指出，如果有自定义的复制构造函数，那么就势必要将锁定区域（下文中会交待</strong>其实<code>std::atomic</code>的主模板实现中可能会有自旋锁</strong>）内的数据交给这些用户代码，如果在用户代码中再使用了锁，就<strong>可能产生死锁</strong>的现象。</p>
+<p>容易发现这样一来，<code>std::atomic&lt;T&gt;</code>里面能放的东西，有很多限制。例如，我们常用的智能指针<code>std::shared_ptr</code>并不能被放到<code>std::atomic</code>里面，但是我们又确实有这个需要，因此标准库通过重载<code>std::atomic_</code>系列函数为<code>std::shared_ptr</code>提供了原子操作的支持。而对于<code>std::atomic</code>类型，我们既可以通过<code>std::atomic_</code>系列函数，也可以通过<code>std::atomic</code>模板中提供了<code>compare_exchange_weak</code>、<code>compare_exchange_strong</code>、<code>load</code>、<code>store</code>等操作。</p>
+<h2 id="atomic偏特化版本的实现"><a href="#atomic偏特化版本的实现" class="headerlink" title="atomic偏特化版本的实现"></a>atomic偏特化版本的实现</h2><p>一般标准库会对一些大小满足能够直接使用某些处理器的原子指令的类型进行特化，例如指针类型、integral类型和一些用户定义类型。对于指针类型，<code>std::atomic</code>会进行偏特化。原子的指针运算可以通过<code>fetch_</code>开头的函数和相应的<code>operator</code>运算符来实现。对integeral类型<code>std::atomic</code>类模板也会进行特化，其实现类似指针类型，并且添加了对位运算的支持。对于“复杂”的整型计算如乘法，虽然atomic未提供，但可以通过<code>compare_exchange_weak</code>等函数间接实现。从C++20开始，<code>std::atomic</code>类模板<strong>提供对浮点类型的特化</strong>。注意在这之前，<code>compare_exchange_strong</code>等CAS方法对浮点数可能出现问题，原因显而易见是<code>memcmp</code>的锅，C++浮点数之间比较时甚至都不能使用<code>==</code>，遑论<code>memcmp</code>。</p>
+<h2 id="atomic主模板的实现"><a href="#atomic主模板的实现" class="headerlink" title="atomic主模板的实现"></a>atomic主模板的实现</h2><p>在上文中提到，除了<code>std::atomic_flag</code>，<code>std::atomic&lt;typename T&gt;</code>类模板都是<strong>不保证不使用锁</strong>的（情况特定于处理器和标准库实现），用户<strong>可通过<code>bool is_lock_free()</code>函数判断是否Lockfree的</strong>。以PJ Plauger的实现为例，<strong>主模板的<code>load()</code>就用了<code>std::atomic_flag</code>实现的自旋锁</strong>。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">inline</span> <span class="keyword">void</span> _Atomic_copy(<span class="keyword">volatile</span> _Atomic_flag_t *_Flag, <span class="keyword">size_t</span> _Size,</span><br><span class="line">    <span class="keyword">volatile</span> <span class="keyword">void</span> *_Tgt, <span class="keyword">volatile</span> <span class="keyword">const</span> <span class="keyword">void</span> *_Src, memory_order _Order)</span><br><span class="line">&#123;</span><br><span class="line">    _Lock_spin_lock(_Flag);</span><br><span class="line">    _CSTD memcpy((void *)_Tgt, (void *)_Src, _Size);</span><br><span class="line">    _Unlock_spin_lock(_Flag);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>主模板的<code>template&lt;class _Ty&gt; struct atomic</code>的实现继承了<code>_Atomic_base&lt;_Ty, sizeof (_Ty)&gt;</code>。<br>这个<code>_Atomic_base&lt;_Ty, sizeof (_Ty)&gt;</code>模板又继承了<code>_Atomic_impl&lt;_Bytes&gt;</code>模板，其作用相当于把<code>_Atomic_impl&lt;_Bytes&gt;</code>中全<code>void *</code>的东西封装回了<code>_Ty</code>。至此，我们将各个类型的atomic模板类的实现<strong>按照长度进行了分类</strong>。<br>我们查看最核心的<code>_Atomic_impl&lt;_Bytes&gt;</code>模板，它是和数据字节数相关的，分别对1/2/4/8字节的进行了偏特化。模板里面定义了最重要的<code>_Is_lock_free</code>、<code>_Store</code>、<code>_Load</code>、<code>_Exchange</code>、<code>_Compare_exchange_weak</code>、<code>_Compare_exchange_strong</code>等操作，全部是<code>void*</code>的。我们刚才看到的<code>_Atomic_copy</code>来自于主模板。</p>
+<h2 id="Atomic-impl-lt-Bytes-gt-偏特化版本实现"><a href="#Atomic-impl-lt-Bytes-gt-偏特化版本实现" class="headerlink" title="_Atomic_impl&lt;_Bytes&gt;偏特化版本实现"></a>_Atomic_impl&lt;_Bytes&gt;偏特化版本实现</h2><p>我们下面看看<code>_Atomic_impl&lt;_Bytes&gt;</code>的偏特化版本，如对于一个<code>uint2_t</code>是如何实现的</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br></pre></td><td class="code"><pre><span class="line">  <span class="meta">#<span class="meta-keyword">define</span> _Compiler_barrier()   _ReadWriteBarrier()</span></span><br><span class="line"></span><br><span class="line">  <span class="meta">#<span class="meta-keyword">if</span> defined(_M_ARM)</span></span><br><span class="line">  <span class="meta">#<span class="meta-keyword">define</span> _Memory_barrier()     __dmb(_ARM_BARRIER_ISH)</span></span><br><span class="line">  <span class="meta">#<span class="meta-keyword">endif</span> <span class="comment">/* defined(_M_ARM) */</span></span></span><br><span class="line"></span><br><span class="line">  <span class="meta">#<span class="meta-keyword">if</span> defined(_M_ARM64)</span></span><br><span class="line">  <span class="meta">#<span class="meta-keyword">define</span> _Memory_barrier()     __dmb(_ARM64_BARRIER_ISH)</span></span><br><span class="line">  <span class="meta">#<span class="meta-keyword">endif</span> <span class="comment">/* defined(_M_ARM64) *</span></span></span><br><span class="line"><span class="meta"><span class="comment">  </span></span></span><br><span class="line"><span class="meta"><span class="comment">    /* _Atomic_load_2 */</span></span></span><br><span class="line"><span class="keyword">inline</span> _Uint2_t _Load_seq_cst_2(<span class="keyword">volatile</span> _Uint2_t *_Tgt)</span><br><span class="line">    &#123;</span><br><span class="line">    _Uint2_t _Value;</span><br><span class="line"></span><br><span class="line"> <span class="meta">#<span class="meta-keyword">if</span> defined(_M_ARM) || defined(_M_ARM64)</span></span><br><span class="line">    _Value = __iso_volatile_load16((<span class="keyword">volatile</span> <span class="keyword">short</span> *)_Tgt);</span><br><span class="line">    _Memory_barrier();</span><br><span class="line"></span><br><span class="line"> <span class="meta">#<span class="meta-keyword">else</span></span></span><br><span class="line">    _Value = *_Tgt;</span><br><span class="line">    _Compiler_barrier();</span><br><span class="line"> <span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> (_Value);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">inline</span> _Uint2_t _Load_relaxed_2(<span class="keyword">volatile</span> _Uint2_t *_Tgt)</span><br><span class="line">    &#123;</span><br><span class="line">    _Uint2_t _Value;</span><br><span class="line"></span><br><span class="line"> <span class="meta">#<span class="meta-keyword">if</span> defined(_M_ARM) || defined(_M_ARM64)</span></span><br><span class="line">    _Value = __iso_volatile_load16((<span class="keyword">volatile</span> <span class="keyword">short</span> *)_Tgt);</span><br><span class="line"></span><br><span class="line"> <span class="meta">#<span class="meta-keyword">else</span></span></span><br><span class="line">    _Value = *_Tgt;</span><br><span class="line"> <span class="meta">#<span class="meta-keyword">endif</span></span></span><br><span class="line">    <span class="keyword">return</span> (_Value);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">inline</span> _Uint2_t _Load_acquire_2(<span class="keyword">volatile</span> _Uint2_t *_Tgt)</span><br><span class="line">    &#123;   </span><br><span class="line">    <span class="keyword">return</span> (_Load_seq_cst_2(_Tgt));</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
+
+<p>可以发现在这个偏特化版本的实现中直接借助了处理器提供的设施，而避免了自旋锁的使用。</p>
+<h1 id="weak和strong版本的CAS"><a href="#weak和strong版本的CAS" class="headerlink" title="weak和strong版本的CAS"></a>weak和strong版本的CAS</h1><p>类似与Windows API的互锁访问函数，atomic库通过<code>bool atomic::compare_exchange_weak(old, value)</code>和<code>bool atomic::compare_exchange_strong(old, value)</code>提供了对CAS操作的支持。这两个函数监测该<code>std::atomic</code>中维护的<code>std::atomic_flag _My_flag</code>（在<code>_Atomic_impl</code>模板中定义）的值，如果等于<code>old</code>就改为<code>value</code>，函数返回一个表示修改是否成功的bool量。<br>我们看一下某一个重载版本的函数签名，容易发现，这里面的参数，并不是<code>std::atomic&lt;T&gt;</code>，而是<code>T&amp;</code>类型的。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">bool</span> <span class="built_in">std</span>::atomic&lt;T&gt;::compare_exchange_weak( T&amp; expected, T desired,</span><br><span class="line">                            <span class="built_in">std</span>::memory_order success,</span><br><span class="line">                            <span class="built_in">std</span>::memory_order failure ) <span class="keyword">noexcept</span>;</span><br></pre></td></tr></table></figure>
+
+<p>容易发现这两个函数<strong>不总是成功的</strong>，因为CPU可能<strong>仅对某些类型</strong>提供了相应的CAS原子指令，对于其他的类型则必须通过使用<strong>自旋锁甚至内核锁</strong>来实现。<br>在这里，需要使用volatile，从而强制从内存中读取。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">inline</span> <span class="keyword">int</span> _Atomic_compare_exchange_weak(<span class="keyword">volatile</span> _Atomic_flag_t *_Flag, <span class="keyword">size_t</span> _Size, <span class="keyword">volatile</span> <span class="keyword">void</span> *_Tgt, <span class="keyword">volatile</span> <span class="keyword">void</span> *_Exp, <span class="keyword">const</span> <span class="keyword">volatile</span> <span class="keyword">void</span> *_Src, memory_order _Order1, memory_order _Order2)</span><br><span class="line">&#123;   <span class="comment">/* atomically compare and exchange with memory ordering */</span></span><br><span class="line">    <span class="keyword">int</span> _Result;</span><br><span class="line"></span><br><span class="line">    _Lock_spin_lock(_Flag);</span><br><span class="line">    _Result = _CSTD <span class="built_in">memcmp</span>((<span class="keyword">const</span> <span class="keyword">void</span> *)_Tgt, (<span class="keyword">const</span> <span class="keyword">void</span> *)_Exp, _Size) == <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">if</span> (_Result != <span class="number">0</span>)</span><br><span class="line">        _CSTD memcpy((void *)_Tgt, (void *)_Src, _Size);</span><br><span class="line">    <span class="keyword">else</span></span><br><span class="line">        _CSTD <span class="built_in">memcpy</span>((<span class="keyword">void</span> *)_Exp, (<span class="keyword">void</span> *)_Tgt, _Size);</span><br><span class="line">    _Unlock_spin_lock(_Flag);</span><br><span class="line">    <span class="keyword">return</span> (_Result);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这两个函数有一些细致的区别，<code>compare_exchange_weak</code>在可能会False Negative，也就是说。这是由于weak允许spurious failure。在某些平台(不错ARM、PowerPC又被点名了)上的CAS是通过LL/SC实现的，而不像x86上那样只通过一条指令，所以可能存在问题。因此使用<code>compare_exchange_weak</code>的时候需要一个循环。注意到这个<code>!expected</code>不是必要的。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">bool</span> expected=<span class="literal">false</span>;</span><br><span class="line"><span class="keyword">extern</span> atomic&lt;<span class="keyword">bool</span>&gt; b; <span class="comment">// set somewhere else</span></span><br><span class="line"><span class="keyword">while</span>(!b.compare_exchange_weak(expected,<span class="literal">true</span>) &amp;&amp; !expected);</span><br></pre></td></tr></table></figure>
+
+<p>在<a href="https://chaomai.github.io/2015/06/09/2015-2015-06-09-translation-understand-std-atomic-compare-exchange-weak-in-cpp11/" target="_blank" rel="noopener">Stackoverflow上相关问题的整理</a>中提到了这两者之间的性能比较，由于weak会忽视检查，所以一般weak比strong快。<strong>但是如果使用strong能避免weak+loop，那么选择strong是适合的</strong>。注意到即使使用strong，loop也不是就一定可以避免的，因为原子操作本来就存在使用乐观锁的情况。</p>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/C/" rel="tag"># C++</a>
+          
+            <a href="/tags/并行计算/" rel="tag"># 并行计算</a>
+          
+            <a href="/tags/多线程/" rel="tag"># 多线程</a>
+          
+            <a href="/tags/Linux/" rel="tag"># Linux</a>
+          
+            <a href="/tags/atomic/" rel="tag"># atomic</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2017/12/28/lockfree-queue/" rel="next" title="Lockfree Queue">
+                <i class="fa fa-chevron-left"></i> Lockfree Queue
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2018/01/17/B-tree/" rel="prev" title="B树">
+                B树 <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">262</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">154</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#std-atomic-flag"><span class="nav-number">1.</span> <span class="nav-text">std::atomic_flag</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#std-atomic"><span class="nav-number">2.</span> <span class="nav-text">std::atomic</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#对typename-T的限制"><span class="nav-number">2.1.</span> <span class="nav-text">对typename T的限制</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#atomic偏特化版本的实现"><span class="nav-number">2.2.</span> <span class="nav-text">atomic偏特化版本的实现</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#atomic主模板的实现"><span class="nav-number">2.3.</span> <span class="nav-text">atomic主模板的实现</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Atomic-impl-lt-Bytes-gt-偏特化版本实现"><span class="nav-number">2.4.</span> <span class="nav-text">_Atomic_impl&lt;_Bytes&gt;偏特化版本实现</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#weak和strong版本的CAS"><span class="nav-number">3.</span> <span class="nav-text">weak和strong版本的CAS</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2017/12/28/C++-atomic/';
+          this.page.identifier = '2017/12/28/C++-atomic/';
+          this.page.title = 'C++ atomic 库';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+  
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Config({
+        tex2jax: {
+          inlineMath: [ ['$','$'], ["\\(","\\)"]  ],
+          processEscapes: true,
+          skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+        }
+      });
+    </script>
+
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax(), i;
+        for (i=0; i < all.length; i += 1) {
+          all[i].SourceElement().parentNode.className += ' has-jax';
+        }
+      });
+    </script>
+    <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+  
+
+
+  
+
+  
+
+</body>
+</html>
