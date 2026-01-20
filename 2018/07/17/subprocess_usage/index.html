@@ -1,0 +1,1220 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="python,Linux,并行计算,多进程," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="Python 可以通过 os.system 来以控制台的形式运行程序，但当涉及到需要进行进程间通信时，就需要用到 subprocess 模块。本文原来是和multiprocessing作为一个整体来介绍的，后来进行了拆分，但内容仍然会有所重叠，并且会涉及 Python 的线程和进程相关机制。">
+<meta name="keywords" content="python,Linux,并行计算,多进程">
+<meta property="og:type" content="article">
+<meta property="og:title" content="subprocess模块用法">
+<meta property="og:url" content="http://www.calvinneo.com/2018/07/17/subprocess_usage/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="Python 可以通过 os.system 来以控制台的形式运行程序，但当涉及到需要进行进程间通信时，就需要用到 subprocess 模块。本文原来是和multiprocessing作为一个整体来介绍的，后来进行了拆分，但内容仍然会有所重叠，并且会涉及 Python 的线程和进程相关机制。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2025-11-21T18:05:14.775Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="subprocess模块用法">
+<meta name="twitter:description" content="Python 可以通过 os.system 来以控制台的形式运行程序，但当涉及到需要进行进程间通信时，就需要用到 subprocess 模块。本文原来是和multiprocessing作为一个整体来介绍的，后来进行了拆分，但内容仍然会有所重叠，并且会涉及 Python 的线程和进程相关机制。">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2018/07/17/subprocess_usage/"/>
+
+
+
+
+
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5487541356791902"
+     crossorigin="anonymous"></script>
+  <title>subprocess模块用法 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2018/07/17/subprocess_usage/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                subprocess模块用法
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2018-07-17T23:41:45+08:00">
+                2018-07-17
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>Python 可以通过 <code>os.system</code> 来以控制台的形式运行程序，但当涉及到需要进行进程间通信时，就需要用到 subprocess 模块。本文原来是和<a href="/2017/04/18/multiprocessing%E6%A8%A1%E5%9D%97%E7%94%A8%E6%B3%95/">multiprocessing</a>作为一个整体来介绍的，后来进行了拆分，但内容仍然会有所重叠，并且会涉及 Python 的线程和进程相关机制。</p>
+<a id="more"></a>
+<h1 id="简单的调用"><a href="#简单的调用" class="headerlink" title="简单的调用"></a>简单的调用</h1><p>subprocess 提供了一下三个函数来实现简单的调用-检查结果的功能，下面列出了它们接受的<strong>常用</strong>参数。</p>
+<ol>
+<li><code>call(args, *, stdin=None, stdout=None, stderr=None, shell=False)</code><br> 返回错误码 <code>returncode</code>。</li>
+<li><code>check_call(args, *, stdin=None, stdout=None, stderr=None, shell=False)</code><br> 在 <code>returncode</code> 为0时返回0，否则抛出 <code>subprocess.CalledProcessError</code> 异常。</li>
+<li><code>check_output(args, *, stdin=None, stderr=None, shell=False, universal_newlines=False)</code><br> 返回标准输出，在错误时抛出 <code>subprocess.CalledProcessError</code> 异常。注意在前面两个函数中实际上也可以通过设置 <code>stdout</code> 等参数来重定向标准输出和标准错误。</li>
+</ol>
+<h2 id="有关-shell-参数的说明"><a href="#有关-shell-参数的说明" class="headerlink" title="有关 shell 参数的说明"></a>有关 shell 参数的说明</h2><p>容易发现 shell 参数：</p>
+<ul>
+<li>为 <code>True</code> 时第一个参数推荐是一个字符串</li>
+<li>为 <code>False</code> 时就需要传入一个原命令行 <code>.split(&quot; &quot;)</code> 的列表过去<br>  不能够直接将参数直接和程序名写到一个字符串里面，这么做的目的是为了防止 shell 注入的发生。</li>
+</ul>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">&gt;&gt;&gt; </span>subprocess.call([<span class="string">"ls"</span>, <span class="string">"-l"</span>])</span><br><span class="line"><span class="number">0</span></span><br><span class="line"></span><br><span class="line"><span class="meta">&gt;&gt;&gt; </span>subprocess.call(<span class="string">"ls -1"</span>, shell=<span class="keyword">True</span>)</span><br><span class="line"><span class="number">1</span></span><br></pre></td></tr></table></figure>
+
+<p>查看一个shell注入的实例，下面的代码本意是想cat一个文件，但最终却运行了恶意的<code>rm -tf /</code>代码。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">&gt;&gt;&gt; </span><span class="keyword">from</span> subprocess <span class="keyword">import</span> call</span><br><span class="line"><span class="meta">&gt;&gt;&gt; </span>filename = input(<span class="string">"What file would you like to display?\n"</span>)</span><br><span class="line">What file would you like to display?</span><br><span class="line">non_existent; rm -rf / <span class="comment">#</span></span><br><span class="line"><span class="meta">&gt;&gt;&gt; </span>call(<span class="string">"cat "</span> + filename, shell=<span class="keyword">True</span>) <span class="comment"># Uh-oh. This will end badly...</span></span><br></pre></td></tr></table></figure>
+
+<p>此外，shell参数为<code>True</code>时还能运行一些命令，例如在windows中我们运行<code>dir /B</code>只能通过shell来做，这是因为<code>dir</code>并不是一个程序，而是cmd内置的一个命令。<a href="https://docs.python.org/2/library/subprocess.html#frequently-used-arguments" target="_blank" rel="noopener">Subprocess文档</a>指出这是我们唯一在Windows下需要指定<code>shell = True</code>来<strong>运行一个程序</strong>的情况，subprocess根据<code>COMSPEC </code>环境参数来运行shell。但在下面的讨论中我们看到<code>shell</code>的设置也影响了输入输出流重定向的细节。</p>
+<h1 id="Popen"><a href="#Popen" class="headerlink" title="Popen"></a>Popen</h1><p>对于大多数的灵活需求，我们都需要<code>Popen</code>这个类来解决。<code>Popen</code>的定义如下所示：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Popen(args, bufsize=<span class="number">0</span>, executable=<span class="keyword">None</span>, stdin=<span class="keyword">None</span>, stdout=<span class="keyword">None</span>, stderr=<span class="keyword">None</span>, preexec_fn=<span class="keyword">None</span>, close_fds=<span class="keyword">False</span>, shell=<span class="keyword">False</span>, cwd=<span class="keyword">None</span>, env=<span class="keyword">None</span>, universal_newlines=<span class="keyword">False</span>, startupinfo=<span class="keyword">None</span>, creationflags=<span class="number">0</span></span><br></pre></td></tr></table></figure>
+
+<h2 id="部分参数说明"><a href="#部分参数说明" class="headerlink" title="部分参数说明"></a>部分参数说明</h2><p>以下说明来自<a href="https://docs.python.org/2/library/subprocess.html" target="_blank" rel="noopener">Subprocess文档</a></p>
+<ol>
+<li><p><code>bufsize</code><br> 等同于<code>open</code>函数的<code>buffering</code>参数。设为0表示无缓存。设为1表示行缓存。大于1表示使用这个size的缓冲区。负数表示系统默认。</p>
+</li>
+<li><p><code>executable </code><br> 有一些晦涩而不常使用的作用，比较有用的是<code>shell = True</code>时会用它来指定用的shell。</p>
+</li>
+<li><p><code>preexec_fn </code> (POSIX)<br> 这个在下面的<em>强制终止进程</em>的讨论中会用到，其作用是在子程序执行前在<strong>子程序上下文</strong>中需要执行的语句，实际上是一个Hook。</p>
+</li>
+<li><p><code>close_fds</code> (POSIX)<br> 对于Linux，子进程在执行前会先关闭除标准输入输出外的所有fd。我们使用以下的代码来测试这个特性</p>
+ <figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> os, sys, time, signal</span><br><span class="line"><span class="keyword">import</span> subprocess</span><br><span class="line"><span class="comment"># Parent</span></span><br><span class="line"><span class="keyword">if</span> __name__ == <span class="string">'__main__'</span>:</span><br><span class="line">    fd = os.open(<span class="string">"test.txt"</span>, os.O_RDWR | os.O_CREAT)</span><br><span class="line">    os.write(fd, <span class="string">"line1 \n"</span>)</span><br><span class="line">    proc = subprocess.Popen([<span class="string">"python"</span>, <span class="string">"ch.py"</span>])</span><br><span class="line"><span class="comment"># Child</span></span><br><span class="line"><span class="keyword">if</span> __name__ == <span class="string">'__main__'</span>:</span><br><span class="line">    os.write(<span class="number">3</span>, <span class="string">"line2 \n"</span>)</span><br></pre></td></tr></table></figure>
+
+<p> 运行发现test.txt中有两行的输出。特别地，这个特性是由Linux保证的，查看subprocess源码，发现它在内部采用了先fork再exec的策略。而<a href="https://stackoverflow.com/questions/22241000/does-exec-preserve-file-descriptors" target="_blank" rel="noopener">exec也是保持file descriptor</a>的。</p>
+ <figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">self.pid = _posixsubprocess.fork_exec(</span><br><span class="line">        args, executable_list,</span><br><span class="line">        close_fds, sorted(fds_to_keep), cwd, env_list,</span><br><span class="line">        p2cread, p2cwrite, c2pread, c2pwrite,</span><br><span class="line">        errread, errwrite,</span><br><span class="line">        errpipe_read, errpipe_write,</span><br><span class="line">        restore_signals, start_new_session, preexec_fn)</span><br></pre></td></tr></table></figure>
+
+<p> 对于Windows事情就没有这么美妙了，<code>close_fds = True</code>意味着子进程不会继承任何从父进程过来的句柄，也就是说我们不能重定向标准输入输出了，<a href="https://stackoverflow.com/questions/48671215/howto-workaround-of-close-fds-true-and-redirect-stdout-stderr-on-windows" target="_blank" rel="noopener">一个可行的解决方案</a>。</p>
+</li>
+<li><p><code>cwd</code><br> 这个设置子线程的环境目录</p>
+</li>
+<li><p><code>env</code><br> 这个设置子线程的环境变量</p>
+</li>
+<li><p><code>universal_newlines</code><br> 这个用来统一所有的换行符模式为<code>\n</code></p>
+</li>
+<li><p><code>startupinfo</code> (Windows)<br> Windows的<code>CreateProcess</code>的对应参数</p>
+</li>
+</ol>
+<h2 id="不同操作系统的不一致性"><a href="#不同操作系统的不一致性" class="headerlink" title="不同操作系统的不一致性"></a>不同操作系统的不一致性</h2><p>首先，我们可以通过<code>if &#39;posix&#39; in sys.builtin_module_names</code>来判断操作系统是否为POSIX。</p>
+<h2 id="有关重定向标准流的问题"><a href="#有关重定向标准流的问题" class="headerlink" title="有关重定向标准流的问题"></a>有关重定向标准流的问题</h2><p><code>Popen</code>的<code>stdin</code>等参数用来重定向子程序的三个标准流，常见选项是<code>subprocess.PIPE</code>、<code>None</code>和一个打开的文件。使用<code>None</code>继承父进程的标准流，例如当<code>shell = False</code>时则所有父程序的输入会被转发给子程序，但当<code>shell = True</code>时会先启动一个shell再运行程序，这时候实际上是接受的shell的标准输入。使用<code>subprocess.PIPE</code>则和子程序之间建立管道。特别地，我们可以指定<code>open(os.devnull, &#39;w&#39;)</code>来忽略一个流。<br>可以调用<code>Popen.communicate(input)</code>来通过管道向子进程传递信息，之后程序会阻塞在<code>communicate</code>上，直到从子程序传回信息。<br>与<code>communicate</code>方法对应的是<code>Popen.stdin.write()</code>方法，<a href="https://stackoverflow.com/questions/9886654/difference-between-communicate-and-stdin-write-stdout-read-or-stderr-read" target="_blank" rel="noopener">这两个有一些区别</a>。此外<code>communicate</code>会默认调用<code>stdin.close()</code>，这相当于向对方发送一个EOF。所以当需要多次向子程序写数据时，并且子程序侦测来自主程序的EOF作为结束提示时，应当使用<code>stdin.write</code>。<br>在写<a href="https://github.com/CalvinNeo/ATP/blob/master/src/test/run_test.py" target="_blank" rel="noopener">ATP</a>时我还遇到程序子程序无法获得<code>stdin.write()</code>写入的数据的情况，这是需要设置<code>shell=True</code>。<br>在写Nuft的时候，有一次发现<code>subprocess.Popen(&quot;./bin/node -f./settings.txt -i0&quot;, subprocess.PIPE, open(&quot;n0.out&quot;, &quot;w&quot;), open(&quot;n0.err&quot;, &quot;w&quot;)</code>这样的是没有输出的，后来我索性在控制台里面执行了<code>&gt; n1.out</code>这样的操作，发现在Ctrl+C中断之后也是没有重定向的内容的。所以这个并不是subprocess的问题。根据<a href="https://stackoverflow.com/questions/16714761/output-redirection-produces-empty-file" target="_blank" rel="noopener">SoF</a>，这实际上是Linux的lazy write问题，我们需要在进程结束的时候手动<code>fflush</code>一下。我们可以注册一个SIGTERM和SIGINT等事件的钩子，这样就可以发送SIGTERM来终止进程了。注意我们可能在SIGTERM之后还要在收尾SIGKILL一下，如下所示</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> proc.poll() == <span class="keyword">None</span>:</span><br><span class="line">    <span class="comment"># Give a chance to save work</span></span><br><span class="line">    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)</span><br><span class="line">    time.sleep(<span class="number">0.2</span>)</span><br><span class="line">    <span class="comment"># Note we can't add a `if` here, otherwise we can't eliminate all child procs.</span></span><br><span class="line">    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)</span><br></pre></td></tr></table></figure>
+
+<h3 id="管道死锁"><a href="#管道死锁" class="headerlink" title="管道死锁"></a>管道死锁</h3><p>subprocess中给我们提供了一个<code>.communicate(input=None)</code>方法，我们向子进程的<code>stdin</code>输入数据，然后接受来自<code>stdout</code>和<code>stderr</code>的输出，直到读到EOF或者子进程结束。Python官方鼓励使用<code>communicate()</code>替代<code>.wait()</code>方法，这是因为如果我们在wait时子进程还在往<code>stdout</code>/<code>stderr</code>中写数据，我们由阻塞在wait上不能读取，当管道的缓存被写满后子进程就会停止写等待我们读取缓冲区，而此时我们还在傻傻地wait子进程！这就造成了死锁。</p>
+<h1 id="强制终止进程"><a href="#强制终止进程" class="headerlink" title="强制终止进程"></a>强制终止进程</h1><p>subprocess提供了<code>kill()</code>函数来终止进程，但这常常不能如愿，这常发生在我们想要kill的进程启动了其他的子进程时。父进程终结并不意味着子进程终结。<br>我们知道Linux中包含有进程组(process group)和会话(session)两个概念。进程组由<code>fork</code>或<code>exec</code>产生，按照父子关系传递，进程组的pgid由进程组leader的pid决定，但leader可以先挂，此时进程组仍然存在，并保有相同的pgid。我们可以通过以下的bash代码查看/枚举pgid/sid</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">ps -p 进程ID -o pgrp=</span><br><span class="line">ps -A -o pgrp= </span><br><span class="line">ps -p 进程ID -o sid=</span><br><span class="line">ps -A -o sid=</span><br></pre></td></tr></table></figure>
+
+<p>在Python中，如果我们subprocess启动的进程启动了其他的子进程，那么在杀死该进程后子进程并不会被杀死，而是变为孤儿进程（注意区别僵尸进程），随后被同进程组的其他进程或者init接管。但是我们可以向整个进程组signal，也就是我们下面使用<code>os.killpg</code>来终止进程组。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 从终止着手</span></span><br><span class="line"><span class="keyword">if</span> <span class="string">'posix'</span> <span class="keyword">in</span> sys.builtin_module_names:</span><br><span class="line">    <span class="comment"># 杀掉proc.pid所在的用户组</span></span><br><span class="line">    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)</span><br><span class="line"><span class="keyword">else</span>:</span><br><span class="line">    <span class="comment"># F表示强制终止，T表示终止该进程和所有以此启动的子进程</span></span><br><span class="line">    subprocess.call([<span class="string">'taskkill'</span>, <span class="string">'/F'</span>, <span class="string">'/T'</span>, <span class="string">'/PID'</span>, str(self.proc.pid)], stdout = open(os.devnull, <span class="string">'w'</span>))</span><br></pre></td></tr></table></figure>
+
+<p>容易发现这个方法存在一定缺陷，如果当前的程序不是该进程组的leader，那简单粗暴的<code>os.killpg</code>会误伤该进程组中的其他进程。例如，假设<code>fa</code>进程启动了<code>ch</code>进程，<code>ch</code>进程启动了<code>grand_ch</code>进程，这时候我们想终止<code>fa</code>，使用<code>os.killpg</code>是可以的，因为<code>fa</code>是当前进程组的leader，<code>fa</code>的家族<code>ch</code>和<code>grand_ch</code>都是我们想终止的对象。但当这个<code>fa</code>进程是由<code>grand_fa</code>进程启动时，当前进程组是以<code>grand_fa</code>为leader的家族，我们使用<code>os.killpg(fa.pid, signal.SIGKILL)</code>就会误杀<code>grand_fa</code>。<br>会话则层级更高，由一个前台进程组和若干后台进程组组成（统称为作业job）建立，每个会话可以关联一个终端（称为控制终端）来实现与人的交互，例如键盘的输入<code>Ctrl+C</code>等都会交给此时前台的进程组。会话也有leader，同样是由第一个创建的进程（通常是bash）决定，当终端的链接断开时，会话leader就会收到SIGHUP信号，而这个信号的默认处理就是关闭所有子进程。因而我们常通过<code>nohup cmd &amp;</code>或者<code>disown</code>来在后台执行长期任务。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 启动时建立一个独立的进程组</span></span><br><span class="line"><span class="keyword">if</span> <span class="string">'posix'</span> <span class="keyword">in</span> sys.builtin_module_names:</span><br><span class="line">    <span class="comment"># 创建一个会话组，设置当前进程为会话组组长</span></span><br><span class="line">    <span class="keyword">return</span> subprocess.Popen(exe, stdin = fin, stdout = fout, stderr = ferr, shell = in_shell, preexec_fn = os.setsid)</span><br><span class="line"><span class="keyword">else</span>:</span><br><span class="line">    <span class="keyword">return</span> subprocess.Popen(exe, stdin = fin, stdout = fout, stderr = ferr, shell = in_shell)</span><br></pre></td></tr></table></figure>
+
+<h1 id="subprocess的惯用法与坑"><a href="#subprocess的惯用法与坑" class="headerlink" title="subprocess的惯用法与坑"></a>subprocess的惯用法与坑</h1><h2 id="threading-Thread-join不能捕获SIGINT等信号"><a href="#threading-Thread-join不能捕获SIGINT等信号" class="headerlink" title="threading.Thread.join不能捕获SIGINT等信号"></a>threading.Thread.join不能捕获SIGINT等信号</h2><p>根据<a href="https://bugs.python.org/issue1167930" target="_blank" rel="noopener">Python官网的Bug</a>，我们在主线程中等待子线程<code>join</code>，这个阻塞的过程不能被SIGINT(2)所唤醒，而SIGINT也不能执行其默认的退出处理，稍后尝试了<code>SIGTERM</code>等信号也同样不能响应，唯有SIGSTOP和SIGKILL可用。这是因为至少在POSIX系统中<code>Lock.acquire()</code>（<code>PyThread_acquire_lock()</code>）中无论是信号量还是CV的实现都会忽略信号。这个问题可以通过设置<code>.join()</code>的<code>timeout</code>参数来解决。注意如果<code>daemon</code>为<code>False</code>则<code>timeout</code>参数无效，这里的<code>daemon</code>表示守护线程。守护线程通常是一些不是那么重要的线程，Python会在所有<strong>非守护</strong>线程退出后结束。<br>我们将在<a href="/2018/08/01/python-join-no-signal/">这篇文章</a>中专门探讨这个机制。</p>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/python/" rel="tag"># python</a>
+          
+            <a href="/tags/Linux/" rel="tag"># Linux</a>
+          
+            <a href="/tags/并行计算/" rel="tag"># 并行计算</a>
+          
+            <a href="/tags/多进程/" rel="tag"># 多进程</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2018/06/25/Python2Encoding/" rel="next" title="Python2字符编码">
+                <i class="fa fa-chevron-left"></i> Python2字符编码
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2018/07/23/redis_learn_object/" rel="prev" title="Redis底层对象实现原理分析">
+                Redis底层对象实现原理分析 <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">262</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">154</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#简单的调用"><span class="nav-number">1.</span> <span class="nav-text">简单的调用</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#有关-shell-参数的说明"><span class="nav-number">1.1.</span> <span class="nav-text">有关 shell 参数的说明</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Popen"><span class="nav-number">2.</span> <span class="nav-text">Popen</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#部分参数说明"><span class="nav-number">2.1.</span> <span class="nav-text">部分参数说明</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#不同操作系统的不一致性"><span class="nav-number">2.2.</span> <span class="nav-text">不同操作系统的不一致性</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#有关重定向标准流的问题"><span class="nav-number">2.3.</span> <span class="nav-text">有关重定向标准流的问题</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#管道死锁"><span class="nav-number">2.3.1.</span> <span class="nav-text">管道死锁</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#强制终止进程"><span class="nav-number">3.</span> <span class="nav-text">强制终止进程</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#subprocess的惯用法与坑"><span class="nav-number">4.</span> <span class="nav-text">subprocess的惯用法与坑</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#threading-Thread-join不能捕获SIGINT等信号"><span class="nav-number">4.1.</span> <span class="nav-text">threading.Thread.join不能捕获SIGINT等信号</span></a></li></ol></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2018/07/17/subprocess_usage/';
+          this.page.identifier = '2018/07/17/subprocess_usage/';
+          this.page.title = 'subprocess模块用法';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>

@@ -1,0 +1,1283 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="数据库," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="主要介绍 TiCI 的一些实现。">
+<meta name="keywords" content="数据库">
+<meta property="og:type" content="article">
+<meta property="og:title" content="TiCI 的设计考量">
+<meta property="og:url" content="http://www.calvinneo.com/2025/01/11/fts-tici/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="主要介绍 TiCI 的一些实现。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2026-01-11T17:01:12.671Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="TiCI 的设计考量">
+<meta name="twitter:description" content="主要介绍 TiCI 的一些实现。">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2025/01/11/fts-tici/"/>
+
+
+
+
+
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5487541356791902"
+     crossorigin="anonymous"></script>
+  <title>TiCI 的设计考量 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2025/01/11/fts-tici/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                TiCI 的设计考量
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2025-01-11T15:57:20+08:00">
+                2025-01-11
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>主要介绍 TiCI 的一些实现。</p>
+<a id="more"></a>
+
+<h1 id="TiCI-要解决什么问题？"><a href="#TiCI-要解决什么问题？" class="headerlink" title="TiCI 要解决什么问题？"></a>TiCI 要解决什么问题？</h1><h2 id="拓展-TiFlash-的能力"><a href="#拓展-TiFlash-的能力" class="headerlink" title="拓展 TiFlash 的能力"></a>拓展 TiFlash 的能力</h2><p>TiFlash 中已经实现了 Vector Index 和 Inverted Index 了，在一些版本中也支持 FTS 了。但是在 TiFlash 中使用这些索引存在一些问题：</p>
+<ul>
+<li>TiFlash 中的 Region 的分布随 TiKV 而定，这导致优化空间较小<ul>
+<li>Region 的迁入和迁出会导致重建 Inverted Index 字典和 HNSW 图，开销大。</li>
+<li>TiFlash 需要和 TiKV 共用一个 PK，导致 TiFlash 无法选择更适合列存的 Sharding 方式。在“PK 的选择”这一章节中，我们会进一步阐述。</li>
+</ul>
+</li>
+<li>TiFlash 的并发较低，但本质上，并发低的原因还是和索引有关</li>
+<li>TiFlash 默认提供了强一致和 SI 的隔离级别，但是这些特性并不是全部必须的，而它们又带来很高的成本，如 MVCC、Learner Read 等。新的引擎能够从架构上摆脱这些臃肿的功能。</li>
+</ul>
+<h2 id="支持-Hybrid-Index"><a href="#支持-Hybrid-Index" class="headerlink" title="支持 Hybrid Index"></a>支持 Hybrid Index</h2><p>传统的列存的访问模式是 scan，它是顺序访问一个流，但是可以通过 min-max、延迟物化等特性，去 skip 掉某些 block 的读取，从而减少 IO 开销和编解码的开销。这种方式对于高 selectivity 的数据（也就是留下的数据多）是友好的，但是对于复杂 OR / 模糊匹配 / Top-K 这些场景就不友好了。在 <a href="/2023/07/22/tikv-tidb-thought/">这篇文章的《延迟物化》</a> 这一章节中，举了一个因为 min-max 索引无效，从而退化为全表扫描的例子。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">for row in block:</span><br><span class="line">    if predicate(row):</span><br><span class="line">        aggregate / output</span><br></pre></td></tr></table></figure>
+
+<p>倒排索引的访问模式是 lookup + intersect，它是根据多个条件去反查 doc ID。这种方式实际上是对 term 做点查，而传统行存是对 PK / key 做点查。倒排索引的方式能够返回一组行号，又可以理解为将本来要下推给行存的一部分条件过滤前置了。这样的方式，对于低 selectivity 的数据（也就是留下的数据少）是友好的。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">posting = intersect(term1, term2)</span><br><span class="line">for doc in posting:</span><br><span class="line">    score(doc)</span><br></pre></td></tr></table></figure>
+
+<p>查询规划核心问题其实是：“哪个 predicate 能最快把 selectivity 降下来？”</p>
+<ul>
+<li>先用低 selectivity 条件 缩小候选集<br>  如倒排索引、主键、稀疏 bitmap</li>
+<li>再用高 selectivity 条件 做 scan + aggregate<br>  如列存、向量化</li>
+</ul>
+<h1 id="架构"><a href="#架构" class="headerlink" title="架构"></a>架构</h1><h2 id="PK-的选择"><a href="#PK-的选择" class="headerlink" title="PK 的选择"></a>PK 的选择</h2><p>在 <a href="/2023/07/22/tikv-tidb-thought/">关于 TiKV、TiDB、TiFlash 的一些思考</a> 的“为什么 TiFlash 实现 HTAP 基于 Raft？”中介绍了在 HTAP 场景中，因为 TiFlash 使用了 Raft Group 复制，获得了一些 benefit。但是，Raft 会导致 TiFlash 和 TiKV 绑定很死，特别是 TiFlash 没办法换 PK，这就一定程度上影响了 QPS。</p>
+<p>使用 TiCI 的架构，用 CDC 同步，可以避免 Raft 那一层的影响。主要体现在可以为列存指定一个新的 PK，并按照新 PK 做 sharding。这里的问题是：</p>
+<ul>
+<li>在任何时候，新的 PK 和老的 PK 一定是一一对应的。但是这个对应关系可能会变。例如 <code>(new_key_col1, new_key_col2) -&gt; old_key_col1</code> 中如果 <code>new_key_col2</code> 的值变了，那么它在 TiCI 的分片可能就会变，但是它在 TiKV 的分片是不可能变的。这就体现了一行可能从一个 Shard 移动到另一个 Shard 中。</li>
+<li>后续支持 Snapshot Read 就会比较麻烦。</li>
+<li>Import into 在导入的时候，数据会非常散。</li>
+</ul>
+<h2 id="数据源"><a href="#数据源" class="headerlink" title="数据源"></a>数据源</h2><h3 id="Push-or-Pull"><a href="#Push-or-Pull" class="headerlink" title="Push or Pull"></a>Push or Pull</h3><p>TiCI 设计主要以 TiCDC 作为数据源。所以一开始是每个 Shard 会不停 Poll S3 上的某个 prefix，复杂度是 <code>O(shard_count*log_count)</code>。为了减小 LIST 的读放大，对 CDC 的日志进行了编号，这样只需要不停 GET 就行。</p>
+<p>但是如果 Shard 很多，那么每个 Shard 的 Poll 依然开销很大。所以，引入了一个 per node 的 Poller，去代理这个 poll 的过程。</p>
+<h3 id="延迟"><a href="#延迟" class="headerlink" title="延迟"></a>延迟</h3><p>根据 <a href="/2025/01/18/percolator-2/">TiCDC 的原理</a>，以 TiCDC 为数据源，很难将延迟降低到秒以内。</p>
+<h1 id="Meta-Service"><a href="#Meta-Service" class="headerlink" title="Meta Service"></a>Meta Service</h1><h2 id="Outline"><a href="#Outline" class="headerlink" title="Outline"></a>Outline</h2><h2 id="Shard-管理"><a href="#Shard-管理" class="headerlink" title="Shard 管理"></a>Shard 管理</h2><p>在 shard 的大小默认设置为 4 GiB，这样对于 80 TiB 的集群规模，会有 20k+ 个 shard。一个 shard 中有多个 fragment，fragment 之间是可以 overlap 的，我们也按照传统方法引入了 leveled compaction。</p>
+<p>过多的 shard/fragment 意味更小的 shard/fragment 的 size，这对于查询是不利的：</p>
+<ul>
+<li>过多的 fragment，会导致每个 fragment 中的词典会很小，压缩率不高</li>
+<li>此外，一个查询如果覆盖多个 fragment，就需要按照每个 fragment 的词典都过滤一遍，再 merge，这样并发上不去</li>
+</ul>
+<h3 id="设计能向后兼容的初始策略"><a href="#设计能向后兼容的初始策略" class="headerlink" title="设计能向后兼容的初始策略"></a>设计能向后兼容的初始策略</h3><p>要实现好 split、compaction 等是困难的，但是我们给出了最基础的策略：</p>
+<ul>
+<li>Split<br>  根据 shard 的大小以及行数。同时，我们还比较写入速度和 L0 的 Compaction 速度，如果发现 L0 的 Compaction 速度很慢，则会 split。</li>
+<li>Compaction<br>  根据 fragment 的数量，以及 segment 的数量，可以按照 level 配置</li>
+<li>Merge<br>  根据当前 shard 的大小，以及写入的流量。并且要确保 merge 后不会立即 split。</li>
+</ul>
+<p>这里面另一个简化是，除了 merge 是定期检查外，Split 和 Compaction 只在写入后检查。</p>
+<p>此外，因为 Compaction 的策略并不是很明确，所以我们在存储格式上，特别注意将 fragment 按照线性表的形式存起来，而将分层信息单独存放。<br>因为 L0 和 L1 都是 Tiered 策略，所以原有的线性表在没有分层信息的情况下，依然是可以用的。Apply compaction 实际上就是一个 split。这样一来，就使得后续我们如果要支持更复杂的 compaction 策略，就不会涉及到改动已有数据的兼容性。</p>
+<h3 id="大量小表"><a href="#大量小表" class="headerlink" title="大量小表"></a>大量小表</h3><p>考虑大量小表的场景，Shard 就会很多。因为这些 Shard 的写入带宽都不会很大，所以在无状态架构下，基本定时都会上传一个小文件到 S3 上。</p>
+<h2 id="写入路径"><a href="#写入路径" class="headerlink" title="写入路径"></a>写入路径</h2><h3 id="S3-的-Slowdown"><a href="#S3-的-Slowdown" class="headerlink" title="S3 的 Slowdown"></a>S3 的 Slowdown</h3><p>从 <a href="https://zhuanlan.zhihu.com/p/606711742" target="_blank" rel="noopener">https://zhuanlan.zhihu.com/p/606711742</a> 来看，prefix 怎么分完全依赖 S3 内部实现。⽽且请求量上去之后，S3 怎么扩容、拆分不同分⽚的流量，⽀撑起所需 qps 的时间没有 qos 保证。</p>
+<p>基于我们的需求，做了测试：</p>
+<ul>
+<li><a href="https://github.com/CalvinNeo/terraform-cloud-native-tiflash/tree/test-s3" target="_blank" rel="noopener">https://github.com/CalvinNeo/terraform-cloud-native-tiflash/tree/test-s3</a></li>
+<li><a href="https://github.com/pingcap-inc/tici/pull/344" target="_blank" rel="noopener">https://github.com/pingcap-inc/tici/pull/344</a></li>
+</ul>
+<p>因为并发较大，所以要达到精确的 QPS。对此需要关注：</p>
+<ul>
+<li>因为不同的 Worker 达到稳定的时间不一致，所以一个 Worker 在并发达到稳定之后，应当能够保持负载</li>
+<li>通常需要让每个 Worker 睡眠一段时间来实现精确的 QPS，这里的 sleep 时间不能过长，否则会影响实际的 QPS，因此对于不同并发的要求，Worker 的数量是有合适区间的</li>
+</ul>
+<p>测试结论如下：</p>
+<ul>
+<li>访问区域影响访问耗时<br>  从 Local 访问 AWS S3 us-west-2 ⼤概耗时 1.7s，在 us-west-2 EC2 上访问耗时⼤概在 0.1/0.6s。在⼀些情况下，upload 的时间会显著增⻓，达到 1s+，此时 QPS 会受到严重影响。<br>  在极个别的时间段中，upload 的时间达到 10s+，此时 S3 的可⽤性下降明显，⽆法达到最⾼的 QPS。<br>  这种情况下，不仅能到 Slowdown 报错，还能看到 InternalError 报错。</li>
+<li>先前有过前⼀次“扩容”，也并不会缩短后⼀次“扩容”所需的时间<br>  这个和 AWS 的客服的回复是不一样的，暂时不知道具体原因。</li>
+<li>3000 QPS 的上限是比较准确的，扩容也是根据 prefix 来进行的，速度大概是在秒级别<br>  prefix 数量为2，最⾼能压到 6500 QPS，达到稳定耗时 30s+。压到 6000 QPS 内，达到稳定耗时在 20s 左右。</li>
+</ul>
+<h3 id="Split-amp-Compaction"><a href="#Split-amp-Compaction" class="headerlink" title="Split &amp; Compaction"></a>Split &amp; Compaction</h3><p>理论上 Compaction 结束后，遍历所有的 Shard，将其中匹配 <code>compaction.input</code> 的串替换为 <code>compaction.output</code> 就行了。但是因为 TiCI 是 cloud native 的架构，所以 Split 只能是逻辑分裂。因此，它的 manifest 中需要记录每一个 fragment 它到底大概引用了多少比例的数据。那么考虑：</p>
+<ul>
+<li>Shard 1 开始 Compact</li>
+<li>Shard 1 分裂为 Shard 2 和 3</li>
+<li>Shard 1 的 Compaction 完成，需要替换到 Shard 2 和 3 上</li>
+</ul>
+<p>此时，很难推断出 Shard 2 和 Shard 3 上应该各有多少行，因为我们不知道 Compaction 到底清理了多少数据。当然，也可以粗略地按照 range 截取一下。</p>
+<h3 id="有状态还是无状态的-Worker"><a href="#有状态还是无状态的-Worker" class="headerlink" title="有状态还是无状态的 Worker"></a>有状态还是无状态的 Worker</h3><p>使用无状态的 worker，则：</p>
+<ul>
+<li>不需要挂载 EBS，成本低</li>
+<li>如果要支持高频写入，则对 S3 的 QPS 有要求。后续对 Compaction 的速度也有要求</li>
+<li>如果不支持高频写入，则数据的 freshness 就会比较差</li>
+</ul>
+<p>使用有状态的 worker，则：</p>
+<ul>
+<li>需要挂载一个小容量的 EBS，定期 flush 到 S3</li>
+<li>查询的时候，需要从 EBS 上 merge<br>  类似 TiFlash 的方案</li>
+</ul>
+<h3 id="CDC-的延迟问题"><a href="#CDC-的延迟问题" class="headerlink" title="CDC 的延迟问题"></a>CDC 的延迟问题</h3><p>CDC 这一套架构的延迟是有上限的，基本上只能保证秒级。其中原理在 <a href="/2023/07/22/tikv-tidb-thought/">“CDC 的延迟”</a>中已经有介绍。因此，我觉得要想获得更好的延迟，就得有一套支持直接写入的 API 和 client。</p>
+<h2 id="心跳"><a href="#心跳" class="headerlink" title="心跳"></a>心跳</h2><p>在<a href="/2023/01/12/high-concurrency/">分布式架构和高并发相关场景</a>中介绍了心跳的一些基本的概念。这里不再详细论述。</p>
+<h1 id="tantivy"><a href="#tantivy" class="headerlink" title="tantivy"></a>tantivy</h1><h2 id="保序"><a href="#保序" class="headerlink" title="保序"></a>保序</h2><h3 id="同时支持-ASC-和-DESC"><a href="#同时支持-ASC-和-DESC" class="headerlink" title="同时支持 ASC 和 DESC"></a>同时支持 ASC 和 DESC</h3><p>Tantivy 的倒排表文件是顺序压缩存储的，例如：</p>
+<ul>
+<li>doc_id 列表经过 delta-encoded<br>  如果要支持逆向，则需要保存两个方向的差值，十分麻烦</li>
+<li>然后通过 bit-packed 或 block-wise 压缩</li>
+<li>压缩的 Block 按顺序写入文件<br>  如果要支持逆向，则需要能定位到前一个 Block 的 offset。</li>
+<li>查找时通过 BlockReader 顺序解码</li>
+</ul>
+<p>这么做的目的是因为顺序访问能够提高吞吐量。而对于随机访问，tantivy 主要是通过如下方式进行快速的 seek：</p>
+<ul>
+<li>skiplist</li>
+</ul>
+<p>对于搜索引擎而言，存储空间通常比随机访问代价更便宜，尤其是 posting list 占比主要来自长尾词，常见高频词列表短，存两份并不会显著膨胀。</p>
+<p>为什么常见高频词反而消耗 posting list 的物理空间更小？</p>
+<ul>
+<li>因为足够高频，所以 delta-encode + bitpack 的优化效果非常好</li>
+<li>高频词可能是 Stopword，不会为它生成倒排表</li>
+<li>基于布尔逻辑，或者范围过滤的短路逻辑，常常能够跳过这些高频词的 posting list 的读取</li>
+</ul>
+<h2 id="内存"><a href="#内存" class="headerlink" title="内存"></a>内存</h2><p>tantivy 在读取的时候需要借助 MmapDirectory 结构，它实际上是把 segment 文件 mmap 读的。</p>
+<p>问题：</p>
+<ul>
+<li>如果要实现 CMEK，则难度相当大，因为 CMEK 在 S3 和本地盘上都需要加密。感觉一种做法是用 gocryptfs 糊一层。</li>
+</ul>
+<h2 id="返回流式数据"><a href="#返回流式数据" class="headerlink" title="返回流式数据"></a>返回流式数据</h2><h1 id="关于-vibe-coding"><a href="#关于-vibe-coding" class="headerlink" title="关于 vibe coding"></a>关于 vibe coding</h1><h3 id="编程风格和编程理念"><a href="#编程风格和编程理念" class="headerlink" title="编程风格和编程理念"></a>编程风格和编程理念</h3><p>这里，我也想进一步探讨编程风格问题，我的想法比较复古：</p>
+<ul>
+<li>坚持测试、可观测性<br>  特别的，对于“莽一版”，需要重视：<ul>
+<li>写测试的过程，也代表了对需求的理解，对边界情况、对性能的评估。如果不写测试，那么很难有自信说自己写的代码就是完全符合需求的。</li>
+<li>莽的目的是能赶快有个版本上线给客户看，因此避免灾难性事故犹在提供功能之上。</li>
+</ul>
+</li>
+<li>相比于论证架构的性能上限，我更看重先论证架构的安全性<br>  可以参考<a href="/2025/01/18/percolator-2/">跨 Region 提交事务？</a>这一章。</li>
+<li>强调建立机制，而不是引入人力<br>  人写代码就是会犯错的，而机器就是比人少犯错。因此应当：<ul>
+<li>引入检查，让“烂”代码无法通过 review</li>
+<li>强制有测试才能合入代码</li>
+</ul>
+</li>
+<li>不隐藏复杂度，只封装复杂度<br>  系统的复杂度是由需求定义的，一个复杂的需求一定导致一个复杂的系统设计。<br>  这里“隐藏”复杂度指的是下列行为：</li>
+</ul>
+<p>关于 vibe coding，我认为有常见如下的 pitfall：</p>
+<ul>
+<li>用一个单薄的实现去解决一个复杂场景</li>
+<li>用一个臃肿实现去解决一个简单场景</li>
+<li>认识不到风险场景，缺乏管控</li>
+<li>写出的代码无法在系统中迭代维护</li>
+</ul>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/数据库/" rel="tag"># 数据库</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2025/01/11/fts/" rel="next" title="Full text search(FTS) 技术调研">
+                <i class="fa fa-chevron-left"></i> Full text search(FTS) 技术调研
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2025/01/11/board-game/" rel="prev" title="桌游品鉴">
+                桌游品鉴 <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">262</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">154</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#TiCI-要解决什么问题？"><span class="nav-number">1.</span> <span class="nav-text">TiCI 要解决什么问题？</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#拓展-TiFlash-的能力"><span class="nav-number">1.1.</span> <span class="nav-text">拓展 TiFlash 的能力</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#支持-Hybrid-Index"><span class="nav-number">1.2.</span> <span class="nav-text">支持 Hybrid Index</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#架构"><span class="nav-number">2.</span> <span class="nav-text">架构</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#PK-的选择"><span class="nav-number">2.1.</span> <span class="nav-text">PK 的选择</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#数据源"><span class="nav-number">2.2.</span> <span class="nav-text">数据源</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Push-or-Pull"><span class="nav-number">2.2.1.</span> <span class="nav-text">Push or Pull</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#延迟"><span class="nav-number">2.2.2.</span> <span class="nav-text">延迟</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Meta-Service"><span class="nav-number">3.</span> <span class="nav-text">Meta Service</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Outline"><span class="nav-number">3.1.</span> <span class="nav-text">Outline</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Shard-管理"><span class="nav-number">3.2.</span> <span class="nav-text">Shard 管理</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#设计能向后兼容的初始策略"><span class="nav-number">3.2.1.</span> <span class="nav-text">设计能向后兼容的初始策略</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#大量小表"><span class="nav-number">3.2.2.</span> <span class="nav-text">大量小表</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#写入路径"><span class="nav-number">3.3.</span> <span class="nav-text">写入路径</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#S3-的-Slowdown"><span class="nav-number">3.3.1.</span> <span class="nav-text">S3 的 Slowdown</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Split-amp-Compaction"><span class="nav-number">3.3.2.</span> <span class="nav-text">Split &amp; Compaction</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#有状态还是无状态的-Worker"><span class="nav-number">3.3.3.</span> <span class="nav-text">有状态还是无状态的 Worker</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#CDC-的延迟问题"><span class="nav-number">3.3.4.</span> <span class="nav-text">CDC 的延迟问题</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#心跳"><span class="nav-number">3.4.</span> <span class="nav-text">心跳</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#tantivy"><span class="nav-number">4.</span> <span class="nav-text">tantivy</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#保序"><span class="nav-number">4.1.</span> <span class="nav-text">保序</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#同时支持-ASC-和-DESC"><span class="nav-number">4.1.1.</span> <span class="nav-text">同时支持 ASC 和 DESC</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#内存"><span class="nav-number">4.2.</span> <span class="nav-text">内存</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#返回流式数据"><span class="nav-number">4.3.</span> <span class="nav-text">返回流式数据</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#关于-vibe-coding"><span class="nav-number">5.</span> <span class="nav-text">关于 vibe coding</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#编程风格和编程理念"><span class="nav-number">5.0.1.</span> <span class="nav-text">编程风格和编程理念</span></a></li></ol></li></ol></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2025/01/11/fts-tici/';
+          this.page.identifier = '2025/01/11/fts-tici/';
+          this.page.title = 'TiCI 的设计考量';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>

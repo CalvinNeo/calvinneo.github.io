@@ -1,0 +1,1391 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="分布式,事务,数据库,论文阅读," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="介绍Percolator论文。">
+<meta name="keywords" content="分布式,事务,数据库,论文阅读">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Percolator 论文阅读">
+<meta property="og:url" content="http://www.calvinneo.com/2021/08/14/percolator-reading/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="介绍Percolator论文。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:image" content="http://www.calvinneo.com/img/dbtrans/percolator3.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/percolator/f5.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/percolator/pert.png">
+<meta property="og:updated_time" content="2025-01-18T17:04:49.760Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Percolator 论文阅读">
+<meta name="twitter:description" content="介绍Percolator论文。">
+<meta name="twitter:image" content="http://www.calvinneo.com/img/dbtrans/percolator3.png">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2021/08/14/percolator-reading/"/>
+
+
+
+
+
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5487541356791902"
+     crossorigin="anonymous"></script>
+  <title>Percolator 论文阅读 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2021/08/14/percolator-reading/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                Percolator 论文阅读
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2021-08-14T19:20:33+08:00">
+                2021-08-14
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>介绍Percolator论文。</p>
+<a id="more"></a>
+
+<p>类Percolator系统的环境：</p>
+<ol>
+<li><p>一个KV存储<br> 在 Percolator 中是 BigTable 或者 HBase，在 TiDB 中是 TiKV。<br> BigTable 可以理解为下面的一个 KV 映射</p>
+ <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">(row:string, column:string, timestamp:int64)-&gt;string</span><br></pre></td></tr></table></figure>
+
+<p> 在 Bigtable 中已经提供了针对单行的跨 column 的事务能力。当然，对于 Percolator 的跨行跨表的事务，这还是不够的。</p>
+</li>
+<li><p>一个全局授时服务器(TSO)<br> 在 Percolator 中叫 Timestamp Oracle。在 TiDB 中由 PD 提供。<br> 这个授时服务可以给每个事务一个全局的时间戳，从而解决时序的问题。<br> 不过 Spanner 使用的应该是 TrueTime。</p>
+</li>
+<li><p>Client<br> 作为分布式事务的协调者。在 TSO 的支持下，这个协调者实现了 SI 的隔离级别。<br> 所以这个协调者并不是在 BigTable 里面的，而其他数据库的控制节点和数据节点是放到一起的。<br> Percolator 里面的每个节点都会向 BigTable 进行读写。</p>
+</li>
+</ol>
+<h1 id="Snapshot-Isolation"><a href="#Snapshot-Isolation" class="headerlink" title="Snapshot Isolation"></a>Snapshot Isolation</h1><p>在<a href="/2017/09/20/transaction/">数据库系统中的事务</a>这篇文章中介绍了快照隔离(Snapshot Isolation, SI)。<br>在实现 SI 时，需要记录两个时间戳，事务开始 ST 和事务提交 CT。SI 保护了 WW 冲突，其他事务在 [ST,CT] 中的写会和本事务产生冲突。</p>
+<p>如下图所示，SI 要求在 ST1 开始的事务，能看到所有 CT2 先于自己的 ST1 事务的修改。也就是</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ST2 --&gt; CT2 --&gt; ST1</span><br></pre></td></tr></table></figure>
+
+<p><img src="/img/dbtrans/percolator3.png"></p>
+<h1 id="2-2-Transactions"><a href="#2-2-Transactions" class="headerlink" title="2.2 Transactions"></a>2.2 Transactions</h1><p>因为 Percolator 的协调者是 BigTable 外部的 Client，所以需要自己维护锁。锁具有 replicated、distributed、balanced、persistent 的要求，BigTable 作为存储是支持的，所以这个锁作为 meta 列一同存放在 BigTable 的中。</p>
+<p>其实有4个 Meta 列，如下图所示：</p>
+<p><img src="/img/percolator/f5.png"></p>
+<ol>
+<li>lock<br> 表示一个没提交的事务正在写这个cell。包含了primary lock的位置。</li>
+<li>write<br> 表示是已提交的数据。存放了BigTable的时间戳。</li>
+</ol>
+<h2 id="Demo"><a href="#Demo" class="headerlink" title="Demo"></a>Demo</h2><p>先来看一个 Demo。一开始 Joe 有2块钱，Bob 有10块钱。现在 Bob 给 Joe 转账7块钱。</p>
+<ol>
+<li>写 <code>bal:lock</code> 加锁 Bob 的账户，这个锁是 primary 的。此外，写 <code>bal:data</code> 为3，也就是扣了7块钱的 Bob。</li>
+<li>加锁 Joe 的账户，在 <code>bal:lock</code> 里面写一个 secondary 锁，引用对 Bob 账户的 primary 锁。这样在事务挂掉之后，能够知道 primary lock 在哪里，并且把它清理掉。</li>
+<li>下面进入提交阶段，首先操作 primary lock 所在的 Bob 的账户。需要将 <code>bal:lock</code> 清理掉，<code>bal:write</code> 写上对应的 ST。通过这个 ST 就能找到实际的数据 <code>bal:data</code>。<br> 在这之后，其他的 Reader 就能看到 Bob 账户上只有3块钱了。</li>
+<li>下面对 Secondary 也进行写记录和删除锁的处理。</li>
+</ol>
+<p>【Q】看完Demo，有几个问题：</p>
+<ol>
+<li>为什么要引入 primary lock？<br> 这个是为了方便进行失败回滚。当事务提交时，会清空 primary lock。因此可以认为如果 primary lock 还在，则事务尚未提交。<br> 例如老事务挂了，留下了一片狼藉的现场。此时，一个新事务可能会访问到老事务残留的 secondary lock，对应有两种情况：<ol>
+<li>指向的 primary lock 还在，认为这个事务还没有提交成功。</li>
+<li>指向的 primary lock 不在了，认为这个事务提交成功。那么必须先继续提交老事务。</li>
+</ol>
+</li>
+<li>如果说 secondary lock 被清了一半，怎么办呢？<br> 没问题，后面会讲。实际上有一个优化就是异步清理 secondary lock。</li>
+<li>写 write 列和清空 lock 是要原子的么？<br> 从 L58 和 L61 可以看到，primary 是原子的，作为一个事务整体提交。但 secondary 不是原子的。</li>
+<li>在还没有修改 Secondary 时就可以访问新版本数据了，这个不破坏一致性么？<br> 同问题2</li>
+</ol>
+<h2 id="实现"><a href="#实现" class="headerlink" title="实现"></a>实现</h2><p>下面就分两步来看实现，其实就是对 Demo 的形式化。<br>整个实现是一个 Transaction 类，包含几个成员：</p>
+<ol>
+<li><p>writes_<br> 这个事务的所有写入。<code>writes_[0]</code> 是 primary。<br> 一个 Percolator 事务类似于</p>
+ <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">BEGIN</span><br><span class="line">DML/DQL</span><br><span class="line">...</span><br><span class="line">DML/DQL</span><br><span class="line">Prewrite</span><br><span class="line">Commit</span><br></pre></td></tr></table></figure></li>
+<li><p>start_ts_<br> 整个事务的 ST 时间戳，在事务创建时初始化。</p>
+</li>
+<li><p>Set<br> 往 <code>writes_</code> 里面加数据。</p>
+</li>
+<li><p>Get<br> 读</p>
+</li>
+<li><p>Commit<br> 提交，首先调用一阶段的 Prewrite，如果全部成功，执行二阶段提交。</p>
+</li>
+<li><p>Prewrite<br> 一阶段，会被 Commit 调用。</p>
+</li>
+</ol>
+<h3 id="Commit-1"><a href="#Commit-1" class="headerlink" title="Commit 1"></a>Commit 1</h3><p>Commit 的前几行是封装了一阶段的 Prewrite，省得用户自己去调用了：</p>
+<ol>
+<li>选择 <code>writes_[0]</code> 作为 <code>primary</code>，剩余的作为 <code>secondaries</code></li>
+<li>对 primary 做 Prewrite</li>
+<li>对所有 secondaries 做 Prewrite</li>
+</ol>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">41 bool Commit() &#123;</span><br><span class="line">42   Write primary = writes_[0];</span><br><span class="line">43   vector&lt;Write&gt; secondaries(writes_.begin()+1, writes_.end());</span><br><span class="line">44   if (!Prewrite(primary, primary)) return false;</span><br><span class="line">45   for (Write w : secondaries)</span><br><span class="line">46     if (!Prewrite(w, primary)) return false;</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+
+<p>先对 primary 进行 Prewrite 是必要的么？此外，在Commit 2阶段也能看到类似的现象。以上两个问题，在 Commit 2这部分讲。</p>
+<p>【Q】在第 46 行返回前，可以将已经加了的锁删除掉么？</p>
+<h3 id="Prewrite"><a href="#Prewrite" class="headerlink" title="Prewrite"></a>Prewrite</h3><p>传入的两个参数，primary 是 <code>writes_[0]</code>，primary lock 会在它上面。</p>
+<p>需要 lock 所有被写的 cell，在这之前，先对于所有的 cell 检查下面两类冲突：</p>
+<ol>
+<li>【Line 32】如果发现 cell 的<strong>write 列</strong>在自己的 ST 之后已经存在一条记录，执行 abort<br> 这实际上是有其他事务已经提交了修改，事务 write-write 冲突了。根据 SI，需要 abort。<br> 【Q】这里有个疑问，SI 不是要到提交的时候再检查冲突么？</li>
+<li>【Line 34】如果发现 cell 的<strong>lock 列</strong>上有另外的记录，无论 timestamp 是什么，执行 abort<br> 有可能是一个已经提交的事务，并且它的 CT 比我们 ST 还要小，但没来得及清理锁，所以并不是冲突。但 Percolator 认为这个不常见，所以还是 abort。<br> 在<a href="https://www.jianshu.com/p/05194f4b29dd" target="_blank" rel="noopener">文章</a>中还提到可能有失败事务的情况。无论事务是在 Prewrite 阶段还是在 Commit 阶段失败，都可能留下 lock 列上的记录。这个时候，以 primary 上的 lock 为准。如果残留的是 secondary lock，就根据 lock 上的信息找 primary。如果 primary lock 已经无了，就说明事务提交成功，否则说明事务未提交成功。</li>
+</ol>
+<p>可以发现，检查冲突实际上就是处理 write 列和 lock 列。这两个检查是优化重点：</p>
+<ol>
+<li>需要注意，Percolator 是一个事务提交的协议。在提交前，DML 已经执行过了。所以如果事务冲突很多，那么这里会频繁发生回滚。可以进行悲观锁的优化来减少这里的冲突。</li>
+<li>另一个优化是可以维护一个全局的 <code>min_commit_ts</code>。后面详细说明。</li>
+</ol>
+<p>如果没有以上两类冲突，才继续进行：</p>
+<ol>
+<li>【Line36】更新 data 列，写入 ST，以及真正的值 <code>w.value</code>。</li>
+<li>【Line37】更新 lock 列，写入 primary 锁的 row 和 col。</li>
+</ol>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">27 bool Prewrite(Write w, Write primary) &#123;</span><br><span class="line">28   Column c = w.col;</span><br><span class="line">29   bigtable::Txn T = bigtable::StartRowTransaction(w.row);</span><br><span class="line">30</span><br><span class="line">31   // Abort on writes after our start timestamp . . .</span><br><span class="line">32   if (T.Read(w.row, c+&quot;write&quot;, [start_ts_ , ∞])) return false;</span><br><span class="line">33   // . . . or locks at any timestamp.</span><br><span class="line">34   if (T.Read(w.row, c+&quot;lock&quot;, [0, ∞])) return false;</span><br><span class="line">35</span><br><span class="line">36   T.Write(w.row, c+&quot;data&quot;, start_ts_ , w.value);</span><br><span class="line">37   T.Write(w.row, c+&quot;lock&quot;, start_ts_ ,</span><br><span class="line">38      &#123;primary.row, primary.col&#125;); // The primary’s location.</span><br><span class="line">39   return T.Commit();</span><br><span class="line">40 &#125;</span><br></pre></td></tr></table></figure>
+
+<p>接下来，进入 Commit 2 阶段。</p>
+<h3 id="Commit-2"><a href="#Commit-2" class="headerlink" title="Commit 2"></a>Commit 2</h3><p>后面就是提交的第二阶段：</p>
+<ol>
+<li>【Line48】向 TSO 请求时间戳，作为 CT</li>
+<li>检查 lock 是否还存在<br> 【Line53】注意，根据“Failure”章节的论述，这里锁可能已经被其他事务清理了。</li>
+<li>对于primary lock<br> 一旦 primary 对 reader 可见，说明事务提交了。<ol>
+<li>【Line55】更新 write 列<br> write 列中存放了 ST 和 CT。<br> 存放 ST 的原因是可以通过 ST 找到数据，即 data 列。</li>
+<li>【Line57】移除锁</li>
+<li>【Line58】提交 BigTable 的行事务，这里就是所谓的 commit point。</li>
+</ol>
+</li>
+<li>对于所有 secondary lock<ol>
+<li>【Line62】更新 write 列</li>
+<li>【Line63】移除锁</li>
+</ol>
+</li>
+</ol>
+<p>【Q】为什么在处理 primary 的时候就提交行事务 <code>T.Commit()</code>了？先对 primary 进行 Prewrite 这个行为是必要的么？<br>原因是 primary 的 lock 列和 write 列是判断整个事务状态的金标准。在 primary 写完 write、清完 lock 之后，就认为事务已经提交，所以就 <code>T.Commit()</code> 了。后面往 secondary 写，只是起到通知作用。<br>假如往 secondary 写失败了，也不会影响到整个事务的提交。因为 secondary 还是会 redirect 到 primary 上，然后就能发现 primary 的已提交状态。</p>
+<p>【Q】写 write 删 lock 是原子操作么？如果不是原子操作，它们的顺序是必然的么？是的，因为这是一个 bigtable 事务。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line">41 bool Commit() &#123;</span><br><span class="line">...</span><br><span class="line">47</span><br><span class="line">48   int commit ts = oracle.GetTimestamp();</span><br><span class="line">49</span><br><span class="line">50   // Commit primary first.</span><br><span class="line">51   Write p = primary;</span><br><span class="line">52   bigtable::Txn T = bigtable::StartRowTransaction(p.row);</span><br><span class="line">53   if (!T.Read(p.row, p.col+&quot;lock&quot;, [start_ts_ , start_ts_ ]))</span><br><span class="line">54     return false; // aborted while working</span><br><span class="line">55   T.Write(p.row, p.col+&quot;write&quot;, commit ts,</span><br><span class="line">56     start_ts_ ); // Pointer to data written at start_ts_ .</span><br><span class="line">57   T.Erase(p.row, p.col+&quot;lock&quot;, commit ts);</span><br><span class="line">58   if (!T.Commit()) return false; // commit point</span><br><span class="line">59</span><br><span class="line">60   // Second phase: write out write records for secondary cells.</span><br><span class="line">61   for (Write w : secondaries) &#123;</span><br><span class="line">62     bigtable::Write(w.row, w.col+&quot;write&quot;, commit ts, start_ts_ );</span><br><span class="line">63     bigtable::Erase(w.row, w.col+&quot;lock&quot;, commit ts);</span><br><span class="line">64   &#125;</span><br><span class="line">65   return true;</span><br><span class="line">66 &#125;</span><br></pre></td></tr></table></figure>
+
+<p>【Q】ST 和 CT 的关系是什么，会出现事务 2 更晚被启动，但是更早被提交，并且之前的事务 1 反而在它提交之后还能<strong>成功</strong>提交的情况么？也就是</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">st1 --&gt; st2 --&gt; ct2 --&gt; ct1</span><br></pre></td></tr></table></figure>
+
+<p>我认为不会，考虑：<br>如果 st2 被提交，说明 st2 设置的 lock，没有被事务 1 清掉。从而事务 2 需要能成功设置 lock。从而事务 2 在 prewrite 时，没有 ts 大于 st2 的 write，在 [0, ∞] 没有 lock。因为 <code>st1 &lt; st2</code>，所以不会有更大的 write，因此只要考虑 lock 就行。那么分为两种情况：</p>
+<ol>
+<li>st1 此时已经提交了，那么 ct1 肯定小于 ct2，假设不成立</li>
+<li>st1 此时还没提交<ol>
+<li>如果此时 st1 已经持有 lock，则 st2 不能上锁成功，假设不成立。</li>
+<li>如果此时 st1 未持有 lock<br> 如果未持有 lock 的原因是 lock 被事务 2 清理了，那么 st1 就不能提交成功，ct1 无从谈起。<br> 当然 Percolator 中没有提到 Prewrite 清锁。那只能说明此时 Client 的 st1 卡在【line 35】。但这个情况成立么？其实不会，注意到 Line 39 的 <code>T.Commit()</code>，可以看出从 31 到 38 行的代码都是作为 bigtable 事务被整体提交的。</li>
+</ol>
+</li>
+</ol>
+<h3 id="Get"><a href="#Get" class="headerlink" title="Get"></a>Get</h3><p>首先检查[0, ST]区间内有没有锁。<br>如果有，说明另一个事务在写，这个读取事务就要等锁被释放(也就是事务完成)后才能继续执行。注意，不能在这里返回旧数据，<a href="https://pingcap.com/zh/blog/percolator-and-txn" target="_blank" rel="noopener">否则可能导致幻读</a>。这里文章中没解释，我这边的理解是加这个 lock 的事务可能卡着，或者稍后返回超时啥的。如果我现在就根据 write 返回了，那么实际上就不一致了。所以这里我们只能等超时，或者其他事务清理锁。<br>【Line19】 如果没有锁，就读取最后一次写的数据 <code>latest_write</code>，并且返回对应的 data【Line22】。如果没有读到数据，就返回 no data。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line">8  bool Get(Row row, Column c, string* value) &#123;</span><br><span class="line">9    while (true) &#123;</span><br><span class="line">10     bigtable::Txn T = bigtable::StartRowTransaction(row);</span><br><span class="line">11     // Check for locks that signal concurrent writes.</span><br><span class="line">12     if (T.Read(row, c+&quot;lock&quot;, [0, start_ts_])) &#123;</span><br><span class="line">13     // There is a pending lock; try to clean it and wait</span><br><span class="line">14     BackoffAndMaybeCleanupLock(row, c);</span><br><span class="line">15     continue;</span><br><span class="line">16   &#125;</span><br><span class="line">17</span><br><span class="line">18   // Find the latest write below our start timestamp.</span><br><span class="line">19   latest_write = T.Read(row, c+&quot;write&quot;, [0, start_ts_]);</span><br><span class="line">20   if (!latest_write.found()) return false; // no data</span><br><span class="line">21   int data ts = latest_write.start_timestamp();</span><br><span class="line">22   *value = T.Read(row, c+&quot;data&quot;, [data_ts, data_ts]);</span><br><span class="line">23   return true;</span><br><span class="line">24 &#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="Failure"><a href="#Failure" class="headerlink" title="Failure"></a>Failure</h2><p>BigTable 能处理自身的问题，但还需要处理 Client 的 Failure。<br>如果在提交事务时 Client 挂了，Percolator 需要能够清除遗留的锁，否则可能导致后续的事务被 hang 住。这个清除的过程是 Lazy 的，如果事务 A 在执行时遇到了事务 B 的冲突锁，那么 A 会判定事务 B 是否宕掉，并清除锁。</p>
+<p>A 在清除锁时，如果事务 B 实际并没有宕掉，而且正准备利用这个锁提交事务，会产生 race。primary lock 就是来解决这个问题的。因为清理或者提交事务都需要通过这个 primary lock，所以事务 A 的清除锁和事务 B 的利用锁提交事务只有一个可能成功：</p>
+<ol>
+<li>如果提交成功了</li>
+<li>如果清理成功了，那么事务 B 提交时会发现锁不存在 LockNotExist。这个时候需要<strong>用一个新的 ST 重试</strong>。因此，当事务中存在依赖查询结果来更新的语句时，重试将无法保证事务原本可重复读的隔离级别，最终可能导致结果与预期出现不一致。</li>
+</ol>
+<p>特别注意，在事务 B 提交前，需要检查 lock 是否还在【Line53】，然后才能写 write。同理，在事务 A 清理前，也需要检查 primary lock 是否存在，如果存在，则可以安全清理掉这个 primary lock。看起来挺奇怪的，如果一个锁存在，就清理掉这个锁。</p>
+<p>还有一种情况，当事务已经写完至少一个 write 列后发生崩溃，此时可能 lock 还没有全清理完，write 可能没有全写完。此时需要 roll forward 这个事务。</p>
+<p>总之，整个判断的原则就是 lock 有没有被 write 取代。</p>
+<h3 id="Lazy-clean-和-Liveness"><a href="#Lazy-clean-和-Liveness" class="headerlink" title="Lazy clean 和 Liveness"></a>Lazy clean 和 Liveness</h3><p>因为 eager clean 会导致事务回滚，带来性能开销。所以只有在该事务的锁被认为是属于某个 dead worker 时，才会被清理。</p>
+<h3 id="gc-和清理-secondary-lock"><a href="#gc-和清理-secondary-lock" class="headerlink" title="gc 和清理 secondary lock"></a>gc 和清理 secondary lock</h3><p>在前面提到，如果发现一个 secondary lock，则需要查询 primary lock，根据 primary lock 是否存在而决定是否清理 secondary lock。<br>但考虑一个特殊的情况，在数据库实现中都会加入 gc 机制，用来清理过时的数据。如果允许 primary lock 被作为过时数据清理掉了，那么实际就无法分清 primary lock 不存在是因为被 gc 清理掉了，还是因为被提交而清理掉了，进而无法判断是否要清理 secondary lock。<br>所以，gc 逻辑不能直接清理 secondary lock。</p>
+<h2 id="Timestamps"><a href="#Timestamps" class="headerlink" title="Timestamps"></a>Timestamps</h2><p>TSO(Timestamp Oracle)服务会阶段性地分配一段区间，并将这段区间的最大值持久化，剩下的时候就可以直接从内存提供服务。当 TSO 服务重启时，timestamp 就会来到持久化了的最大值上。</p>
+<p>为了减少 TSO 的压力，每个 Percolator worker 会 batch 自己的请求为一个 RPC 发送给 TSO 服务。当 TSO 的负载变大时，Percolator的batch大小也会变大。</p>
+<p>Percolator的事务性要求 Get() 操作会返回它的 ST 前所有已经被提交的写。考虑一个事务 R 在 TR 读，另一个事务 W 在 TW 提交了写，且 TW &lt; TR，则 R 能看到 W 的写。因为 TW &lt; TR，那么 TW 一定在 TR 的 batch，或者 TR 之前的 batch 中。因此可以得到下面的顺序</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">W lock -&gt; W request TW -&gt; R get TR -&gt; R read</span><br></pre></td></tr></table></figure>
+
+<p>实际上，在 R 读取前，W 至少已经写完所有的 lock 了。所以 R 要么读到锁，要么读到已经被写完的数据。</p>
+<p>从这里，也可以看出加锁的意义之一。考虑下面的执行顺序，如果不加锁，R 就不能知道 W 在写。因为 Commit(row1) 的 CT 是小于 Get(row) 的 ST 的，根据 SI，TR 需要能读到 Commit(row1) 的结果。如果 R 不管不顾直接读了，而 Commit(row1) 又是在读取之后发生的，那么 R 实际上就读到了 Commit(row1) 之前的结果。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">Transaction W       Transaction TR</span><br><span class="line">Prewrite(row1)</span><br><span class="line">W request TW</span><br><span class="line">                    R get TR</span><br><span class="line">                    Get(row) with TR</span><br><span class="line">Commit(row1)</span><br></pre></td></tr></table></figure>
+
+<h1 id="分析"><a href="#分析" class="headerlink" title="分析"></a>分析</h1><h2 id="ACID-性质"><a href="#ACID-性质" class="headerlink" title="ACID 性质"></a>ACID 性质</h2><p>相比于 RR，SI 不会出现幻读问题，但会<a href="/2017/09/20/transaction/">出现 write skew 问题</a>。通过 select for update 可以解决 write skew 问题。</p>
+<h2 id="Percolator-和普通-2PC"><a href="#Percolator-和普通-2PC" class="headerlink" title="Percolator 和普通 2PC"></a>Percolator 和普通 2PC</h2><p>Percolator 改进了普通 2PC 协调者的单点问题。</p>
+<h1 id="TiKV-的实现"><a href="#TiKV-的实现" class="headerlink" title="TiKV 的实现"></a>TiKV 的实现</h1><p>注意，需要区分事务 commit 和 percolator 的 prewrite 和 commit 阶段。在事务执行 <code>commit</code> 前，其内容在内存中。在执行 <code>commit</code> 后，才会执行两阶段提交。</p>
+<h2 id="优化锁冲突"><a href="#优化锁冲突" class="headerlink" title="优化锁冲突"></a>优化锁冲突</h2><h3 id="乐观事务和悲观事务"><a href="#乐观事务和悲观事务" class="headerlink" title="乐观事务和悲观事务"></a>乐观事务和悲观事务</h3><p>乐观事务就是标准的 Percolator 的 2PC 实现。</p>
+<p>悲观事务需要区分快照读和当前读：</p>
+<ol>
+<li>SELECT 是快照读，读的是事务开始前的版本。</li>
+<li>DELETE、UPDATE、SELECT FOR UPDATE、INSERT 是当前读，读的是当前的版本。</li>
+</ol>
+<p>如果使用当前读，则需要加悲观锁。</p>
+<p>但是 TiKV 不支持间隙锁，所以 range 内的 DML 不会被 SELECT FOR UPDATE 阻塞。</p>
+<p>关于悲观锁的实现细节在随后章节中介绍。</p>
+<h3 id="min-commit-ts"><a href="#min-commit-ts" class="headerlink" title="min_commit_ts"></a>min_commit_ts</h3><p>当一个事务被提交时，将更新 <code>min_commit_ts</code>。因此在判断读写冲突的时候，可以先比较自己的 start_ts 和 min_commit_ts，以减少冲突检查的开销。</p>
+<h2 id="悲观锁的实现"><a href="#悲观锁的实现" class="headerlink" title="悲观锁的实现"></a>悲观锁的实现</h2><p>TiKV 的悲观锁实际上就是将原本要在事务提交阶段加的锁提前到 DML 阶段了。如<a href="https://zhuanlan.zhihu.com/p/79034576" target="_blank" rel="noopener">下图</a>所示。</p>
+<p><img src="/img/percolator/pert.png"></p>
+<p>对图上几点进行说明：</p>
+<ol>
+<li>TiKV 的悲观锁和其他数据库的悲观锁仍有不一致。TiKV 需要在执行 DML 之后才会加锁。其他数据库一般在读的时候就上锁，然后才执行 DML 进行修改</li>
+<li>悲观事务需要从 pd 取一个 for_update_ts，而不是用一开始的 start_ts 去读<br> 否则只能读到 start_ts 之前的数据，不能读到后面的修改了。如果不能读到后面的修改，那么就无法判断后面产生的冲突了。<br> 自然而然地，如果使用 for_update_ts 读到一个冲突，那么就可以更新 for_update_ts，然后用它继续尝试加锁。而不需要整个回滚 start_ts。<br> 但是这里不能使用 max_ts。这是为了避免在执⾏ DML 后加锁之前数据被其他事务修改，从而破坏 SI。</li>
+<li>即使一个 key 不存在，TiKV 也会上锁。</li>
+<li>TiKV 也不会对 DML 中每个要修改的 key 都上锁<br> 对 Insert，只上锁 unique index 和 row key。<br> 对 Delete，只上锁 row key。<br> 对 Update，会上锁 old row key。如果 new row key 不等于 old row key，则上锁 new row key。如果新的 row 中有新的 unique index，则上锁 unique index。</li>
+</ol>
+<h2 id="Resolve-Lock"><a href="#Resolve-Lock" class="headerlink" title="Resolve Lock"></a>Resolve Lock</h2><p><a href="https://zhuanlan.zhihu.com/p/447978561" target="_blank" rel="noopener">https://zhuanlan.zhihu.com/p/447978561</a></p>
+<h2 id="SI-处理锁"><a href="#SI-处理锁" class="headerlink" title="SI 处理锁"></a>SI 处理锁</h2><p>SI 相比 RC，要多一个 <code>load_and_check_lock</code> 的过程。</p>
+<p><code>check_lock</code> <a href="https://github.com/tikv/tikv/blob/v3.1.0/src/storage/mvcc/reader/util.rs" target="_blank" rel="noopener">检查锁</a>：</p>
+<ol>
+<li>如果锁的 ts 比读事务的 start_ts 要大，忽略这个锁。<br> 因为根据 Percolator，只检查 [0,ST] 的锁。<br> 为什么会出现更 recent 的锁呢？这是因为读事务开始后，可能有新的写入，或者我们在 stale read。</li>
+<li>如果我们的 ts 是 MAX，并且这是一个 primary lock，说明意图就是找最近提交的，也忽略这个锁。</li>
+<li>否则，这里就是被锁的。返回一个 <code>Err(Error::KeyIsLocked())</code>。</li>
+</ol>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">pub</span> <span class="function"><span class="keyword">fn</span> <span class="title">check_lock</span></span>(key: &amp;Key, ts: <span class="built_in">u64</span>, lock: Lock) -&gt; <span class="built_in">Result</span>&lt;()&gt; &#123;</span><br><span class="line">    <span class="keyword">if</span> lock.ts &gt; ts || lock.lock_type == LockType::Lock || lock.lock_type == LockType::Pessimistic &#123;</span><br><span class="line">        <span class="comment">// Ignore lock when lock.ts &gt; ts or lock's type is Lock or Pessimistic</span></span><br><span class="line">        <span class="keyword">return</span> <span class="literal">Ok</span>(());</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">let</span> raw_key = key.to_raw()?;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> ts == std::<span class="built_in">u64</span>::MAX &amp;&amp; raw_key == lock.primary &#123;</span><br><span class="line">        <span class="comment">// When `ts == u64::MAX` (which means to get latest committed version for</span></span><br><span class="line">        <span class="comment">// primary key), and current key is the primary key, we ignore this lock.</span></span><br><span class="line">        <span class="keyword">return</span> <span class="literal">Ok</span>(());</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// There is a pending lock. Client should wait or clean it.</span></span><br><span class="line">    <span class="literal">Err</span>(Error::KeyIsLocked(lock.into_lock_info(raw_key)))</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="顺序读"><a href="#顺序读" class="headerlink" title="顺序读"></a>顺序读</h2><p>考虑在 [lb, rb] 区间中扫 scan_ts，它大概就是从 lb 往后面扫，对于所有要查询的 user key，跳过 commit_ts &gt; scan_ts 的版本，然后选择第一个 commit_ts &lt;= scan_ts 的版本。但是要考虑有锁的情况。</p>
+<p>介绍几个不变量：</p>
+<ol>
+<li><code>current_user_key</code> 是 <code>min(user_key(write_cursor), lock_cursor)</code>，它表示正在处理的 user key，这个 key 可能没有 write，也可能没有 lock。</li>
+<li><code>has_write</code> 表示 <code>current_user_key</code> 是否至少有一个 write。如果有的话，就是 <code>self.cursors.write</code> 正在指向的位置。这个位置一定是最新的，也就是 commit_ts 最大的位置。</li>
+<li><code>has_lock</code> 表示 <code>current_user_key</code> 是否有一个 lock。如果有的话，就是 <code>self.cursors.lock</code> 正在指向的位置。</li>
+</ol>
+<p>讨论四种情况：</p>
+<ol>
+<li>无 write 无 lock<br> 简单的查不到值。</li>
+<li>无 write 有 lock<br> 对于 RC，就是查不到。<br> 对于 SI，需要检查锁冲突。</li>
+<li>有 write 无 lock<br> 需要进一步找到要的 version。</li>
+<li>有 write 有 lock<br> 因为此时 write 和 lock 上指向的 user key 未必一样，比如有个 user key 就没有 write 之类的，所以先比较 user key。<br> 如果 write 的更小，说明对应的 user key 上没有锁，忽略这个 lock。<br> 如果 write 的更大，说明对应的 user key 上有锁，但是没 write，但我们需要检查 lock 是否带来锁冲突。<br> 如果相等，说明 write 指向的 user key 上有一个对应的 lock。</li>
+</ol>
+<p>如果有 lock，则调用 <code>self.scan_policy.handle_lock</code> -&gt; <a href="https://github.com/tikv/tikv/blob/v3.1.0/src/storage/mvcc/reader/scanner/forward.rs#L509" target="_blank" rel="noopener"><code>scan_latest_handle_lock</code></a>。这个函数中只对 SI 进行额外处理，如果认为有锁冲突，就返回 HandleRes::Skip(current_user_key)，否则就调用 <code>move_write_cursor_to_next_user_key</code> 更新到下一个 user key。<code>handle_lock</code> 的返回不会产生 HandleRes::Return。<br><code>move_write_cursor_to_next_user_key</code> 这个函数会尝试 next 最多 SEEK_BOUND 即 8 次，如果再找不到下一个 user key，就直接 seek 了。</p>
+<p>如果有 write，即使前面已经处理过 lock，同样还是要处理的：</p>
+<ol>
+<li>如果有锁冲突，此时在处理下一个 user key</li>
+<li>否则在处理当前的 user key</li>
+</ol>
+<p>调用 <code>move_write_cursor_to_ts</code> 将 cursor 移动到 <code>self.cfg.ts</code> 位置，可能能找到，可能找不到，分别返回 Ok(true/false)。<br>此时已经到达了第一个大于等于 <code>${user_key}_${scan_ts}</code> 的位置了。然后是两个 Policy，LatestKvPolicy 表示可以直接读了。读完之后，需要前进到下一个 user key 处。<br>LatestEntryPolicy 还需要往后扫一下，有没有 WriteType::Lock 或者 WriteType::Rollback。这里不是很懂了。</p>
+<h1 id="Refernce"><a href="#Refernce" class="headerlink" title="Refernce"></a>Refernce</h1><ol>
+<li>Large-scale Incremental Processing Using Distributed Transactions and Notiﬁcations<br> Percolator论文</li>
+<li><a href="http://mysql.taobao.org/monthly/2018/11/02/" target="_blank" rel="noopener">http://mysql.taobao.org/monthly/2018/11/02/</a><br> 阿里数据库月报，对Percolator有较为详细的介绍</li>
+<li><a href="https://www.jianshu.com/p/05194f4b29dd" target="_blank" rel="noopener">https://www.jianshu.com/p/05194f4b29dd</a><br> 一个简单翻译和个人理解</li>
+<li><a href="https://github.com/tikv/tikv/blob/v3.1.0/src/storage/mvcc/reader/util.rs" target="_blank" rel="noopener">https://github.com/tikv/tikv/blob/v3.1.0/src/storage/mvcc/reader/util.rs</a><br> SI 的 check_lock</li>
+<li><a href="https://cn.pingcap.com/blog/tikv-source-code-reading-13" target="_blank" rel="noopener">https://cn.pingcap.com/blog/tikv-source-code-reading-13</a><br> 介绍顺序读</li>
+<li><a href="https://juejin.cn/post/6850418105563217934" target="_blank" rel="noopener">https://juejin.cn/post/6850418105563217934</a></li>
+<li><a href="https://docs.pingcap.com/zh/tidb/dev/dev-guide-transaction-restraints" target="_blank" rel="noopener">https://docs.pingcap.com/zh/tidb/dev/dev-guide-transaction-restraints</a></li>
+<li><a href="https://tidb.net/blog/7730ed79" target="_blank" rel="noopener">https://tidb.net/blog/7730ed79</a><br> 悲观锁</li>
+</ol>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/分布式/" rel="tag"># 分布式</a>
+          
+            <a href="/tags/事务/" rel="tag"># 事务</a>
+          
+            <a href="/tags/数据库/" rel="tag"># 数据库</a>
+          
+            <a href="/tags/论文阅读/" rel="tag"># 论文阅读</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2021/08/11/wsl2-probs/" rel="next" title="WSL2使用的一些问题">
+                <i class="fa fa-chevron-left"></i> WSL2使用的一些问题
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2021/08/17/rust-acpppp/" rel="prev" title="Rust - A CPP Programmer's Perspective">
+                Rust - A CPP Programmer's Perspective <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">262</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">154</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Snapshot-Isolation"><span class="nav-number">1.</span> <span class="nav-text">Snapshot Isolation</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#2-2-Transactions"><span class="nav-number">2.</span> <span class="nav-text">2.2 Transactions</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Demo"><span class="nav-number">2.1.</span> <span class="nav-text">Demo</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#实现"><span class="nav-number">2.2.</span> <span class="nav-text">实现</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Commit-1"><span class="nav-number">2.2.1.</span> <span class="nav-text">Commit 1</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Prewrite"><span class="nav-number">2.2.2.</span> <span class="nav-text">Prewrite</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Commit-2"><span class="nav-number">2.2.3.</span> <span class="nav-text">Commit 2</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Get"><span class="nav-number">2.2.4.</span> <span class="nav-text">Get</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Failure"><span class="nav-number">2.3.</span> <span class="nav-text">Failure</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Lazy-clean-和-Liveness"><span class="nav-number">2.3.1.</span> <span class="nav-text">Lazy clean 和 Liveness</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#gc-和清理-secondary-lock"><span class="nav-number">2.3.2.</span> <span class="nav-text">gc 和清理 secondary lock</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Timestamps"><span class="nav-number">2.4.</span> <span class="nav-text">Timestamps</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#分析"><span class="nav-number">3.</span> <span class="nav-text">分析</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#ACID-性质"><span class="nav-number">3.1.</span> <span class="nav-text">ACID 性质</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Percolator-和普通-2PC"><span class="nav-number">3.2.</span> <span class="nav-text">Percolator 和普通 2PC</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#TiKV-的实现"><span class="nav-number">4.</span> <span class="nav-text">TiKV 的实现</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#优化锁冲突"><span class="nav-number">4.1.</span> <span class="nav-text">优化锁冲突</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#乐观事务和悲观事务"><span class="nav-number">4.1.1.</span> <span class="nav-text">乐观事务和悲观事务</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#min-commit-ts"><span class="nav-number">4.1.2.</span> <span class="nav-text">min_commit_ts</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#悲观锁的实现"><span class="nav-number">4.2.</span> <span class="nav-text">悲观锁的实现</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Resolve-Lock"><span class="nav-number">4.3.</span> <span class="nav-text">Resolve Lock</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#SI-处理锁"><span class="nav-number">4.4.</span> <span class="nav-text">SI 处理锁</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#顺序读"><span class="nav-number">4.5.</span> <span class="nav-text">顺序读</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Refernce"><span class="nav-number">5.</span> <span class="nav-text">Refernce</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2021/08/14/percolator-reading/';
+          this.page.identifier = '2021/08/14/percolator-reading/';
+          this.page.title = 'Percolator 论文阅读';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+  
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Config({
+        tex2jax: {
+          inlineMath: [ ['$','$'], ["\\(","\\)"]  ],
+          processEscapes: true,
+          skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+        }
+      });
+    </script>
+
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax(), i;
+        for (i=0; i < all.length; i += 1) {
+          all[i].SourceElement().parentNode.className += ' has-jax';
+        }
+      });
+    </script>
+    <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+  
+
+
+  
+
+  
+
+</body>
+</html>

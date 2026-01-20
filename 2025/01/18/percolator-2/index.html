@@ -1,0 +1,1319 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="数据库," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="将 关于 TiKV、TiDB、TiFlash 的一些思考中关于 Percolator 事务的部分独立出来。">
+<meta name="keywords" content="数据库">
+<meta property="og:type" content="article">
+<meta property="og:title" content="关于 Percolator 的进一步论述">
+<meta property="og:url" content="http://www.calvinneo.com/2025/01/18/percolator-2/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="将 关于 TiKV、TiDB、TiFlash 的一些思考中关于 Percolator 事务的部分独立出来。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:image" content="http://www.calvinneo.com/img/ti-arch-thought/consensus_order_txn_order.png">
+<meta property="og:updated_time" content="2025-10-25T13:54:47.385Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="关于 Percolator 的进一步论述">
+<meta name="twitter:description" content="将 关于 TiKV、TiDB、TiFlash 的一些思考中关于 Percolator 事务的部分独立出来。">
+<meta name="twitter:image" content="http://www.calvinneo.com/img/ti-arch-thought/consensus_order_txn_order.png">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2025/01/18/percolator-2/"/>
+
+
+
+
+
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5487541356791902"
+     crossorigin="anonymous"></script>
+  <title>关于 Percolator 的进一步论述 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2025/01/18/percolator-2/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                关于 Percolator 的进一步论述
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2025-01-18T11:57:20+08:00">
+                2025-01-18
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>将 <a href="/2023/07/22/tikv-tidb-thought/">关于 TiKV、TiDB、TiFlash 的一些思考</a>中关于 Percolator 事务的部分独立出来。</p>
+<a id="more"></a>
+
+<h1 id="Percolator-的性能优化"><a href="#Percolator-的性能优化" class="headerlink" title="Percolator 的性能优化"></a>Percolator 的性能优化</h1><h2 id="一些问题"><a href="#一些问题" class="headerlink" title="一些问题"></a>一些问题</h2><p>Percolator 主要定义了事务提交模型，因此有一些不够完备的地方：</p>
+<ul>
+<li>对于提交前的行为没有作规定<ul>
+<li>Modify Set 的储存方式</li>
+<li>Snapshot Isolation Read 的实现方式，当然 SI Read 一般都是在 Snapshot 上基于 MVCC 实现的</li>
+</ul>
+</li>
+<li>对于悲观事务的支持</li>
+</ul>
+<p>在性能上，也有一些缺点：</p>
+<ul>
+<li>依赖一个 BigTable 类似的一致性 KVStore 作为底座。容易产生跨节点的分布式事务。这种情况下，Percolator 也是 2PC 的，任何一个参与节点的 failure 或者 jitter 都会影响事务提交的性能。</li>
+<li>乐观事务，回滚开销大。</li>
+<li>依赖一个全局单点生成时间戳为事务定序。</li>
+</ul>
+<h2 id="加锁的时机"><a href="#加锁的时机" class="headerlink" title="加锁的时机"></a>加锁的时机</h2><p>无论是悲观锁还是乐观锁，都面临加锁时机的选取。</p>
+<p>在提交时加锁存在下面的问题：</p>
+<ol>
+<li>乐观锁的问题</li>
+<li>因为整个事务需要缓存在内存中，所以大事务面临 OOM</li>
+</ol>
+<p>在 DML 时加锁存在下面的问题：</p>
+<ol>
+<li>每写一个 key 都要和 TiKV 通讯一次</li>
+<li>多次对同一个 key 的 prewrite 无法确认先后（网络可能被任意延迟）</li>
+<li>对 TiFlash 而言，因为列需要按照 commit_ts 排序，所以最好等到 commit 之后再行转列，而 DML 加锁意味着 DML 阶段 prewrite，那么在 DML 阶段就可以行转列了</li>
+</ol>
+<h2 id="Percolator-事务和共识层乱序"><a href="#Percolator-事务和共识层乱序" class="headerlink" title="Percolator 事务和共识层乱序"></a>Percolator 事务和共识层乱序</h2><p>在什么程度上共识层可以乱序呢？我的结论是：</p>
+<ol>
+<li>跨 Region 情况下会破坏线性一致读，并且从事务层修正的难度比较大，可能引入很长的等待</li>
+<li>单 Region 上，如果保证 Lock 和 Write 的全局序，但只在发现事务 A 的第一个 commit 的时候，将事务相关的所有的 Default 写入，这种情况应该是可以的。对于较为基础的 case 我有 tla 证明<br> 根据具体实现，需要落盘 Default 和 Lock 是一起的，比如先落盘 Lock 再落盘 Default。可以不用原子落盘两个 cf。</li>
+</ol>
+<h2 id="Async-Commit"><a href="#Async-Commit" class="headerlink" title="Async Commit"></a>Async Commit</h2><p>Async Commit 的核心思想是：</p>
+<ul>
+<li>在 Prewrite 阶段完成后，不需要等待所有键都被确认提交。</li>
+<li>Primary Key 的提交操作即被视为事务完成，其它 Secondary Key 的提交可以异步完成。</li>
+</ul>
+<p>这使得事务提交延迟主要取决于 Prewrite 的耗时，而不是整个 2PC 流程。</p>
+<p>实现方式是在每个 key 的 lock 中声明一个 min_commit_ts，表示事务不会在这个之前提交。后续的读取可能会继续推高 min_commit_ts。当事务提交时，需要选择所有 min_commit_ts 中最大的一个作为 commit_ts。</p>
+<p>因此，在这个优化后，不同事务的 commit_ts 可能相同，但是 start_ts 依然是不相同的。</p>
+<h2 id="Bypass-lock-机制"><a href="#Bypass-lock-机制" class="headerlink" title="Bypass lock 机制"></a>Bypass lock 机制</h2><p>这是 Learner read 层的优化。<br>TiFlash 存在 remote read 的机制。在第一次遇到 lock 的时候，会由 client-c 去 resolve lock。此时，会有几种情况：</p>
+<ol>
+<li>事务已经 commit 了，并且 commit_ts 大于 read_ts</li>
+<li>事务还没有 commit，但是 min_commit_ts 大于 read_ts</li>
+<li>其他情况</li>
+</ol>
+<p>对于第一、二种情况，我们不应该读到这个锁对应的数据。它们都保证了事务已经或者最终要以高于 read_ts 的 ts 来提交。因此，既然这个 lock 对应的写入是不需要对 read_ts 的读可见的，因此在下一次读的时候，就可以 bypass 掉这个 lock，而不需要等待它们的 commit 了。</p>
+<h2 id="Read-through-lock-机制"><a href="#Read-through-lock-机制" class="headerlink" title="Read through lock 机制"></a>Read through lock 机制</h2><p>这是一个事务层的优化。<br>Read through lock 特性指的是当确定某个事务可以被 commit 的时候，跳过 resolve lock 的过程，而直接读。而这锁最终会被下一次写同一个 key 的时候 resolve。<br>具体做法是，它首先是事务上一个 secondary key 的锁，我们在通过 secondary lock 去查询 PK 的 lock 的时候，会发现 PK 上的事务提交了。因此，这个事务一定是提交了的，所以可以 read through lock。<br>这个“lazy”地 resolve lock 的方式也被用在了大事务的支持上。</p>
+<h1 id="基于共识层之上的事务"><a href="#基于共识层之上的事务" class="headerlink" title="基于共识层之上的事务"></a>基于共识层之上的事务</h1><h2 id="事务的“序”"><a href="#事务的“序”" class="headerlink" title="事务的“序”"></a>事务的“序”</h2><h3 id="几个问题"><a href="#几个问题" class="headerlink" title="几个问题"></a>几个问题</h3><p>不妨考虑几个问题：</p>
+<ul>
+<li>是不是 start_ts 越大的事务，体现在 log index 上更大？commit_ts 呢？</li>
+<li>两个事务可以有相同的 start_ts 么？</li>
+<li>两个事务可以有相同的 commit_ts 么？</li>
+<li>假设一个事务 [ST1, CT1] 准备提交了，它可以看到另一个事务 [ST2, ?]，并且 ST2 小于 ST1。请问此时它是否可以立即提交？</li>
+</ul>
+<p>答案：</p>
+<ul>
+<li>不一定<br>  参考下面的双重定序</li>
+<li>不可以</li>
+<li>可以<br>  比如 Async Commit 特性就会产生这样的现象。</li>
+<li>不能<br>  参考“一个两难问题”</li>
+</ul>
+<h3 id="一个两难问题"><a href="#一个两难问题" class="headerlink" title="一个两难问题"></a>一个两难问题</h3><blockquote>
+<p>假设一个事务 [ST1, CT1] 准备提交了，它可以看到另一个事务 [ST2, ?]，并且 ST2 小于 ST1。请问此时 ST1 事务是否可以立即提交？</p>
+</blockquote>
+<p>答案是不行，因为不知道 ST2 这个事务的 Commit TS 是多少。在一个异步系统中，这个消息总是可以被任意延迟的。</p>
+<p>在 Percolator 中的解决方式是：如果能看到 ST2，则意味着会读到一个 Lock，所以 ST1 这个事务要先 Resolve Lock。</p>
+<p>这个问题，就展现了事务序和共识序之间的相互关联。这就如同之前全序广播中论述的一样，核心是能够确保消息被不重不漏地编号，例如 TCP 的 seq 一样。共识系统通过日志的全序性来保障了这一点。</p>
+<h3 id="共识层和事务层的关系"><a href="#共识层和事务层的关系" class="headerlink" title="共识层和事务层的关系"></a>共识层和事务层的关系</h3><p>Percolator 事务提交模型中，commit_ts(R) &lt; start_ts(T) 的事务 R 对事务 T 可⻅。不满⾜该关系的事务为并发事务，并发事务如果访问相同的 key 将会导致其中⼀个事务会碰到 Lock ⽽回滚。因此，Percolator 本质上是一个 2PL 协议，因为一个事务会在 Prewrite 阶段尝试获得自己所有需要的锁。start_ts 此时被用来决议这些锁的 order。</p>
+<p>Raft 的 Read Index 模型中，一个读请求需要等到 applied_index 大于等于 read_index 时，才能读取数据。<strong>但并不保证是否能读到 <code>applied_index = x + 1</code> 时的数据</strong>。实际上无论是否读到，都不违背强一致读的原则。因为如果一个读 A 能读到 applied_index = x + 1，而另一个读 B happen after 读 A，那么读 B 一定会读到 <code>applied_index &gt;= x + 1</code> 的数据。</p>
+<p>TiKV 的共识层在事务层之下。在事务 Commit 之前的很多数据也会被复制到多数节点上，这产生了一些写放大。但也需要注意其带来的好处：</p>
+<ol>
+<li>共识层实际为 Percolator 提供了类似 BigTable 的一致性存储保障。<br> 首先提供了外部一致性。<br> 然后提供了 PUT default/PUT lock 和 PUT write/DEL lock 的原子性写入。<br> 当然，这里要先读后写，可能会有 Write Skew。</li>
+<li>共识层本身也可以作为一个 Raw KV 对外服务。</li>
+<li>共识层参与定序。这个在后面介绍。</li>
+<li>多个 Raft Group 组成的共识层提高了并发能力。</li>
+<li>Lock 的存在性和⼀致性由该⾏所处的 Raft Group 保障。</li>
+<li>事务提交后，会写⼊ Write 并删除 Lock，其原⼦性由 Raft Write Batch 保障。</li>
+<li>共识层提供了全序广播语义。<br> “在 xx 之前，一定不会有别的 Lock 和 Write 了”</li>
+</ol>
+<p>当然这也存在一个 argue 点，因为 Raft Log 本身也是 total order 的。虽然我们目前不是全局一个 Raft Group 的，但看起来会有一些冗余，在后面会讨论。<br>特别地，在 CDC 服务和 TiFlash 中，实际上不会处理未 Commit 的数据。</p>
+<h4 id="双重定序"><a href="#双重定序" class="headerlink" title="双重定序"></a>双重定序</h4><p>事务层的实现中，为了满足隔离性，通常会给事务分配 id 来表示相互依赖的事务之间的偏序关系。TiDB 中使用了 TSO，Spanner 中使用了 TrueTime，CRDB 中使用了 HLC。<br>共识层的实现中，为了实现容灾和高可用，使用共识算法在各个 RSM 之间复制日志，这些日志为全序关系，RSM 可以应用这个全序关系确保线性一致。</p>
+<p>事务层生成 TSO 和共识层生成 Log 两个行为：</p>
+<ol>
+<li>不是原子的</li>
+<li>也不构成全序关系<br> 实际上也没必要，两个不相交的事务按照事务序本来可以并行 Commit 的，但因为要写到共识层，必须又要排出一个全序关系来。</li>
+<li>甚至一个事务的 commit_ts 相比别的事务更小，而 raft log index 更大<br> 下面会展示这种情况，并详细阐述。</li>
+</ol>
+<p>总而言之：</p>
+<ul>
+<li>Percolator 协议保证了事务层能够生成一个特定的排序，并且按照它的二阶段方式写入到共识层</li>
+<li>共识层保证了所有的副本都会应用该特定排序</li>
+</ul>
+<h4 id="共识层为事务层提供帮助"><a href="#共识层为事务层提供帮助" class="headerlink" title="共识层为事务层提供帮助"></a>共识层为事务层提供帮助</h4><p>目前 TiKV 通过一个 pd 分配一个全局的 tso 来作为事务的 <code>start_ts</code> 和 <code>commit_ts</code>，所以它们之间构成全序关系。当然，实际上不同的事务可能具有同一个 <code>commit_ts</code>，但这并不影响下面的讨论。通过 <code>start_ts</code> 和 <code>commit_ts</code> 可以构建有依赖的事务之间偏序关系，也可以用来判断事务是否是 concurrent 的。如果在单个节点上串行地 commit 这些事务，则面临问题：</p>
+<ol>
+<li>整个系统毫无并行度<br> 这个应该算是 MultiRaft 的一个 bonus，正如后面讲的，如果没有 MultiRaft，同样可以做 partitioning。<br> 因此，TiKV 在多个线性一致的存储，即 Region 上储存这些事务。它保证了每个事务在每个 Region 上都遵循了 <code>start_ts</code> 和 <code>commit_ts</code> 所 imply 的顺序，也 Percolator 那一套。这样尽管各个 Region 之间是并发的了，但只要 Region 内遵循这个 order 就行了。<blockquote>
+<p>当然，这个切分也未必是按照 Region 来，比如 CDC 会使用表来切分。无论按照哪种方式来切分，我觉得一个实现的要点是每个 shard 在调度上是不可以再分的了。比如一个 Region 的一部分数据在 store 1 上，另一部分数据在 store 2 上，这样做实际上会导致无论在 store 1 和 store 2 上都很难独立构建出该 Region 上数据的全序关系，比如 store 1 如果不和 store 2 交互，那么就很难知道 store 2 上还有没有 happen before 它的事务了。比如说，如果两个 store 上 apply 这个 Region 的 log 的进度不一样。</p>
+</blockquote>
+</li>
+<li>如何判断某个 tso 之前还有没有其他 Lock 或者 Write？<br> 因此，读事务会在取得自己的 start_ts 后，再通过 ReadIndex 请求一下 Region Leader 上的 commit_index。那么假设在这之前 Region 上有写入任意的 Lock 或者 Write，都能被 ReadIndex 扫到。这样就保证了读事务能看到 start_ts 之前的所有修改。至于 start_ts 之后的也有 Lock 可以帮忙。<br> 同样考虑一个<a href="/2017/09/20/transaction/">Snapshot Isolation(SI)/一个两难问题</a>，这里不再详细展开具体内容。但 ReadIndex 提供了一个保证，就是截止到 read_index，这个 Region 上到底有没有 Write，是很确定的。我理解这实际上就是一种全序广播了。破坏这种全序广播可能会有严重后果，比如如果将 Write 乱序到 Lock 前面，则违反了 Percolator 事务的约束。我们实际上也没办法很好的处理，在“跨 Region 提交事务”中，就构造出了这样的场景。</li>
+</ol>
+<p>此外，对于并发事务，共识层也会对它们之间排出一个串行的顺序，比如两个并发的事务不能同时 Commit，而要等到 Log 按序 apply 而这可能有点过强。诸如 ParallelRaft 或者 MultiPaxos 的算法允许并行 apply，可以解决此问题，但会导致 Leader 和 Follower 之间的 apply order 难以统一，从而无法实现 Follower Read。</p>
+<h4 id="共识层对并发事务的乱序"><a href="#共识层对并发事务的乱序" class="headerlink" title="共识层对并发事务的乱序"></a>共识层对并发事务的乱序</h4><p>刚才说过，共识层未必会按照事务序写入。这也很容易理解，因为取 <code>start_ts</code> 和 <code>commit_ts</code> 和真正写共识层不是原子的。<br>TiKV 事务在读取时，需要同时接收事务层和共识层的定序。为了满⾜线性⼀致读，需要⾸先带上 <code>start_ts</code>，发送⼀个 ReadIndexRequest 给对应的 Region，求出⼀个 applied_index。在实现中，<code>start_ts</code> 并⽆作⽤。<br>如下所示，Key a 和 Key b 属于两个事务。在事务提交前，可以看到或者得到的保证是：</p>
+<ol>
+<li>start_ts(a) &lt; commit_ts(a)</li>
+<li>start_ts(b) &lt; commit_ts(b)</li>
+<li>start_ts(a) &lt; start_ts(b)</li>
+<li>并且这两个是并发事务，也就是说 commit_ts(a) &gt; start_ts(b)</li>
+</ol>
+<p>共识层的序至少保证了同一个 key 的 prewrite 在 commit 前面。并且共识层主要还保证了在所有副本中，看到的都是这个顺序。</p>
+<p>不妨假设 commit_ts 分别为 4 和 6，然后再假如以 (read_ts=7, read_index=202) 读取。如下所示，可以看到 Key a 的 commit_ts 更小，applied_index 却比 Key b 的更大，这并不违反上面事务的序：</p>
+<ol>
+<li>Key a：(start_ts: 1, applied_index: 100), (commit_ts: 4, applied_index: 210）</li>
+<li>Key b：(start_ts: 3, applied_index: 101), (commit_ts: 6, applied_index: 200)</li>
+</ol>
+<p>在这种情况下：</p>
+<ul>
+<li>从事务层上讲，Key a 和 Key b 的写入对 read_ts=7 的读取事务应当可见</li>
+<li>从共识层上讲，只要 applied_index 等于 read_index，或者超过它的的任意时刻都可以读了。因此 <code>applied_index: 210</code> 这个条目通过 ReadIndex 就可能读不到</li>
+</ul>
+<p>因此，此时可能：</p>
+<ul>
+<li>读到一个锁和 Key b<br>  此时，刚好 apply 到 read_index=202。<br>  需要 ResolveLock，实际上导致以新的 read_index 来重新读取。</li>
+<li>或者读到 Key a 和 Key b<br>  此时，apply 超过 read_index=202 很多，比如到 211 了。</li>
+</ul>
+<p>但以上两种情况都符合事务隔离的要求。</p>
+<p>反过来讲，如果共识层给出下面的顺序，Key a 的 commit_ts 更小，applied_index 也更小。我们可以看到中间的 a 或者 b 上有锁。因为这两个事务是并发事务，所以这也是 OK 的</p>
+<ol>
+<li>Key a：(start_ts: 1, applied_index: 100), (commit_ts: 4, applied_index: 200）</li>
+<li>Key b：(start_ts: 3, applied_index: 101), (commit_ts: 6, applied_index: 210)<br> 因为 read_index = 202，则 ReadIndex 可能读不到 Key b 的提交，却能看到它的锁</li>
+</ol>
+<p><img src="/img/ti-arch-thought/consensus_order_txn_order.png"></p>
+<p>可以看到，尽管将事务拆到了 N 个线性一致的存储上执行，并且这些存储可能对并发事务任意定序，但最终读到的结果还是满足了线性一致，以及事务隔离层的要求的。</p>
+<h4 id="并发事务的共识序"><a href="#并发事务的共识序" class="headerlink" title="并发事务的共识序"></a>并发事务的共识序</h4><p>并发事务 1 和 2，假设 start_ts1 &lt; start_ts2 &lt; commit_ts1 &lt; commit_ts2，那么两个事务彼此不可见，或者说是并发事务。假设这两个事务写入同一个 region，那么在 raft log entry 层面，完全可以出现 commit_ts1 对应的 raft log 的 index 更靠后，而 commit_ts2 对应的更靠前。比如</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">index 10: Put Write CF commit_ts2</span><br><span class="line">index 11: Put Write CF commit_ts1</span><br></pre></td></tr></table></figure>
+
+<h4 id="跨-Region-提交事务？"><a href="#跨-Region-提交事务？" class="headerlink" title="跨 Region 提交事务？"></a>跨 Region 提交事务？</h4><blockquote>
+<p>能不能在看到第一个 write 记录时“提交”该事务的所有 key？</p>
+</blockquote>
+<p>这里的“提交”指的是写入下层存储，比如将 Default 写过去，但并不包含删除 Lock 等。</p>
+<p>考虑两个事务 T1 和 T2，涉及三个 key：a/b/c。假设 a 在一个 region r1，b 和 c 在另一个 region r2：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">            region r1                         region r2</span><br><span class="line">T1: commit a(applied_index@r1=100), commit b(applied_index@r2=300), commit_ts=4</span><br><span class="line">T2:                                 commit c(applied_index@r2=200), commit_ts=1</span><br></pre></td></tr></table></figure>
+
+<p>从事务层上来看，一定有读事务能看到 c，或者 a、b、c。但如果看到 a 提交了，能不能跑到 b 所在的 region r2 上把 b 也提交了呢？</p>
+<p>我认为是不可以的，因为从共识层上来说，b 的 commit 是在 c 的后面被写入的，如果用 <code>(start_ts &gt; 4, read_index = 250)</code> 去读的话，可能：</p>
+<ul>
+<li>当然有很大可能读到 b</li>
+<li>但也有可能读到 lock b，甚至可能连 lock b 也还没被写入<br>  虽然 start_ts &gt; 4，但是 read_index = 250，如果刚好在 250 返回了，那肯定是看不到 300 的 commit 记录的。</li>
+</ul>
+<p>但如果我们“跨 Region 提交事务”了，即在 apply a 的 write 记录的时候发现了 a 被 write 了，就直接写 b 的 write 记录。那么就导致 b 一定在 c 前面就能被读到，实际上违反了共识层的序，造成副本间不一致，违反线性一致读。</p>
+<p>具体来说，不妨考虑 client 先后从 Learner 和 Leader 读：</p>
+<ol>
+<li>在 Learner 上，它使用 <code>read_index = 250</code> 读。但是因为在 region r1 中我们跨 region 提交了 b，所以一定也能读到 commit b<br> 当然细究下来，因为 lock + default 是原子的，所以实际上 write 无法被正确执行。但这就是 orphan write key 的问题，之前在处理 multi rocks 的时候就解过，实际是很复杂。我觉得在这个场景下，免不了要去进行等待。这种在异步系统中的等待，可以理解为是一种活性问题。</li>
+<li>在 Leader 上，此时 Leader 只 apply 到了 260。并且，Leader 上没有 region，所以没法跨 region 提交。所以此时 Leader 上一定没有 commit b，这导致它读不到 commit b。</li>
+</ol>
+<p>这里线性一致读就被破坏了。反之，如果按共识序 commit，则不会有这种情况。具体就不展开了。</p>
+<h4 id="单-Region-上提交事务？"><a href="#单-Region-上提交事务？" class="headerlink" title="单 Region 上提交事务？"></a>单 Region 上提交事务？</h4><blockquote>
+<p>限定事务只在一个 Region 中发生，能不能在看到第一个 write 记录时“提交”该事务的所有 key？</p>
+</blockquote>
+<p>上述场景在单 Region 上无法构造，原因是单 Region 是串行的。</p>
+<p>尽管“在看到第一个 write 记录时‘提交’该事务的所有 key”可能相当于让一部分 Write 被乱序，但这种乱序不是直接去把 Write 挪到 Lock 之前。比如说，因为 Percolator 的特性，单 Region 上的某个事务的 Prewrite 一定都在 Commit 前面。因此，就算在看到第一个 Write 时候，将该事务的所有 Default 都提前写到下层存储，也不至于提前到某个 Lock 前面。这样被写的 Key 始终有 Lock 保护，直到看到它对应的 Write。</p>
+<p>而在多 Region 中不同 Region 可以说是完全异步的（不考虑 Split 等），那我就可以构造一个无比提前的 Write，让它失去 Lock 的保护。</p>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/数据库/" rel="tag"># 数据库</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2025/01/12/tikv-resource-management/" rel="next" title="TiKV 的资源管理模型">
+                <i class="fa fa-chevron-left"></i> TiKV 的资源管理模型
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2025/01/19/on-fap/" rel="prev" title="TiFlash 的快速新建副本(FAP)特性">
+                TiFlash 的快速新建副本(FAP)特性 <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">262</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">154</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Percolator-的性能优化"><span class="nav-number">1.</span> <span class="nav-text">Percolator 的性能优化</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#一些问题"><span class="nav-number">1.1.</span> <span class="nav-text">一些问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#加锁的时机"><span class="nav-number">1.2.</span> <span class="nav-text">加锁的时机</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Percolator-事务和共识层乱序"><span class="nav-number">1.3.</span> <span class="nav-text">Percolator 事务和共识层乱序</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Async-Commit"><span class="nav-number">1.4.</span> <span class="nav-text">Async Commit</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Bypass-lock-机制"><span class="nav-number">1.5.</span> <span class="nav-text">Bypass lock 机制</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Read-through-lock-机制"><span class="nav-number">1.6.</span> <span class="nav-text">Read through lock 机制</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#基于共识层之上的事务"><span class="nav-number">2.</span> <span class="nav-text">基于共识层之上的事务</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#事务的“序”"><span class="nav-number">2.1.</span> <span class="nav-text">事务的“序”</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#几个问题"><span class="nav-number">2.1.1.</span> <span class="nav-text">几个问题</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#一个两难问题"><span class="nav-number">2.1.2.</span> <span class="nav-text">一个两难问题</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#共识层和事务层的关系"><span class="nav-number">2.1.3.</span> <span class="nav-text">共识层和事务层的关系</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#双重定序"><span class="nav-number">2.1.3.1.</span> <span class="nav-text">双重定序</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#共识层为事务层提供帮助"><span class="nav-number">2.1.3.2.</span> <span class="nav-text">共识层为事务层提供帮助</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#共识层对并发事务的乱序"><span class="nav-number">2.1.3.3.</span> <span class="nav-text">共识层对并发事务的乱序</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#并发事务的共识序"><span class="nav-number">2.1.3.4.</span> <span class="nav-text">并发事务的共识序</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#跨-Region-提交事务？"><span class="nav-number">2.1.3.5.</span> <span class="nav-text">跨 Region 提交事务？</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#单-Region-上提交事务？"><span class="nav-number">2.1.3.6.</span> <span class="nav-text">单 Region 上提交事务？</span></a></li></ol></li></ol></li></ol></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2025/01/18/percolator-2/';
+          this.page.identifier = '2025/01/18/percolator-2/';
+          this.page.title = '关于 Percolator 的进一步论述';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>

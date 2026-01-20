@@ -1,0 +1,1282 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="C++,内存管理,profiling," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="介绍 C++ 上的内存监控方案。 默认使用 jemalloc。">
+<meta name="keywords" content="C++,内存管理,profiling">
+<meta property="og:type" content="article">
+<meta property="og:title" content="C++ 内存监控方案">
+<meta property="og:url" content="http://www.calvinneo.com/2024/08/23/monitor-alloc-in-C++/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="介绍 C++ 上的内存监控方案。 默认使用 jemalloc。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:image" content="http://www.calvinneo.com/img/monitor-memory/11.png">
+<meta property="og:image" content="http://www.calvinneo.com/img/monitor-memory/heap-hire.png">
+<meta property="og:updated_time" content="2025-12-13T14:10:33.061Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="C++ 内存监控方案">
+<meta name="twitter:description" content="介绍 C++ 上的内存监控方案。 默认使用 jemalloc。">
+<meta name="twitter:image" content="http://www.calvinneo.com/img/monitor-memory/11.png">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2024/08/23/monitor-alloc-in-C++/"/>
+
+
+
+
+
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5487541356791902"
+     crossorigin="anonymous"></script>
+  <title>C++ 内存监控方案 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2024/08/23/monitor-alloc-in-C++/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                C++ 内存监控方案
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2024-08-23T09:23:25+08:00">
+                2024-08-23
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>介绍 C++ 上的内存监控方案。</p>
+<p>默认使用 jemalloc。</p>
+<a id="more"></a>
+
+<h1 id="MemoryTracker"><a href="#MemoryTracker" class="headerlink" title="MemoryTracker"></a>MemoryTracker</h1><p>原理是每次分配内存的时候，manually 去向⼀个 MemoryTracker 注册。下层级的 Tracker 和上层级的 Tracker ⼀起组成树状结构。</p>
+<h1 id="prof-dump"><a href="#prof-dump" class="headerlink" title="prof.dump"></a>prof.dump</h1><p>可以定期通过 prof.dump 的方式 dump 下堆文件。<br>需要配置 MALLOC_CONF 为 <code>prof:true</code>，否则会报错 Resource temporarily unavailable。可以设置 <code>prof.activate:false</code> 避免在不需要 profile 的时候，产生开销。</p>
+<p>注意，<code>prof:true</code> 是不可以运行期修改的。但是 <code>prof.activate</code> 是可以的。</p>
+<h2 id="有关-dl-iterate-phdr-的死锁"><a href="#有关-dl-iterate-phdr-的死锁" class="headerlink" title="有关 dl_iterate_phdr 的死锁"></a>有关 dl_iterate_phdr 的死锁</h2><p>在 <a href="https://github.com/tikv/pprof-rs/pull/85/files#diff-65a1ed4903a387e1d45937ab46e839563c38fc24dc6be2c8e7ae021621c3b0da" target="_blank" rel="noopener">Rust</a> 中因为 <code>Backtrace::new()</code> 会调用 <code>dl_iterate_phdr</code>，而这个函数会调用 mutex。如果一个 signal 在获得这个锁之后过来，就会死锁。在 tikv 中，很容易就会调用到 <code>Backtrace</code>，特别是在有错误的时候。在 <code>_Unwind_Backtrace</code> 中，也会调用这个锁。对应的 libunwind 的 <a href="https://github.com/libunwind/libunwind/issues/16" target="_blank" rel="noopener">issue</a>。</p>
+<p>解决方案是在 prof-rs 中禁用掉 <code>[&quot;libc&quot;, &quot;libgcc&quot;, &quot;pthread&quot;, &quot;vdso&quot;]</code> 这几个库的 unwind。</p>
+<h2 id="有关-dwarf-下-prof-变慢"><a href="#有关-dwarf-下-prof-变慢" class="headerlink" title="有关 dwarf 下 prof 变慢"></a>有关 dwarf 下 prof 变慢</h2><p>【这里几个图在我的破 QQ 文档里面我就懒得放了】<br>事情的起因是无论是手动调用 profile 还是自动进行的 continuous profiling，预期 10s 的 profile 时，实际会花一分钟左右，从而将 status_server 线程卡住而无法处理 prometheus 的 http 请求。<br>经过加日志断点，发现时间主要花在生成火焰图上，耗时约 40s。<br>观察生成火焰图的火焰图，发现花费大量时间在 <code>miniz_oxide</code> 上。<br>后面发现这个错误在 frame pointer 上不存在。当然 frame pointer 上有 bug，所以我们对于 x86 统一换成了 dwarf。另外，如果将 TiFlash 的压缩 debug section 去掉，耗时也会显著减少。这个是在 <code>cmake/tiflash_linux_post_install.cmake</code> 里面 <code>--compress-debug-sections=zlib-gnu</code> 来清理的。但去掉之后，binary 大小是原来的三倍，所以去掉也不是长久之计。<br>去掉之后发现是 addr2line 耗时比较多。这里发现有个 do_rallocx 函数，对应了 Report::pprof 中将符号入栈的操作。它花了不少时间。<br>这从而也启发到我同事，说可以比较下 dwarf 拿到 backtrace 和 frame pointer 的栈的深度。可能 dwarf 拿到的栈会深很多（比如 inline 的函数可能能拿到），所以从地址转换成符号花的时间更长。这个比较下来，实际上两个栈差不多大。<br>然后同事发现，在 <a href="https://github.com/tikv/pprof-rs/blob/1f4ef0991dc780ed11dc17954a38d0a3abd59c61/src/report.rs#L72" target="_blank" rel="noopener">https://github.com/tikv/pprof-rs/blob/1f4ef0991dc780ed11dc17954a38d0a3abd59c61/src/report.rs#L72</a> 处一个循环耗时很高，循坏一千多次花费四十多秒。<br>进而进入 Frames::from 中，这里根据 dwarf(即 bracktrace-rs) 或者 framepointer 实现，会选择不同的 Frame 实现。而在 backtrace 中的 resolve_frame 中会先读 mapping_for_lib，这是个 cache，如果 cache 不够才会读别的。<br>这里我怀疑可能是因为 dwarf 里面 symbol 比较多，然后 cache 被 evict 掉了。<br>根因应该是 dwarf 的 backtrace 深度比较深，涉及的 so 会更多，而 backtrace-rs 里 lib cache 最多只有4个，所以 dwarf cache miss 会比较频繁，需要不断地对 so 的 debug_section 解压缩和 addr2line。<a href="https://github.com/rust-lang/backtrace-rs/issues/499%E3%80%82" target="_blank" rel="noopener">https://github.com/rust-lang/backtrace-rs/issues/499。</a></p>
+<p>发现其实如果用 addr2line 去读 heap，耗时也会很长，感觉还是和 binary 的压缩有关。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">root      986545  1.8  0.1 520308 515644 pts/32  S+   17:39   0:16 perl ./jeprof --add_lib bin/tiflash/libtiflash_proxy.so --add_lib bin/tiflash/libgmssld.so.3 --svg bin/tiflash/tiflash jeprof.910766.14.i14.heap</span><br><span class="line">root      988390  0.0  0.0   7120  3460 pts/32   S+   17:40   0:00 sh -c addr2line -f -C -e 。。。/libtiflash_proxy.so -i &lt;/tmp/jeprof986545.sym</span><br></pre></td></tr></table></figure>
+
+<p>另外，binutils 也要升级，不然会出 invalid or unhandled FORM value 0x25 错误。</p>
+<h1 id="Jemalloc-allocatedptr"><a href="#Jemalloc-allocatedptr" class="headerlink" title="Jemalloc allocatedptr"></a>Jemalloc allocatedptr</h1><p>这个方案要求感知线程的创建和销毁，在对应的时候，通过 <code>thread.allocatedp</code> 和 <code>thread.deallocatedp</code> 来注册。这样就可以知道每个线程分配或者释放了多少内存。<br>该⽅案能够很好看到内存分配和释放的速率和增量，例如如果观察到 allocated 斜率⼤幅增加，则说明该线程最近在⾼速分配内存。但难以判断某个线程到底 own 了多少内存，原因是：</p>
+<ol>
+<li>⼀个线程可能释放另⼀个线程分配的内存。例如同一个模块中线程 bg-1 分配的内存可能被另⼀个线程 bg-2 释放。</li>
+<li>Rust 的 move 语义和协程机制会加剧这个问题。</li>
+</ol>
+<p>其实 allocatedp 这个调用是成对的，还有一个 <code>thread.allocated</code> 可以立即返回当前的 caller thread 分配了多少内存。而 <code>thread.allocatedp</code> 可以返回一个指针，解引用这个指针可以返回对应线程当前分配了多少内存。通过 allocatedp 可以避免频繁的 mallctl 调用，也可以实现从其他线程进行观测。但其中比较困难的一点就是如何监测线程的启动和释放，从而判断对应的指针是否能够被读取。一种做法是包装线程池的 API，在每个线程启动和释放的时候加上 hook。</p>
+<p>此外，这种方式对于 Rust 程序会有一些问题：</p>
+<ol>
+<li>Rust 的移动语义会导致一些线程分配的内存会被另一个线程释放<br> 比如返回一个 T : Send 给另一个线程作为 Result。通常在需要使用线程池进行处理的逻辑中。</li>
+<li>协程跑在 executor 上面，难以分清辨认出具体的用途</li>
+</ol>
+<h1 id="Jemalloc-Arena"><a href="#Jemalloc-Arena" class="headerlink" title="Jemalloc Arena"></a>Jemalloc Arena</h1><p>该⽅案可以看做是对 allocatedptr 的补充。通过 <code>arena.create</code> 创建一个 arena，通过 thread.arena 绑定⼀个线程到某个 arena，则可以通过该 arena 获知该线程 own 了多少内存，所以这是看存量的⼯具。<br>但线程 own 多少内存，并不等于某个模块占⽤了多少内存。原因：</p>
+<ol>
+<li>内存的 ownership 会在平⾏的模块之间转移。例如 P 模块分配出来的内存，可能会被转移给 S 模块。所以即便能够看到 S 线程池对应的 arena 的占⽤上升，也难以判断是 S 模块的原因，还是 P 转移过来的内存。</li>
+<li>上级模块从同线程中调⽤下级模块，⽆法区分出上级和下级分别消耗了多少内存。</li>
+</ol>
+<p>这个⽅案有下述的缺点：</p>
+<ol>
+<li>我们更需要找内存增⻓的根因，知道内存都在哪些 arena ⾥⾯未必是⾜够的。</li>
+<li>一些使用线程池的模块中的内存分配⼤致满⾜“⾃⼰⽤⾃⼰弃”的 pattern，因此可以通过减法来算出存量。因此，“Jemalloc Arena” 相⽐ “Jemalloc allocatedptr” 的⽅案的作⽤不是很⼤</li>
+</ol>
+<p>可以使用 mallocx 为某个模块指定对应的 arena。TiKV 的 <a href="https://github.com/tikv/tikv/pull/16255" target="_blank" rel="noopener">benchmark</a> 展示这不会产生很明显的 overhead。</p>
+<h1 id="thread-local-memory-tracker"><a href="#thread-local-memory-tracker" class="headerlink" title="thread_local memory tracker"></a>thread_local memory tracker</h1><p>来⾃ Doris 的 Memtracker ⽅案。<br>该⽅案可以作为 “Jemalloc allocatedptr” ⽅案的补充。对于“上级模块从同线程中调⽤下级模块”的情况，可以使⽤⼀个 thread_local 变量记录栈中的⼀部分的内存开销。如下所⽰ kvs_page_mem 这个 thread_local 变量记录了 thread 1 中从 KVStore 调⽤到 PageStorage ⼀部分的开销。因此再结合 “Jemalloc allocatedptr” ⽅案本⾝的数据，就可以区分开来 PageStorage 产⽣<br>的内存（如新建⽴的 PageDirectoy）和调⽤链路上其他的内存，如 KVStore 和 PageStorage 中缓存的其他内容。<br>thread_local 的信息会被定时地上报给全局的 tracker，并由 tracker 做聚合后上报给 Prometheus。<br>也可以直接复⽤当前的逻辑，由 tracker 直接做聚合，但这样就需要⼀个全局的 hook 去线程启动的事件。</p>
+<p><img src="/img/monitor-memory/11.png"></p>
+<p>缺点：</p>
+<ol>
+<li>只能根据调⽤链路细化，不能追踪某个组件占据了多少内存。</li>
+</ol>
+<h1 id="Jemalloc-mallocx"><a href="#Jemalloc-mallocx" class="headerlink" title="Jemalloc mallocx"></a>Jemalloc mallocx</h1><p>通过 MALLOCX_ARENA flag，可以在 mallocx 的时候指定从某个 arena 分配。因此对于模块 A 可以替换它的所有 malloc 为 mallocx，从⽽实现追踪该模块的内存分配。<br>C++ 中内存管理层级和⽅式都很多，不能通过简单替换 mallocx 才能做到按组件统计。</p>
+<h1 id="C-的堆内存管理层级"><a href="#C-的堆内存管理层级" class="headerlink" title="C++ 的堆内存管理层级"></a>C++ 的堆内存管理层级</h1><p><img src="/img/monitor-memory/heap-hire.png"></p>
+<h1 id="C-Custom-Allocator"><a href="#C-Custom-Allocator" class="headerlink" title="C++ Custom Allocator"></a>C++ Custom Allocator</h1><p>对于 stl 中的 container 类型提供，指⽰如何构造 <code>Container&lt;T, CustomAllocator&lt;T&gt;&gt;</code> 。因为⼤部分内存的占⽤都是通过 C++ 的容器对⼀些基本类型组合产⽣的，因此通过指定⾃⼰的 allocator 可以达到较⾼的覆盖率。<br>缺点：</p>
+<ol>
+<li>只对 stl 起作⽤，custom class 需要⾃⼰适配，并且会传染。</li>
+<li>Stl 的接⼝也不同，诸如 std::map、std::vector 需要提供⼀个额外的参数。⽽ std::make_shared<br>需要被 std::allocated_shared 代替。修改成本⽐较⼤。</li>
+<li>Allocator 是有类型的，所以不同 allocator 的容器之间不能简单实现互操作，除⾮使⽤ pmr。</li>
+</ol>
+<h2 id="pmr"><a href="#pmr" class="headerlink" title="pmr"></a>pmr</h2><p>需要⽤ std::pmr 下⾯的容器，同样具有传染性。</p>
+<h1 id="C-Custom-global-operator-new"><a href="#C-Custom-global-operator-new" class="headerlink" title="C++ Custom global operator new"></a>C++ Custom global operator new</h1><p>可以通过下⾯实现⼀些类似 “thread_local memory tracker” 的功能，避免掉⼿动埋点。</p>
+<ol>
+<li>在 new 或者 delete 中调⽤ backtrace 获得前⼀帧，判断组件来源</li>
+<li>设法 inline 这些 operator，然后给需要监控的 <code>__FUNCTION__</code> 加上特定的前缀</li>
+</ol>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">inline</span> __attribute__((always_inline)) <span class="function"><span class="keyword">void</span> *<span class="keyword">operator</span> <span class="title">new</span><span class="params">(<span class="keyword">size_t</span> size)</span></span></span><br><span class="line"><span class="function"><span class="title">noexcept</span><span class="params">(<span class="literal">false</span>)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">return</span> wrap_malloc(size, __FILE__, __LINE__, __FUNCTION__);</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">inline</span> __attribute__((always_inline)) <span class="keyword">void</span> *<span class="keyword">operator</span> <span class="keyword">new</span>[](<span class="keyword">size_t</span> size)</span><br><span class="line"><span class="keyword">noexcept</span>(<span class="literal">false</span>) &#123;</span><br><span class="line">    <span class="keyword">return</span> wrap_malloc(size, __FILE__, __LINE__, __FUNCTION__);</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">inline</span> __attribute__((always_inline)) <span class="function"><span class="keyword">void</span> <span class="keyword">operator</span> <span class="title">delete</span><span class="params">(<span class="keyword">void</span> *ptr)</span> <span class="keyword">noexcept</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    wrap_free(ptr, __FILE__, __LINE__, __FUNCTION__);</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">inline</span> __attribute__((always_inline)) <span class="keyword">void</span> <span class="keyword">operator</span> <span class="keyword">delete</span>[](<span class="keyword">void</span> *ptr)</span><br><span class="line"><span class="keyword">noexcept</span> &#123;</span><br><span class="line">    wrap_free(ptr, __FILE__, __LINE__, __FUNCTION__);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>缺点：</p>
+<ol>
+<li>在 critical path 上，打击范围太⼴。C++ 实践中不太推荐这么做。</li>
+</ol>
+<h1 id="C-Custom-class-operator-new"><a href="#C-Custom-class-operator-new" class="headerlink" title="C++ Custom class operator new"></a>C++ Custom class operator new</h1><p>相⽐ global operator new 的⽅案，class operator new 的时候已经知道了对象的类型，所以打击范围不⼴。我们可以仅仅针对某些对象统计。<br>缺点：</p>
+<ol>
+<li>只能追踪通过 new 分配的内存。栈内存⼀般较⼩，所以这⼀点不是问题。</li>
+<li>在对象内部再通过 new 分配的动态内存⽆法被追踪。也就意味着</li>
+</ol>
+<p>std::vector::push_back 、 std::make_shared 和 new T[] 这样的主⼒内存分配点⽆法被跟踪。<br>因此，基于这样的⽅案，需要在某个 T 提供⼀个 size() ⽅法，然后 hook 住 T 的 operator new，从⽽给到关于 T 的总内存占⽤的统计。例如对 Block 和 VersionedPageEntries 提供统计。<br>缺点：</p>
+<ol>
+<li>std::make_shared 直接调⽤ ::new，因此对此没有作⽤</li>
+</ol>
+<h1 id="我的一些实践"><a href="#我的一些实践" class="headerlink" title="我的一些实践"></a>我的一些实践</h1><h2 id="TiFlash-的-heap-profiling"><a href="#TiFlash-的-heap-profiling" class="headerlink" title="TiFlash 的 heap profiling"></a>TiFlash 的 heap profiling</h2><p>提供了几种方案：</p>
+<ol>
+<li><p>heap_activate、heap_deactivate<br> 这个接口会启动一个线程定期调用 prof.dump。后续可以通过 heap_list 获取所有的 heap 文件，然后 curl 命令下载某个文件到本地。</p>
+</li>
+<li><p>set_prof_active、set_prof_inactive<br> 这个接口只会操作 <code>prof.activate</code>。用户需要手动在某个时候触发 prof.dump。这是因为只要 activate 了，就会开始记录堆分配的情况，不触发 prof.dump 这样就可以避免产生较多的文件，从而污染客户的环境。</p>
+</li>
+<li><p>heap、symbol<br> 这个接口最为灵活，因为它支持 jeprof 从外部环境访问这个接口，从而避免访问用户的机器，或者 binary。</p>
+ <figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//go:embed jeprof.in</span></span><br><span class="line"><span class="keyword">var</span> jeprof <span class="keyword">string</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">fetch</span><span class="params">()</span></span> &#123;</span><br><span class="line">    cmd := exec.Command(<span class="string">"perl"</span>, <span class="string">"/dev/stdin"</span>, <span class="string">"--raw"</span>, scheme+<span class="string">"://"</span>+op.ip+<span class="string">":"</span>+strconv.Itoa(op.port)+op.path) </span><br><span class="line">    cmd.Stdin = strings.NewReader(jeprof)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p> 注意，这种方式一般要持续开启 <code>prof.activate</code>。因为<a href="https://github.com/pingcap/tidb-engine-ext/pull/403/files" target="_blank" rel="noopener">临时开启</a>，则收集的时间过于短暂，可能无法生成有信息的报告。<br> 这种⽅式其实上是 jeprof 调⽤ <code>/debug/pprof/heap?jeprof=false</code> ，把 heap 下载到本地来处理的。也可以⼿动 curl 这个下载下来，⽤ jeprof 处理。注意，这个时候需要⼿动指定 TiFlash 的 binary，如果没有指定，或者⼿动指定出错，则会报错 The first profile should be a remote form to use /pprof/symbol。</p>
+</li>
+</ol>
+<h2 id="遇到的一些问题"><a href="#遇到的一些问题" class="headerlink" title="遇到的一些问题"></a>遇到的一些问题</h2><p>Arm 架构下，一些功能无法执行：</p>
+<ul>
+<li>在 AWS 的 arm + Rocky9 Linux 下，/heap 和 /heap_activate 不会显示 C++ 部分的栈，需要开启 <code>lg_prof_interval</code> 才行<ul>
+<li>开启 <code>lg_prof_interval</code> 后，即使关闭 prof.active，仍然可能会有 dump 产生</li>
+</ul>
+</li>
+<li>在 AWS 的 arm + ubuntu 下，profiling 正常</li>
+<li>在 Kunpeng + Rocky9 Linux 下，会在 libunwind 中报错 panic<br>  <a href="https://github.com/pingcap/tiflash/issues/10152" target="_blank" rel="noopener">https://github.com/pingcap/tiflash/issues/10152</a></li>
+</ul>
+<h3 id="addr2line-的版本问题"><a href="#addr2line-的版本问题" class="headerlink" title="addr2line 的版本问题"></a>addr2line 的版本问题</h3><p>上⾯提到过有的时候⽣成的不详细，如下所⽰。这是因为 addr2line 版本的问题，有条件的可以通过传参的⽅式把 jeprof.in 使⽤的 addr2line ⾃⾏魔改为 llvm-addr2line。注意，llvm-addr2line 的版本，也需要和 tiflash ⼀样，不然</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">addr2line: DWARF error: could not find variable specification at offset</span><br></pre></td></tr></table></figure>
+
+<h3 id="DWARF-error-section-debug-info-is-larger-than-its-file-size"><a href="#DWARF-error-section-debug-info-is-larger-than-its-file-size" class="headerlink" title="DWARF error:section.debug_info is larger than its file size."></a>DWARF error:section.debug_info is larger than its file size.</h3><p>报错 DWARF error:section.debug_info is larger than its file size. 这个问题需要连同 nm、objdump 等全部换成 llvm 的版本。</p>
+<h3 id="生成不了-Cpp-或者-Rust-的栈"><a href="#生成不了-Cpp-或者-Rust-的栈" class="headerlink" title="生成不了 Cpp 或者 Rust 的栈"></a>生成不了 Cpp 或者 Rust 的栈</h3><p>另外，一些情况会生成不了 Cpp 或者 Rust 的栈，例如只有其中某个语言的栈。此时需要检查：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">pprof = &#123; version = &quot;0.14&quot;, default-features = false, features = [</span><br><span class="line">  &quot;flamegraph&quot;,</span><br><span class="line">  &quot;protobuf-codec&quot;,</span><br><span class="line">  &quot;cpp&quot;,</span><br><span class="line">] &#125;</span><br></pre></td></tr></table></figure>
+
+<p>并且还需要检查 jeprof.in 的参数</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">Command::new(<span class="string">"perl"</span>)</span><br><span class="line">    .args([</span><br><span class="line">        <span class="string">"/dev/stdin"</span>,</span><br><span class="line">        <span class="string">"--show_bytes"</span>,</span><br><span class="line">        bin_str,</span><br><span class="line">        path,</span><br><span class="line">        &amp;output_format,</span><br><span class="line">        &amp;<span class="built_in">format!</span>(<span class="string">"--add_lib=&#123;&#125;"</span>, bin_proxy_str),</span><br><span class="line">    ])</span><br></pre></td></tr></table></figure>
+
+<h3 id="heap-火焰图的调参"><a href="#heap-火焰图的调参" class="headerlink" title="heap 火焰图的调参"></a>heap 火焰图的调参</h3><figure class="highlight perl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">-  $main::opt_nodecount = <span class="number">80</span>;</span><br><span class="line">-  $main::opt_nodefraction = <span class="number">0</span>.<span class="number">005</span>;</span><br><span class="line">-  $main::opt_edgefraction = <span class="number">0</span>.<span class="number">001</span>;</span><br><span class="line">-  $main::opt_maxdegree = <span class="number">8</span>;</span><br><span class="line">+  $main::opt_nodecount = <span class="number">300</span>;</span><br><span class="line">+  $main::opt_nodefraction = <span class="number">0</span>;</span><br><span class="line">+  $main::opt_edgefraction = <span class="number">0</span>;</span><br><span class="line">+  $main::opt_maxdegree = <span class="number">32</span>;</span><br></pre></td></tr></table></figure>
+
+<h2 id="需要的工具"><a href="#需要的工具" class="headerlink" title="需要的工具"></a>需要的工具</h2><p>如果使⽤宿主机 tiflash 上的 jeprof.in，则必须宿主机上有下列⼯具：</p>
+<ul>
+<li>perl<br>  缺少 perl 可能会有报错 3329，或者 No such file or directory</li>
+<li>objdump</li>
+</ul>
+<p>但此时 raw 会报错 “jeprof can only dump remote profiles for –raw”，⽽ text 只有简略信息，并且不能反应出 addr2line 之后的结果。还需要⾄少如下⼯具，才能返回正常</p>
+<ul>
+<li>addr2line</li>
+<li>nm</li>
+<li>c++filt</li>
+</ul>
+<p>另外，注意在 jeprof.in 中使用 llvm-addrline，不然可能会出现 0x25 的报错，并且生成的 svg 图有缺失。</p>
+<h2 id="TiFlash-的-continuous-profiling"><a href="#TiFlash-的-continuous-profiling" class="headerlink" title="TiFlash 的 continuous profiling"></a>TiFlash 的 continuous profiling</h2><p>有下列问题会影响 TiFlash 开启 continous profiling</p>
+<ul>
+<li><a href="https://github.com/pingcap/tiflash/issues/5285" target="_blank" rel="noopener">https://github.com/pingcap/tiflash/issues/5285</a><br>  一个修复在 <a href="https://github.com/pingcap/tidb-engine-ext/pull/640%EF%BC%8C%E4%BD%86%E5%8F%AF%E8%83%BD%E8%BF%98%E6%9C%89%E5%88%AB%E7%9A%84%E5%8E%9F%E5%9B%A0%E5%AF%BC%E8%87%B4%E3%80%82" target="_blank" rel="noopener">https://github.com/pingcap/tidb-engine-ext/pull/640，但可能还有别的原因导致。</a></li>
+<li><a href="https://github.com/pingcap/tiflash/issues/6228" target="_blank" rel="noopener">https://github.com/pingcap/tiflash/issues/6228</a><br>  修复在 <a href="https://github.com/pingcap/tidb-engine-ext/pull/213" target="_blank" rel="noopener">https://github.com/pingcap/tidb-engine-ext/pull/213</a></li>
+<li><a href="https://github.com/pingcap/tiflash/issues/3236" target="_blank" rel="noopener">https://github.com/pingcap/tiflash/issues/3236</a><br>  修复在 <a href="https://github.com/pingcap/tiflash/pull/9240%EF%BC%8C%E5%B0%B1%E6%98%AF%E4%B8%8A%E9%9D%A2%E6%8F%90%E5%88%B0%E7%9A%84" target="_blank" rel="noopener">https://github.com/pingcap/tiflash/pull/9240，就是上面提到的</a> dl_iterate_phdr 死锁问题</li>
+</ul>
+<h1 id="使用-eBPF-进行-heap-profiling"><a href="#使用-eBPF-进行-heap-profiling" class="headerlink" title="使用 eBPF 进行 heap profiling"></a>使用 eBPF 进行 heap profiling</h1><p>见 <a href="/2024/08/23/use-ebpf-to-monitor-memory/">使用 eBPF 监控内存分配</a>。</p>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/C/" rel="tag"># C++</a>
+          
+            <a href="/tags/内存管理/" rel="tag"># 内存管理</a>
+          
+            <a href="/tags/profiling/" rel="tag"># profiling</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2024/08/23/use-ebpf-to-monitor-memory/" rel="next" title="使用 eBPF 监控内存分配">
+                <i class="fa fa-chevron-left"></i> 使用 eBPF 监控内存分配
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2024/10/11/2024_norway_iceland_spain/" rel="prev" title="2024 挪威冰岛西班牙">
+                2024 挪威冰岛西班牙 <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">262</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">154</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#MemoryTracker"><span class="nav-number">1.</span> <span class="nav-text">MemoryTracker</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#prof-dump"><span class="nav-number">2.</span> <span class="nav-text">prof.dump</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#有关-dl-iterate-phdr-的死锁"><span class="nav-number">2.1.</span> <span class="nav-text">有关 dl_iterate_phdr 的死锁</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#有关-dwarf-下-prof-变慢"><span class="nav-number">2.2.</span> <span class="nav-text">有关 dwarf 下 prof 变慢</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Jemalloc-allocatedptr"><span class="nav-number">3.</span> <span class="nav-text">Jemalloc allocatedptr</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Jemalloc-Arena"><span class="nav-number">4.</span> <span class="nav-text">Jemalloc Arena</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#thread-local-memory-tracker"><span class="nav-number">5.</span> <span class="nav-text">thread_local memory tracker</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Jemalloc-mallocx"><span class="nav-number">6.</span> <span class="nav-text">Jemalloc mallocx</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-的堆内存管理层级"><span class="nav-number">7.</span> <span class="nav-text">C++ 的堆内存管理层级</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-Custom-Allocator"><span class="nav-number">8.</span> <span class="nav-text">C++ Custom Allocator</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#pmr"><span class="nav-number">8.1.</span> <span class="nav-text">pmr</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-Custom-global-operator-new"><span class="nav-number">9.</span> <span class="nav-text">C++ Custom global operator new</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#C-Custom-class-operator-new"><span class="nav-number">10.</span> <span class="nav-text">C++ Custom class operator new</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#我的一些实践"><span class="nav-number">11.</span> <span class="nav-text">我的一些实践</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#TiFlash-的-heap-profiling"><span class="nav-number">11.1.</span> <span class="nav-text">TiFlash 的 heap profiling</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#遇到的一些问题"><span class="nav-number">11.2.</span> <span class="nav-text">遇到的一些问题</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#addr2line-的版本问题"><span class="nav-number">11.2.1.</span> <span class="nav-text">addr2line 的版本问题</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#DWARF-error-section-debug-info-is-larger-than-its-file-size"><span class="nav-number">11.2.2.</span> <span class="nav-text">DWARF error:section.debug_info is larger than its file size.</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#生成不了-Cpp-或者-Rust-的栈"><span class="nav-number">11.2.3.</span> <span class="nav-text">生成不了 Cpp 或者 Rust 的栈</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#heap-火焰图的调参"><span class="nav-number">11.2.4.</span> <span class="nav-text">heap 火焰图的调参</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#需要的工具"><span class="nav-number">11.3.</span> <span class="nav-text">需要的工具</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#TiFlash-的-continuous-profiling"><span class="nav-number">11.4.</span> <span class="nav-text">TiFlash 的 continuous profiling</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#使用-eBPF-进行-heap-profiling"><span class="nav-number">12.</span> <span class="nav-text">使用 eBPF 进行 heap profiling</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2024/08/23/monitor-alloc-in-C++/';
+          this.page.identifier = '2024/08/23/monitor-alloc-in-C++/';
+          this.page.title = 'C++ 内存监控方案';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
