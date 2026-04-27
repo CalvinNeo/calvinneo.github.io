@@ -99,7 +99,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="主要介绍 TiCI 的一些实现。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2026-02-25T11:30:27.137Z">
+<meta property="og:updated_time" content="2026-04-24T13:21:10.185Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="TiCI 的设计考量">
 <meta name="twitter:description" content="主要介绍 TiCI 的一些实现。">
@@ -387,8 +387,10 @@
 <li>TiFlash 需要和 TiKV 共用一个 PK，导致 TiFlash 无法选择更适合列存的 Sharding 方式。在“PK 的选择”这一章节中，我们会进一步阐述。</li>
 </ul>
 </li>
-<li>TiFlash 的并发较低，但本质上，并发低的原因还是和索引有关</li>
+<li>TiFlash 的并发较低，但本质上，并发低的原因还是和索引有关。</li>
 <li>TiFlash 默认提供了强一致和 SI 的隔离级别，但是这些特性并不是全部必须的，而它们又带来很高的成本，如 MVCC、Learner Read 等。新的引擎能够从架构上摆脱这些臃肿的功能。</li>
+<li>半结构化的数据如 json，非结构化的数据如文本，TiFlash 不能有效处理。</li>
+<li>我们需要一个真正的索引，而 TiFlash 更像是一种数据格式。这里也很大程度上是因为数据格式导致的。</li>
 </ul>
 <h2 id="支持-Hybrid-Index"><a href="#支持-Hybrid-Index" class="headerlink" title="支持 Hybrid Index"></a>支持 Hybrid Index</h2><p>传统的列存的访问模式是 scan，它是顺序访问一个流，但是可以通过 min-max、延迟物化等特性，去 skip 掉某些 block 的读取，从而减少 IO 开销和编解码的开销。这种方式对于高 selectivity 的数据（也就是留下的数据多）是友好的，但是对于复杂 OR / 模糊匹配 / Top-K 这些场景就不友好了。在 <a href="/2023/07/22/tikv-tidb-thought/">这篇文章的《延迟物化》</a> 这一章节中，举了一个因为 min-max 索引无效，从而退化为全表扫描的例子。</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">for row in block:</span><br><span class="line">    if predicate(row):</span><br><span class="line">        aggregate / output</span><br></pre></td></tr></table></figure>
@@ -402,40 +404,49 @@
 <li>再用高 selectivity 条件 做 scan + aggregate<br>  如列存、向量化</li>
 </ul>
 <h1 id="架构"><a href="#架构" class="headerlink" title="架构"></a>架构</h1><h2 id="PK-的选择"><a href="#PK-的选择" class="headerlink" title="PK 的选择"></a>PK 的选择</h2><p>在 <a href="/2023/07/22/tikv-tidb-thought/">关于 TiKV、TiDB、TiFlash 的一些思考</a> 的“为什么 TiFlash 实现 HTAP 基于 Raft？”中介绍了在 HTAP 场景中，因为 TiFlash 使用了 Raft Group 复制，获得了一些 benefit。但是，Raft 会导致 TiFlash 和 TiKV 绑定很死，特别是 TiFlash 没办法换 PK，这就一定程度上影响了 QPS。</p>
+<p>而行存和列存在访问模式上天然是有差别的，行存以点查和事务为主，通过打散热点可以获得更好的 QPS，而列存以扫表和聚合为主，更希望数据有空间局部性。</p>
 <p>使用 TiCI 的架构，用 CDC 同步，可以避免 Raft 那一层的影响。主要体现在可以为列存指定一个新的 PK，并按照新 PK 做 sharding。这里的问题是：</p>
 <ul>
 <li>在任何时候，新的 PK 和老的 PK 一定是一一对应的。但是这个对应关系可能会变。例如 <code>(new_key_col1, new_key_col2) -&gt; old_key_col1</code> 中如果 <code>new_key_col2</code> 的值变了，那么它在 TiCI 的分片可能就会变，但是它在 TiKV 的分片是不可能变的。这就体现了一行可能从一个 Shard 移动到另一个 Shard 中。</li>
 <li>后续支持 Snapshot Read 就会比较麻烦。</li>
 <li>Import into 在导入的时候，数据会非常散。</li>
 </ul>
-<h2 id="数据源"><a href="#数据源" class="headerlink" title="数据源"></a>数据源</h2><h3 id="Push-or-Pull"><a href="#Push-or-Pull" class="headerlink" title="Push or Pull"></a>Push or Pull</h3><p>TiCI 设计主要以 TiCDC 作为数据源。所以一开始是每个 Shard 会不停 Poll S3 上的某个 prefix，复杂度是 <code>O(shard_count*log_count)</code>。为了减小 LIST 的读放大，对 CDC 的日志进行了编号，这样只需要不停 GET 就行。</p>
-<p>但是如果 Shard 很多，那么每个 Shard 的 Poll 依然开销很大。所以，引入了一个 per node 的 Poller，去代理这个 poll 的过程。</p>
+<h2 id="数据源"><a href="#数据源" class="headerlink" title="数据源"></a>数据源</h2><h3 id="Push-or-Pull"><a href="#Push-or-Pull" class="headerlink" title="Push or Pull"></a>Push or Pull</h3><p>TiCI 设计主要以 TiCDC 作为数据源。所以一开始是每个 Shard 会不停 Poll S3 上的某个 prefix，复杂度是 <code>O(shard_count*log_count)</code>。另外，LIST 的价格和 PUT 是一个级别，大约为 GET 的 10 倍还多。为了减小 LIST 的读放大，对 CDC 的日志进行了编号，这样只需要不停 GET 就行。但是如果 Shard 很多，那么每个 Shard 的 Poll 依然开销很大。所以，引入了一个 per node 的 Poller，去代理这个 poll 的过程。</p>
+<p>随后发现，在一些 DDL 之后，CDC 的目录会发生变更。因此，对于这种情况，需要通过 LIST 找到新的 prefix。而这种 fallback 就会对要求在一定阈值之后，就 LIST 一次，这给低频更新的表造成了很大的负担。优雅的做法是支持 Push，但这个需要 CDC 的配合。我觉得比较好的 workaround，是 CDC 提供一个 api 供 TiCI poll，而不是 Poll S3。</p>
 <h3 id="延迟"><a href="#延迟" class="headerlink" title="延迟"></a>延迟</h3><p>根据 <a href="/2025/01/18/percolator-2/">TiCDC 的原理</a>，以 TiCDC 为数据源，很难将延迟降低到秒以内。</p>
-<h1 id="Meta-Service"><a href="#Meta-Service" class="headerlink" title="Meta Service"></a>Meta Service</h1><h2 id="Outline"><a href="#Outline" class="headerlink" title="Outline"></a>Outline</h2><h2 id="Shard-管理"><a href="#Shard-管理" class="headerlink" title="Shard 管理"></a>Shard 管理</h2><p>在 shard 的大小默认设置为 4 GiB，这样对于 80 TiB 的集群规模，会有 20k+ 个 shard。一个 shard 中有多个 fragment，fragment 之间是可以 overlap 的，我们也按照传统方法引入了 leveled compaction。</p>
+<h2 id="和-MySQL-的兼容"><a href="#和-MySQL-的兼容" class="headerlink" title="和 MySQL 的兼容"></a>和 MySQL 的兼容</h2><h1 id="Meta-Service"><a href="#Meta-Service" class="headerlink" title="Meta Service"></a>Meta Service</h1><h2 id="Outline"><a href="#Outline" class="headerlink" title="Outline"></a>Outline</h2><h2 id="Shard-管理"><a href="#Shard-管理" class="headerlink" title="Shard 管理"></a>Shard 管理</h2><p>在 shard 的大小默认设置为 4 GiB，这样对于 80 TiB 的集群规模，会有 20k+ 个 shard。一个 shard 中有多个 fragment，fragment 之间是可以 overlap 的，我们也按照传统方法引入了 leveled compaction。</p>
 <p>过多的 shard/fragment 意味更小的 shard/fragment 的 size，这对于查询是不利的：</p>
 <ul>
-<li>过多的 fragment，会导致每个 fragment 中的词典会很小，压缩率不高</li>
-<li>此外，一个查询如果覆盖多个 fragment，就需要按照每个 fragment 的词典都过滤一遍，再 merge，这样并发上不去</li>
+<li>过多的 fragment，会导致每个 fragment 中的词典会很小，压缩率不高。</li>
+<li>此外，一个查询如果覆盖多个 fragment，就需要按照每个 fragment 的词典都过滤一遍，再 merge，这样并发上不去。</li>
 </ul>
 <h3 id="设计能向后兼容的初始策略"><a href="#设计能向后兼容的初始策略" class="headerlink" title="设计能向后兼容的初始策略"></a>设计能向后兼容的初始策略</h3><p>要实现好 split、compaction 等是困难的，但是我们给出了最基础的策略：</p>
 <ul>
-<li>Split<br>  根据 shard 的大小以及行数。同时，我们还比较写入速度和 L0 的 Compaction 速度，如果发现 L0 的 Compaction 速度很慢，则会 split。</li>
-<li>Compaction<br>  根据 fragment 的数量，以及 segment 的数量，可以按照 level 配置</li>
+<li>Split<br>  根据 shard 的大小以及行数。同时还比较写入速度和 L0 的 Compaction 速度，如果发现 L0 的 Compaction 速度很慢，则会 split。</li>
+<li>Compaction<br>  根据 fragment 的数量，以及 segment 的数量，可以按照 level 配置。</li>
 <li>Merge<br>  根据当前 shard 的大小，以及写入的流量。并且要确保 merge 后不会立即 split。</li>
 </ul>
 <p>这里面另一个简化是，除了 merge 是定期检查外，Split 和 Compaction 只在写入后检查。</p>
-<p>此外，因为 Compaction 的策略并不是很明确，所以我们在存储格式上，特别注意将 fragment 按照线性表的形式存起来，而将分层信息单独存放。<br>因为 L0 和 L1 都是 Tiered 策略，所以原有的线性表在没有分层信息的情况下，依然是可以用的。Apply compaction 实际上就是一个 split。这样一来，就使得后续我们如果要支持更复杂的 compaction 策略，就不会涉及到改动已有数据的兼容性。</p>
-<h3 id="大量小表"><a href="#大量小表" class="headerlink" title="大量小表"></a>大量小表</h3><p>考虑大量小表的场景，Shard 就会很多。因为这些 Shard 的写入带宽都不会很大，所以在无状态架构下，基本定时都会上传一个小文件到 S3 上。</p>
+<p>此外，因为 Compaction 的策略并不是很明确，所以在存储格式上，特别注意将 fragment 按照线性表的形式存起来，而将分层信息单独存放。<br>因为 L0 和 L1 都是 Tiered 策略，所以原有的线性表在没有分层信息的情况下，依然是可以用的。Apply compaction 实际上就是一个 split。这样一来，后续要支持更复杂的 compaction 策略，就不会涉及到改动已有数据的兼容性。</p>
+<h3 id="大量小表"><a href="#大量小表" class="headerlink" title="大量小表"></a>大量小表</h3><p>主要有几个问题：</p>
+<ul>
+<li>Shard 就会很多<ul>
+<li>碎片<br>  因为这些 Shard 的写入带宽都不会很大，所以在无状态架构下，基本定时都会上传一个小文件到 S3 上。这会产生大量的小文件。</li>
+<li>CDC LIST<br>  LIST 会有很大压力。</li>
+<li>CDC log advance<br>  但是因为每个表是一个单独的 cdc prefix，所以相比于单个大表，这些 shard 上对应的 append empty 的场景不会很多。因此在 shard 数量相同的情况下，meta 的写入压力要小于单个大表。</li>
+</ul>
+</li>
+</ul>
 <h2 id="写入路径"><a href="#写入路径" class="headerlink" title="写入路径"></a>写入路径</h2><h3 id="S3-的-Slowdown"><a href="#S3-的-Slowdown" class="headerlink" title="S3 的 Slowdown"></a>S3 的 Slowdown</h3><p>从 <a href="https://zhuanlan.zhihu.com/p/606711742" target="_blank" rel="noopener">https://zhuanlan.zhihu.com/p/606711742</a> 来看，prefix 怎么分完全依赖 S3 内部实现。⽽且请求量上去之后，S3 怎么扩容、拆分不同分⽚的流量，⽀撑起所需 qps 的时间没有 qos 保证。</p>
-<p>基于我们的需求，做了测试：</p>
+<p>基于需求，做了测试：</p>
 <ul>
 <li><a href="https://github.com/CalvinNeo/terraform-cloud-native-tiflash/tree/test-s3" target="_blank" rel="noopener">https://github.com/CalvinNeo/terraform-cloud-native-tiflash/tree/test-s3</a></li>
 <li><a href="https://github.com/pingcap-inc/tici/pull/344" target="_blank" rel="noopener">https://github.com/pingcap-inc/tici/pull/344</a></li>
 </ul>
 <p>因为并发较大，所以要达到精确的 QPS。对此需要关注：</p>
 <ul>
-<li>因为不同的 Worker 达到稳定的时间不一致，所以一个 Worker 在并发达到稳定之后，应当能够保持负载</li>
-<li>通常需要让每个 Worker 睡眠一段时间来实现精确的 QPS，这里的 sleep 时间不能过长，否则会影响实际的 QPS，因此对于不同并发的要求，Worker 的数量是有合适区间的</li>
+<li>因为不同的 Worker 达到稳定的时间不一致，所以一个 Worker 在并发达到稳定之后，应当能够保持负载。</li>
+<li>通常需要让每个 Worker 睡眠一段时间来实现精确的 QPS，这里的 sleep 时间不能过长，否则会影响实际的 QPS，因此对于不同并发的要求，Worker 的数量是有合适区间的。</li>
 </ul>
 <p>测试结论如下：</p>
 <ul>
@@ -457,7 +468,7 @@
 </ul>
 <p>TiCI 中的 Fragment 大致对应 sst，目前将 Manifest 作为一个线性表来存储。而 Compaction 就是选择一段区间的 Fragments，将它们合并为一个 Fragment 后，再 splice 回去，实际上就是 Tiered 的策略。出于为了实现简单的“合并大小相近的 Fragment”的策略，所以人为分了两层，但实际上是不必要的。因此，在实现上，我并没有把分层的策略写死，而是做成了外挂式的。</p>
 <p>如果要实现 Leveled 策略，那么 Shard Compactor 就需要感知到下层的 sst 的排布，对实现要求较高。而如果沿用现在的 Tiered 策略，则 Shard Reader 本身就有一个 dedup 的操作，读放大不是那么糟糕。另外，考虑到倒排索引或者全文索引的特性，我们实际上是希望 Fragment 能尽可能大一点的，而 Leveled 策略需要分出很多相等大小的 sst，所以 Tiered 策略也是更优的。</p>
-<p>如果基于 Tiered 构造 LSM 树，则分层显得不必要且不灵活。我们依旧可以将 Manifest 看做一个头部写入的有序的线性表，表中的元素是 Fragment。要实现的方案需要做到：</p>
+<p>如果基于 Tiered 构造 LSM 树，则分层显得不必要且不灵活。依旧可以将 Manifest 看做一个头部写入的有序的线性表，表中的元素是 Fragment。要实现的方案需要做到：</p>
 <ul>
 <li><p>每次 Compaction 必须选择连续的 Fragment，然后用合并完的 Fragment 进行 Splice 替换，这样能够保留原有的先后关系</p>
 </li>
@@ -475,7 +486,28 @@
 <li><p>如果写入很频繁，那么要保证 Manifest 的尾部也能被 Compact 到</p>
 </li>
 </ul>
-<h3 id="有状态还是无状态的-Worker"><a href="#有状态还是无状态的-Worker" class="headerlink" title="有状态还是无状态的 Worker"></a>有状态还是无状态的 Worker</h3><p>使用无状态的 worker，则：</p>
+<p>总而言之，我提出了一个 Uni Compaction 的方案，可以参考 <a href="https://github.com/pingcap-inc/tici/pull/971" target="_blank" rel="noopener">https://github.com/pingcap-inc/tici/pull/971</a> 中的设计。</p>
+<h3 id="关于“Full-Compaction”"><a href="#关于“Full-Compaction”" class="headerlink" title="关于“Full Compaction”"></a>关于“Full Compaction”</h3><p>Full Compaction 突然会变得非常重要，当我们发现：</p>
+<ul>
+<li>Base 上的 Fragment 会一直逻辑分裂，导致读取性能很差</li>
+</ul>
+<p>从性质上来说：</p>
+<ul>
+<li>Base 层会“好”一点，主要体现在虽然它有重复的 PK，但它们的值是一样的，所以大概能有一个 run。</li>
+<li>Delta 层是全序的，每一个 Fragment 都需要带一个 delete set，表示它会删除前面。<br>  我曾经提出一个方案，想直接根据 delete set 为空来分割 Base 和 Delta。但并不是 delete set 为空，就是 base 了。例如 delta 的前几个 fragment，也可能就全是 insert。当然，因为全是 insert，所以把这一部分 delta 放到 base 也是安全的（考虑到我们认为 Delta 始终比 Base 新）。</li>
+</ul>
+<p>在实现 Full Compaction 的时候，通常实现就是引入一个原子的 Switch 操作。这个操作非常轻，只是一个保证，表示后续不会再往 base 写入数据了。在这个操作之后，Base 和 Delta 就会合并。但遇到的最大讨论点是在 Compaction 之后，是否还需要区分 Base 和 Delta。</p>
+<p>最终方案是：</p>
+<ul>
+<li>只在内存中维护 Base 和 Delta，持久化的时候合并为一个以保持灵活性。记录一个 offset 来区分。这里的灵活性指的是，即使丢失 offset，数据也是完整的，因为这是一个全序的列表。我们完全可以根据有没有 delete set 去重新划分一个新的 Base 和 Delta。</li>
+<li>在 Switch 之后，Base 就不可以写了，并且会把 Base 都 prepend 到 Delta 前面。在下次 Compaction 的时候，会按照 Uni Compaction 的方法生成 Compaction。</li>
+<li>但是会对 Compaction 进行校验：<ul>
+<li>Full Compaction：这种 Compaction 的产物不需要保留 delete set，其实也不应该有。需要满足已经 Switch 且 Base 为空，并且这个 Compaction 是从 0 开始的。</li>
+<li>Delta Compaction：这种 Compaction 需要保留 delte set。包含 [b2, …, bn, d0, d1] 这种包含了部分 base 的情况。</li>
+</ul>
+</li>
+</ul>
+<h3 id="关于-Base-和-Delta-的-TSO"><a href="#关于-Base-和-Delta-的-TSO" class="headerlink" title="关于 Base 和 Delta 的 TSO"></a>关于 Base 和 Delta 的 TSO</h3><h3 id="有状态还是无状态的-Worker"><a href="#有状态还是无状态的-Worker" class="headerlink" title="有状态还是无状态的 Worker"></a>有状态还是无状态的 Worker</h3><p>使用无状态的 worker，则：</p>
 <ul>
 <li>不需要挂载 EBS，成本低</li>
 <li>如果要支持高频写入，则对 S3 的 QPS 有要求。后续对 Compaction 的速度也有要求</li>
@@ -488,9 +520,41 @@
 </ul>
 <h3 id="CDC-的延迟问题"><a href="#CDC-的延迟问题" class="headerlink" title="CDC 的延迟问题"></a>CDC 的延迟问题</h3><p>CDC 这一套架构的延迟是有上限的，基本上只能保证秒级。其中原理在 <a href="/2023/07/22/tikv-tidb-thought/">“CDC 的延迟”</a>中已经有介绍。因此，我觉得要想获得更好的延迟，就得有一套支持直接写入的 API 和 client。</p>
 <h2 id="心跳"><a href="#心跳" class="headerlink" title="心跳"></a>心跳</h2><p>在<a href="/2023/01/12/high-concurrency/">分布式架构和高并发相关场景</a>中介绍了心跳的一些基本的概念。这里不再详细论述。</p>
+<h2 id="读取路径"><a href="#读取路径" class="headerlink" title="读取路径"></a>读取路径</h2><h3 id="Refactor"><a href="#Refactor" class="headerlink" title="Refactor"></a>Refactor</h3><p>我们希望满足：</p>
+<ul>
+<li>lazy 地往 reader上缓存 shard。</li>
+<li>tidb 请求 shardcache，⼀定能返回⼀个全部 warmup 好的 range。</li>
+<li>处理好同步和异步问题<br>  从物理规律上 warmup 和写⼊是异步的。<br>  但是 pubsub 处理写⼊只能同步，处理 warmup 请求也只能同步。</li>
+<li>【可选】请求 shardcache 的时候，返回完整的 shard。比如如果 1 分裂为 2 和 3，在 2 和 3 都 ready 前，只返回 1。</li>
+</ul>
+<p>我们曾经 vibe 了一版实现，但是存在 bug。我认为这是设计问题，比如：</p>
+<ul>
+<li>状态信息维护不全，shardcache 总共有 existence 和 allocate 和 ready 三个状态，其两两转换是异步的：<ul>
+<li>必须 ready 才能对 reader 可⻅</li>
+<li>shard 变更 split 和 merge 必须 inorder 处理</li>
+<li>warmup 必须阻塞，最多做到类似 cq 优化</li>
+</ul>
+</li>
+<li>现有的逻辑是只维护 existence 态和 ready 态，从原理上就⽆法做到完备的描述整个过程。因此针对于这个⽅案的⼩修⼩补是不够的</li>
+<li>状态信息更新存在冲突<br>  例如存在很多异步更新：<ol>
+<li>读请求：分配未存在的</li>
+<li>读请求：分配 reader 宕机的</li>
+<li>shardevent: split merge 这些场景中，都需要阻塞整个 pubsub 队列做 warmup，⾮常慢。并且会导致 pubsub 队列阻塞出现 Lag 的报错。</li>
+<li>⼼跳<ul>
+<li>因为 warmup 消息提前修改 reader 端元信息，所以导致⼼跳冲突误删 shard</li>
+<li>后续可能会做成异步补副本，从⽽引发冲突</li>
+</ul>
+</li>
+</ol>
+</li>
+</ul>
+<blockquote>
+<p>复杂的需求导致复杂的设计。良好的设计只能封装/转移复杂性，⽽不能减少复杂性。</p>
+</blockquote>
+<p>详细的讨论在 20260424.7z 中的 《WIP TiCI Reader refactor 讨论.pdf》 里面，因为太细碎，就不 cover 了。</p>
 <h1 id="tantivy"><a href="#tantivy" class="headerlink" title="tantivy"></a>tantivy</h1><h2 id="保序"><a href="#保序" class="headerlink" title="保序"></a>保序</h2><h3 id="同时支持-ASC-和-DESC"><a href="#同时支持-ASC-和-DESC" class="headerlink" title="同时支持 ASC 和 DESC"></a>同时支持 ASC 和 DESC</h3><p>Tantivy 的倒排表文件是顺序压缩存储的，例如：</p>
 <ul>
-<li>doc_id 列表经过 delta-encoded<br>  如果要支持逆向，则需要保存两个方向的差值，十分麻烦</li>
+<li>doc_id 列表经过 delta-encoded<br>  如果要支持逆向，则需要保存两个方向的差值，十分麻烦。</li>
 <li>然后通过 bit-packed 或 block-wise 压缩</li>
 <li>压缩的 Block 按顺序写入文件<br>  如果要支持逆向，则需要能定位到前一个 Block 的 offset。</li>
 <li>查找时通过 BlockReader 顺序解码</li>
@@ -793,7 +857,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#TiCI-要解决什么问题？"><span class="nav-number">1.</span> <span class="nav-text">TiCI 要解决什么问题？</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#拓展-TiFlash-的能力"><span class="nav-number">1.1.</span> <span class="nav-text">拓展 TiFlash 的能力</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#支持-Hybrid-Index"><span class="nav-number">1.2.</span> <span class="nav-text">支持 Hybrid Index</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#架构"><span class="nav-number">2.</span> <span class="nav-text">架构</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#PK-的选择"><span class="nav-number">2.1.</span> <span class="nav-text">PK 的选择</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#数据源"><span class="nav-number">2.2.</span> <span class="nav-text">数据源</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Push-or-Pull"><span class="nav-number">2.2.1.</span> <span class="nav-text">Push or Pull</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#延迟"><span class="nav-number">2.2.2.</span> <span class="nav-text">延迟</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Meta-Service"><span class="nav-number">3.</span> <span class="nav-text">Meta Service</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Outline"><span class="nav-number">3.1.</span> <span class="nav-text">Outline</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Shard-管理"><span class="nav-number">3.2.</span> <span class="nav-text">Shard 管理</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#设计能向后兼容的初始策略"><span class="nav-number">3.2.1.</span> <span class="nav-text">设计能向后兼容的初始策略</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#大量小表"><span class="nav-number">3.2.2.</span> <span class="nav-text">大量小表</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#写入路径"><span class="nav-number">3.3.</span> <span class="nav-text">写入路径</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#S3-的-Slowdown"><span class="nav-number">3.3.1.</span> <span class="nav-text">S3 的 Slowdown</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Split-amp-Compaction"><span class="nav-number">3.3.2.</span> <span class="nav-text">Split &amp; Compaction</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Compaction-的策略"><span class="nav-number">3.3.3.</span> <span class="nav-text">Compaction 的策略</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#有状态还是无状态的-Worker"><span class="nav-number">3.3.4.</span> <span class="nav-text">有状态还是无状态的 Worker</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#CDC-的延迟问题"><span class="nav-number">3.3.5.</span> <span class="nav-text">CDC 的延迟问题</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#心跳"><span class="nav-number">3.4.</span> <span class="nav-text">心跳</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#tantivy"><span class="nav-number">4.</span> <span class="nav-text">tantivy</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#保序"><span class="nav-number">4.1.</span> <span class="nav-text">保序</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#同时支持-ASC-和-DESC"><span class="nav-number">4.1.1.</span> <span class="nav-text">同时支持 ASC 和 DESC</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#内存"><span class="nav-number">4.2.</span> <span class="nav-text">内存</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#返回流式数据"><span class="nav-number">4.3.</span> <span class="nav-text">返回流式数据</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#关于-vibe-coding"><span class="nav-number">5.</span> <span class="nav-text">关于 vibe coding</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#编程风格和编程理念"><span class="nav-number">5.0.1.</span> <span class="nav-text">编程风格和编程理念</span></a></li></ol></li></ol></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#TiCI-要解决什么问题？"><span class="nav-number">1.</span> <span class="nav-text">TiCI 要解决什么问题？</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#拓展-TiFlash-的能力"><span class="nav-number">1.1.</span> <span class="nav-text">拓展 TiFlash 的能力</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#支持-Hybrid-Index"><span class="nav-number">1.2.</span> <span class="nav-text">支持 Hybrid Index</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#架构"><span class="nav-number">2.</span> <span class="nav-text">架构</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#PK-的选择"><span class="nav-number">2.1.</span> <span class="nav-text">PK 的选择</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#数据源"><span class="nav-number">2.2.</span> <span class="nav-text">数据源</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Push-or-Pull"><span class="nav-number">2.2.1.</span> <span class="nav-text">Push or Pull</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#延迟"><span class="nav-number">2.2.2.</span> <span class="nav-text">延迟</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#和-MySQL-的兼容"><span class="nav-number">2.3.</span> <span class="nav-text">和 MySQL 的兼容</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Meta-Service"><span class="nav-number">3.</span> <span class="nav-text">Meta Service</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Outline"><span class="nav-number">3.1.</span> <span class="nav-text">Outline</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Shard-管理"><span class="nav-number">3.2.</span> <span class="nav-text">Shard 管理</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#设计能向后兼容的初始策略"><span class="nav-number">3.2.1.</span> <span class="nav-text">设计能向后兼容的初始策略</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#大量小表"><span class="nav-number">3.2.2.</span> <span class="nav-text">大量小表</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#写入路径"><span class="nav-number">3.3.</span> <span class="nav-text">写入路径</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#S3-的-Slowdown"><span class="nav-number">3.3.1.</span> <span class="nav-text">S3 的 Slowdown</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Split-amp-Compaction"><span class="nav-number">3.3.2.</span> <span class="nav-text">Split &amp; Compaction</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Compaction-的策略"><span class="nav-number">3.3.3.</span> <span class="nav-text">Compaction 的策略</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#关于“Full-Compaction”"><span class="nav-number">3.3.4.</span> <span class="nav-text">关于“Full Compaction”</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#关于-Base-和-Delta-的-TSO"><span class="nav-number">3.3.5.</span> <span class="nav-text">关于 Base 和 Delta 的 TSO</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#有状态还是无状态的-Worker"><span class="nav-number">3.3.6.</span> <span class="nav-text">有状态还是无状态的 Worker</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#CDC-的延迟问题"><span class="nav-number">3.3.7.</span> <span class="nav-text">CDC 的延迟问题</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#心跳"><span class="nav-number">3.4.</span> <span class="nav-text">心跳</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#读取路径"><span class="nav-number">3.5.</span> <span class="nav-text">读取路径</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Refactor"><span class="nav-number">3.5.1.</span> <span class="nav-text">Refactor</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#tantivy"><span class="nav-number">4.</span> <span class="nav-text">tantivy</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#保序"><span class="nav-number">4.1.</span> <span class="nav-text">保序</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#同时支持-ASC-和-DESC"><span class="nav-number">4.1.1.</span> <span class="nav-text">同时支持 ASC 和 DESC</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#内存"><span class="nav-number">4.2.</span> <span class="nav-text">内存</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#返回流式数据"><span class="nav-number">4.3.</span> <span class="nav-text">返回流式数据</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#关于-vibe-coding"><span class="nav-number">5.</span> <span class="nav-text">关于 vibe coding</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#编程风格和编程理念"><span class="nav-number">5.0.1.</span> <span class="nav-text">编程风格和编程理念</span></a></li></ol></li></ol></li></ol></div>
             
 
           </div>

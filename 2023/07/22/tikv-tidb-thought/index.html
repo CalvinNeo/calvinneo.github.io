@@ -99,7 +99,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="一些常见问题的思考，只代表个人见解。对于一些已经沉淀下来的知识，会被挪到专门的文章中讨论。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2025-12-12T19:05:20.686Z">
+<meta property="og:updated_time" content="2026-04-24T11:58:04.931Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="关于 TiKV、TiDB、TiFlash 的一些思考">
 <meta name="twitter:description" content="一些常见问题的思考，只代表个人见解。对于一些已经沉淀下来的知识，会被挪到专门的文章中讨论。">
@@ -661,8 +661,13 @@
 <li>MVCC 字段<br> 如果要和 TiDB 一起玩，就必须要支持 MVCC，不能只保存最新的版本。</li>
 <li>Unique 的主键</li>
 </ol>
-<p>这样的架构使得 TiFlash 和 TiKV 绑定特别紧。原因是 ReadIndex 机制使得读和 Region 强绑定。在 <a href="/2025/01/11/fts-tici/">TiCI 的设计考量</a> 中我们会讨论基于 CDC 的架构如何缓解这个问题。</p>
+<p>这样的架构使得 TiFlash 和 TiKV 绑定特别紧。原因是 ReadIndex 机制使得读和 Region 强绑定。在 <a href="/2025/01/11/fts-tici/">TiCI 的设计考量</a> 中讨论了基于 CDC 的架构如何缓解这个问题。</p>
 <p>特别是 TiFlash 没办法换 PK，这就一定程度上影响了 QPS。可以考虑一个常见的按照 ts 查询的场景，一般常见的做法是用分区表优化。但如果不是分区表，并且假设主键是某个 auto increment 的字段，那么如果有一个 filter 要查询最近一天的数据，TiFlash 就没办法按照时间进行裁剪，最后导致要扫整个表的所有 Region。</p>
+<p>另外需要认识到，TiDB 总体是 txn on consensus 的架构。consensus 是 local total order，而 txn 是 global partial order。双重定序，会导致有的地方序太强了，TiDB 有很多优化方案，在此不展开。但总而言之，这对 TiFlash 造成了一些问题：</p>
+<ul>
+<li>TiDB 在读取的时候才需要已提交的事务是“可读”的，而 TiFlash 的行转列是写入的时候就需要保证。</li>
+<li>大事务的提交相关问题，在此不展开。</li>
+</ul>
 <h3 id="DM-的-Delta-层是如何实现的？"><a href="#DM-的-Delta-层是如何实现的？" class="headerlink" title="DM 的 Delta 层是如何实现的？"></a>DM 的 Delta 层是如何实现的？</h3><p>PageStorage 先前使用 Append 写加上 GC 的方案，但带来写放大、读放大和空间放大。因为这里 GC 采用的 Copy Out 的方式，所以理论上写放大和空间放大构成一个 trade off：</p>
 <ol>
 <li>如果允许更少的有效数据和更多的碎片，那么空间放大更严重</li>
