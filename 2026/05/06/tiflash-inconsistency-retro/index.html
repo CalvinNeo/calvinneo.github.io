@@ -1,0 +1,1272 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="数据库," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="以几年前的一个 case 为例，讨论了 TiFlash 的 HTAP 架构对排查不一致问题的影响，也讨论了如何用 AI 来减少这一类问题的调查时间。">
+<meta name="keywords" content="数据库">
+<meta property="og:type" content="article">
+<meta property="og:title" content="例论 TiFlash 的 HTAP 架构对排查不一致问题的影响">
+<meta property="og:url" content="http://www.calvinneo.com/2026/05/06/tiflash-inconsistency-retro/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="以几年前的一个 case 为例，讨论了 TiFlash 的 HTAP 架构对排查不一致问题的影响，也讨论了如何用 AI 来减少这一类问题的调查时间。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2026-05-09T08:00:00.196Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="例论 TiFlash 的 HTAP 架构对排查不一致问题的影响">
+<meta name="twitter:description" content="以几年前的一个 case 为例，讨论了 TiFlash 的 HTAP 架构对排查不一致问题的影响，也讨论了如何用 AI 来减少这一类问题的调查时间。">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2026/05/06/tiflash-inconsistency-retro/"/>
+
+
+
+
+
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5487541356791902"
+     crossorigin="anonymous"></script>
+  <title>例论 TiFlash 的 HTAP 架构对排查不一致问题的影响 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2026/05/06/tiflash-inconsistency-retro/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                例论 TiFlash 的 HTAP 架构对排查不一致问题的影响
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2026-05-06T23:09:06+08:00">
+                2026-05-06
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>以几年前的一个 case 为例，讨论了 TiFlash 的 HTAP 架构对排查不一致问题的影响，也讨论了如何用 AI 来减少这一类问题的调查时间。</p>
+<a id="more"></a>
+
+<h1 id="正文"><a href="#正文" class="headerlink" title="正文"></a>正文</h1><h2 id="结论"><a href="#结论" class="headerlink" title="结论"></a>结论</h2><p>这个 bug 的表象是：endless consistency 测试中，<code>insert</code> 负载下同一个 <code>start_ts</code> 对拍 TiKV 和 TiFlash，TiFlash 偶发少返回若干行，例如 <code>tikv: [35068980], tiflash: [35068960]</code>。再次用同一个 TSO 查询，结果会自动恢复一致，说明底层数据没有永久丢失，也不是被后续 snapshot 覆盖修好的持久化损坏。</p>
+<p>最终根因不是 ReadIndex 没有推进 <code>max_ts</code>，也不是 TiKV memory lock、bypass lock、Region Split 本身。真正的问题在 DeltaMerge 的 <code>DeltaIndex</code> 复用：一个较早的读已经拿到了旧的 segment snapshot，但尚未完成 place index；另一个较晚的读先执行，把共享 <code>DeltaIndex</code> 推进到了更新的状态。这个更新后的 <code>DeltaIndex</code> 中如果包含“重复写入的同一批 row_id + version”，会把较早 snapshot 中仍应该可见的那批重复 tuple 标记为 deleted。较早的读继续执行时复用了这个过新的共享 <code>DeltaIndex</code>，于是漏读了这些行。</p>
+<p>PR <a href="https://github.com/pingcap/tiflash/pull/9000" target="_blank" rel="noopener">#9000</a> 的修复就是围绕这个点：</p>
+<ul>
+<li>在 <code>DeltaTree</code> 里记录 <code>max_dup_tuple_id</code>，place insert 时记录发生重复 tuple 的最大 tuple id</li>
+<li>clone <code>DeltaIndex</code> 时除了检查 delete range 数量不超过 snapshot，还要检查 snapshot 是否覆盖了共享 <code>DeltaIndex</code> 中所有 duplicated tuples<ul>
+<li>如果不覆盖，就不能复用共享 <code>DeltaIndex</code>，必须为当前 snapshot 重新 place。</li>
+</ul>
+</li>
+</ul>
+<h2 id="最小化后的触发序列"><a href="#最小化后的触发序列" class="headerlink" title="最小化后的触发序列"></a>最小化后的触发序列</h2><p>issue 评论中 J-H 给出的抽象复现可以概括成：</p>
+<ol>
+<li>线程 A 通过 <code>resolveLocksAndReadRegionData</code> 写入一批行 <code>batch_1</code>，随后获取 segment snapshot <code>snap_a</code>。</li>
+<li>线程 C 又写入一批和 <code>batch_1</code> 具有完全相同 row_id 和 version 的行 <code>batch_2</code>。</li>
+<li>线程 B 获取更晚的 segment snapshot <code>snap_b</code>。</li>
+<li>线程 B 先于线程 A 执行读流程，并更新 segment 的共享 <code>DeltaIndex</code>。</li>
+<li>线程 B 更新 <code>DeltaIndex</code> 时，因为 row_id/version 重复，<code>batch_1</code> 在 delta tree 中被 delete 掉。</li>
+<li>线程 A 继续使用 <code>snap_a</code> 读，但 clone/reuse 了线程 B 推进后的共享 <code>DeltaIndex</code>，导致 <code>batch_1</code> 对线程 A 不再可见，从而少读。</li>
+</ol>
+<p>这个错误是 transient 的：后续读通常会拿到更完整、更靠后的 snapshot，delta 覆盖了重复写入的全部 tuple，<code>DeltaIndex</code> 和 snapshot 再次匹配，所以结果自然恢复。</p>
+<h2 id="现场现象和证据链"><a href="#现场现象和证据链" class="headerlink" title="现场现象和证据链"></a>现场现象和证据链</h2><p>初始 issue <a href="https://github.com/pingcap/tiflash/issues/8845" target="_blank" rel="noopener">#8845</a> 在 2024-03-14 提交，描述是 consistency test 中 <code>select count(*)</code> 对拍失败，TiFlash 少 20 行。Issue 被标记为 storage critical bug。</p>
+<p>关键现象：</p>
+<ul>
+<li>workload 基本只有 insert，没有注入错误。</li>
+<li>错误窗口很短，同一个事务或同一个 TSO 后续查询会收敛到正确结果。</li>
+<li>多次现场都伴随 Region Split、Remote Read、Learner Read、lock resolve 或并发读写 DeltaMerge。</li>
+<li>不是所有 TiFlash 节点都错，通常是某个节点的某次 TableScan 少了固定数量的行，例如 20、50、863。</li>
+<li>检查同一时间之后的 apply snapshot，排除了“后续 snapshot 覆盖坏数据导致恢复”的解释。</li>
+</ul>
+<p>4 月下旬的日志把方向从事务层拉回到了 DeltaMerge：</p>
+<ul>
+<li>同一 region、同一 applied index 下，来自 Raft Apply 线程的写入和来自 Learner Read/resolve lock 路径的写入发生并发<br>  这其实是一个关键线索，因为它能够极大的缩小范围。实际上如果 C-N 当时没有看到这条线索，那么会在事务层上浪费更多的时间。<br>  C-N 当时提到，<strong>不妨假设事务层是有问题的</strong>，那么在这种情况下，Delta Index 也有问题。</li>
+<li>同一批 50 条记录被两条路径写入。第一次读的 snapshot 中 <code>fully_indexed=false</code>，第二次读已经 <code>fully_indexed=true</code></li>
+</ul>
+<p>两次 snapshot 行数差和 delta index 行数差相差正好 50，吻合“重复 tuple 被过新的 delta index delete 掉”的模型。</p>
+<h2 id="定位过程：难点主要在找到-DeltaIndex"><a href="#定位过程：难点主要在找到-DeltaIndex" class="headerlink" title="定位过程：难点主要在找到 DeltaIndex"></a>定位过程：难点主要在找到 DeltaIndex</h2><p>这个问题在定位到 DeltaIndex 之后，修复并不复杂，真正困难和耗时的是前面的定位：现象强烈指向事务/ReadIndex/lock/Remote Read，但最终根因藏在 DeltaMerge 的读索引复用。</p>
+<p>早期首先确认了几个事实：</p>
+<ul>
+<li>TiFlash 少的是某一次 TableScan 的行数，不是聚合或 TiDB 层统计错误。把同一查询拆到各 TiFlash 节点看 <code>MPPTaskStatistics</code>，发现只有某个节点某次 scan 少了 20/50 行。</li>
+<li>用相同 <code>start_ts</code> 后续再查会恢复，说明不是数据永久丢失，也不是 PageStorage/DeltaMerge 持久化写坏。</li>
+<li>错误现场经常伴随 Region Split 后 epoch mismatch 触发 Remote Read，因此最早怀疑 remote read 的 key range、region split 处理、apply snapshot 覆盖等路径。</li>
+<li>检查错误时间点之后的 apply snapshot，发现没有发生能解释“恢复正确”的 snapshot 覆盖行为，于是排除了 apply snapshot 覆盖坏数据。<br>  这个判断是很重要的，因为在检查 raft 路径导致的不一致问题的时候，需要首先区分是否是 apply snapshot 导致的。对应的后续调查方案是不一样的。</li>
+</ul>
+<p>接着排查转向事务可见性。C-N 在 issue 第一条评论里提出过一个很合理的怀疑：</p>
+<ul>
+<li><a href="https://github.com/pingcap/tiflash/pull/3971" target="_blank" rel="noopener">#3971</a> 引入了同 region 的历史 ReadIndex 结果复用</li>
+<li>如果两个事务互不可见，<code>start_ts</code> 和 commit record 在 Raft log 中的顺序不一定一致，那么较小 TSO 复用较大 TSO 的 read index 可能读不到后面的 commit record<br>  这个假设解释力很强，因为现象正好是“TiFlash 少读已提交数据”。</li>
+<li>但后续 J-H 指出，Async Commit 的 <code>max_ts</code> 推进理论上应该防止这个问题，所以它不能直接作为根因。</li>
+</ul>
+<p>之后又集中排查了 <code>max_ts</code>、memory lock 和 bypass lock：</p>
+<ul>
+<li>TiFlash 的 read index 路径一度被怀疑没有真正通过 TiKV 的 <code>ReadIndexObserver</code> 推进 <code>max_ts</code>，因为旧的 <code>read_index</code> RPC 已经不再使用，而 TiFlash 看起来发送的是 <code>RaftCmdRequest{cmd_type=ReadIndex}</code>。<br>  后来通过继续跟 TiFlash proxy 到 TiKV leader 的交互确认，TiFlash 虽然内部使用 <code>RaftCmdRequest</code>，但真正和 TiKV 交互仍走 <code>MsgReadIndex</code> raft message，路径是合理的。</li>
+<li>使用 TiKV 侧临时日志确认：TiFlash Proxy 发出的 <code>MsgReadIndex</code> 带上了目标 <code>start_ts</code>；TiKV 收到后确实打印了 <code>advance max_ts to ...</code>，也返回了对应 read index。这排除了“完全没有推进 <code>max_ts</code>”的简单解释。</li>
+<li>memory lock 也被排除<br>  因为：多个复现场景中错误附近没有足够的 memlock 事件；有些焦点 region 的 <code>bypass_locks</code> 为空；TiFlash 遇到 lock 后触发 Remote Read、resolve lock、重试的行为在日志上能解释，但不能解释最终少行。</li>
+<li>bypass lock 也被排除<br>  因为：相关日志显示读事务并没有依赖异常的 bypass lock 路径，且 lock 的 <code>min_commit_ts</code>/<code>commit_ts</code> 关系不能完整解释“同一 TSO 后续恢复”的现象。</li>
+</ul>
+<p>这个阶段最迷惑的是“矛盾日志”：</p>
+<ol>
+<li>TiKV 已经 advance <code>max_ts</code> 并返回 read index，例如 region 459 返回到 313679。</li>
+<li>但 TiFlash 随后在 apply 313680 时仍看到 <code>commit_ts &lt; read_tso</code> 的记录。</li>
+</ol>
+<p>这看起来像 follower read 与 Async Commit 的线性一致性问题。后续还去咨询 TiKV 侧，分析 async commit、read through lock、<code>min_commit_ts</code> 推进规则。这个方向耗时很大，因为它确实和一致性语义相关，而且日志表面上支持。</p>
+<p>后续这个问题进入了僵局。最终 C-N 发现了下面的问题：</p>
+<blockquote>
+<p>转⽽考虑，⽆论是否承认 max_ts 有问题，⾄少确认已经 apply 到了 79 这个 raftlog，那么：</p>
+<ol>
+<li>要么能看到 lock</li>
+<li>要么能看到 commit<br>不应该出现既没有看到 lock ⼜没有看到 commit 的情况。因此准备转⽽调查 resolvelock 和 raft command 两个地⽅的⾏转列的过程。</li>
+</ol>
+</blockquote>
+<p>这是整个问题解决的关键，因为它揭示了在经过了那一团浆糊一样的事务问题之后，无论这时候的数据是否已经有问题，那么后续的处理也是有问题的。</p>
+<p>C-N 把两次读同一个 segment 的信息做了对比：</p>
+<ul>
+<li>第一次读拿到的 snapshot：<code>fully_indexed=false</code>，snapshot 中的 stable/persisted/mem rows 总数较少。</li>
+<li>第二次读拿到的 snapshot：<code>fully_indexed=true</code>，snapshot 行数更多，<code>DeltaIndex</code> 也更靠后。</li>
+<li>两次 snapshot 行数差是 4860，两次 delta index placed rows 差是 4810，差值正好 50。</li>
+<li>同时 Learner Read 线程和 Raft Apply 线程对同一 region、同一 applied index 写入了同一批 50 条记录，版本和 handles 完全吻合。</li>
+</ul>
+<p>这组证据把问题从“为什么读不到已经 commit 的 MVCC 数据”改写成“为什么旧 snapshot 会使用包含额外重复 tuple 删除信息的过新 DeltaIndex”。随后 JHL 在 PR #9000 中抽象出单测：</p>
+<ul>
+<li>线程 A 先拿旧 snapshot，线程 B 先读并推进 shared delta index</li>
+<li>然后线程 A 复用这个 shared delta index 时少读。</li>
+</ul>
+<p>PR 评论里最小测试曾复现 <code>count1 = 118, count2 = 128</code>，这直接证明了问题在 DeltaIndex 和 snapshot 的匹配关系，而不是事务层。</p>
+<h2 id="为什么这么难查"><a href="#为什么这么难查" class="headerlink" title="为什么这么难查"></a>为什么这么难查</h2><ol>
+<li>症状像事务一致性问题，但根因在存储读索引复用。TiFlash 少读的行对应的 <code>commit_ts</code> 小于读 TSO，且现场经常出现 ReadIndex、Async Commit、memory lock、bypass lock、Remote Read、Region Split，因此很自然会先怀疑 <code>max_ts</code> 推进、lock resolve 或 ReadIndex 复用。</li>
+<li>问题会自动恢复，容易误导排查。相同 TSO 之后再查是正确的，说明数据既没有永久丢也没有损坏；这排除了很多常规方向，但也让现场窗口很短，必须在错误发生时保留 segment snapshot、DeltaIndex、KVStore、日志和 region 信息。</li>
+<li>复现条件苛刻。它需要高并发读、Remote Read/resolve lock 触发的写入、Raft Apply 写入、相同 row_id/version 的重复 tuple、旧 snapshot 和新共享 DeltaIndex 交错复用。早期本地集群和 IDC 集群很难稳定复现，后来通过调小 region 大小、提高 split 频率、打开 failpoint 增加 remote read 才提高概率。</li>
+<li>中间出现了多个合理但非最终的假设。PR <a href="https://github.com/pingcap/tiflash/pull/3971" target="_blank" rel="noopener">#3971</a> 引入的 batch/async read-index 复用逻辑一度被怀疑；<a href="https://github.com/pingcap/tiflash/pull/8873" target="_blank" rel="noopener">#8873</a> 增强了 ReadIndexWorker 日志；<a href="https://github.com/pingcap/tiflash/pull/8874" target="_blank" rel="noopener">#8874</a> 增加写入 version 和 segment snapshot rows 日志；<a href="https://github.com/pingcap/tiflash/pull/8928" target="_blank" rel="noopener">#8928</a> 用来检查 async task 测试/日志路径。这些帮助排除方向，但不是最终修复。</li>
+<li>TiKV/TiFlash 日志存在时钟漂移和跨组件链路。文档里曾用 TiKV 加日志确认 TiFlash Proxy 确实发了 <code>MsgReadIndex</code>，TiKV 也 advance <code>max_ts</code> 并返回 read index；但 TiFlash 随后仍看到看似 <code>commit_ts &lt; read_tso</code> 的写入。这让问题一度看起来像 Async Commit 与 follower read 的线性一致性问题。后续才确认这不是最终矛盾，而是并发写入和 DeltaIndex 复用造成的读视图错配。</li>
+</ol>
+<h2 id="从-TiFlash-架构看，为什么一致性问题更难查"><a href="#从-TiFlash-架构看，为什么一致性问题更难查" class="headerlink" title="从 TiFlash 架构看，为什么一致性问题更难查"></a>从 TiFlash 架构看，为什么一致性问题更难查</h2><p>TiFlash 的 HTAP 架构选择是“TiKV 行存主副本 + TiFlash 列存 learner 副本”。官方文档中也说明，TiFlash columnar replica 是通过 Raft Learner 异步复制得到的：<a href="https://docs.pingcap.com/tidb/stable/tiflash-overview/" target="_blank" rel="noopener">TiFlash Overview</a>；VLDB 论文 <a href="https://vldb.org/pvldb/vol13/p3072-huang.pdf" target="_blank" rel="noopener">TiDB: A Raft-based HTAP Database</a> 也描述了 TiFlash learner 接收 Raft log，并把 row-format tuple 转成 columnar representation。这个架构带来了很好的 HTAP 隔离和列存性能，但一致性排查天然更复杂。</p>
+<ol>
+<li>TiFlash 不是事务提交路径上的 voting replica，而是 learner columnar replica。写入先在 TiKV/Raft 事务语义中成立，然后 TiFlash 通过 Raft log apply、row-to-column decode、DeltaMerge 写入、segment snapshot、DeltaIndex 等步骤把数据转成可分析查询的列存视图。因此一个读结果不一致，可能发生在事务层、Raft learner apply、proxy 交互、行转列、DeltaMerge 存储视图、查询执行任意一层。相比单一存储引擎，怀疑面更宽。</li>
+<li>TiFlash 的“读到某个 TSO”不是简单读一个本地 MVCC store。它需要 ReadIndex 保证 learner 至少 apply 到足够新的 Raft index，还要处理 Async Commit lock、<code>max_ts</code>/<code>min_commit_ts</code>、read through lock、bypass lock、resolve lock、Remote Read 重试。也就是说，读可见性由 TiKV 事务协议、Raft read index、TiFlash learner 状态和本地 DeltaMerge snapshot 共同决定。任何一层日志单独看都可能“合理”，但组合起来才暴露矛盾。</li>
+<li>Region Split 和 Remote Read 会把一个逻辑 table scan 拆成跨 region、跨 TiFlash 节点、跨 epoch 的多个子读。Issue #8845 的现场多次出现 split 后 epoch mismatch，随后触发 Remote Read；Remote Read 又可能在另一个 TiFlash 节点上以 Coprocessor 请求形式读同一个 region。这样一来，同一个 SQL 的错误可能只出现在某个 region 的某个 remote cop task 上，而其他 TiFlash 节点和后续查询都正确。定位时必须把 SQL、MPP task、region epoch、remote target、read index、segment 读任务全部串起来。</li>
+<li>TiFlash 本地列存不是 Raft KV 的直接镜像，而是 DeltaMerge 的多层读视图。一次读会拿 segment snapshot，再决定是否复用 shared <code>DeltaIndex</code>、是否需要 <code>ensurePlace</code>、是否 <code>fully_indexed</code>。这类内部优化通常不改变持久化数据，只影响某个瞬间的读视图，所以 bug 表现为“瞬时少读，后续恢复”。这种问题不会像数据损坏那样留下稳定现场，也不会像事务协议错误那样一定能从 TiKV 日志直接解释。</li>
+<li>TiFlash 为了性能引入了多处跨请求复用：ReadIndex 结果复用、shared DeltaIndex 复用、batch read index、remote read 重试、snapshot 复用/推进。这些优化单独看都有正确性条件，但一致性 bug 往往出现在“两个正确优化的边界交错”上。#8845 就是旧 snapshot 和过新的 shared <code>DeltaIndex</code> 在 duplicated tuple 场景下组合出了错误读视图。</li>
+</ol>
+<p>和其他 HTAP 实现相比，这个复杂度有 TiFlash 架构自身的特点：</p>
+<ul>
+<li>SingleStore 官方文档强调它可以在一个系统中结合 rowstore 和 columnstore，并在单个查询里合并实时和历史数据：<a href="https://docs.singlestore.com/db/v9.0/introduction/how-singlestore-works/high-performance-for-oltp-and-olap-workloads/" target="_blank" rel="noopener">High-Performance for OLTP and OLAP Workloads</a>。它也有分布式和存储格式复杂性，但通常不是“TiKV 行存主副本 + TiFlash Raft learner 列存副本”这种跨进程、跨引擎复制后的读视图问题。</li>
+<li>CockroachDB 更偏向单一分布式 KV/MVCC 存储层，上层有向量化/列式执行来加速分析型查询：<a href="https://www.cockroachlabs.com/docs/stable/architecture/overview" target="_blank" rel="noopener">Architecture Overview</a>。这类架构的难点更多集中在事务、租约、range、closed timestamp 等同一存储系统内的一致性，而不是额外列存 learner 副本与行存主副本之间的视图对齐。</li>
+<li>OceanBase 官方 HTAP 介绍强调在同一个分布式数据库内直接承载交易和分析：<a href="https://oceanbase.github.io/docs/user_manual/operation_and_maintenance/en-US/scenario_best_practices/chapter_03_htap/introduction" target="_blank" rel="noopener">OceanBase HTAP introduction</a>。它同样有分布式事务和分析执行复杂性，但 TiFlash 这种“主行存 + 异步列存副本 + Raft learner + 行转列 DeltaMerge”的链路，给排查额外引入了副本同步点和列存视图构建点。</li>
+</ul>
+<p>所以 TiFlash 的一致性问题难查，并不是因为某个模块特别脆弱，而是因为它把事务系统、Raft 复制、异步列存副本、MPP/Remote Read、DeltaMerge 本地读优化组合在一起。问题的真实根因可能在任意一层，但表象往往会穿过多层后才被 SQL 对拍发现。#8845 正是这种架构复杂性的典型案例：外观看起来像事务/ReadIndex 问题，实际是列存读视图中 shared DeltaIndex 和 snapshot 的代际错配。</p>
+<h2 id="关联-PR-和作用"><a href="#关联-PR-和作用" class="headerlink" title="关联 PR 和作用"></a>关联 PR 和作用</h2><ul>
+<li><a href="https://github.com/pingcap/tiflash/pull/9000" target="_blank" rel="noopener">#9000</a>：最终修复。核心是阻止旧 snapshot 复用包含其未覆盖 duplicated tuples 的过新共享 <code>DeltaIndex</code>，并补充单测 <code>DupHandleVersionAndDeltaIndexAdvancedThanSnapshot</code>、<code>ReadWithMoreAdvacedDeltaIndex2</code> 等。</li>
+<li><a href="https://github.com/pingcap/tiflash/pull/8873" target="_blank" rel="noopener">#8873</a>：排查期间改进 ReadIndexWorker 代码和日志，记录 read index 复用等信息。</li>
+<li><a href="https://github.com/pingcap/tiflash/pull/8874" target="_blank" rel="noopener">#8874</a>：增加可选的 record version 日志和 segment snapshot rows 日志，用于确认写入版本、行数和 snapshot 关系。</li>
+<li><a href="https://github.com/pingcap/tiflash/pull/8928" target="_blank" rel="noopener">#8928</a>：排查 remote read / async task 相关现象时用于检查测试路径，不是根因修复。</li>
+<li><a href="https://github.com/pingcap/tiflash/pull/3971" target="_blank" rel="noopener">#3971</a>：历史上引入高并发下按 start-ts batch/reuse read-index 的机制，一度被怀疑会导致旧 TSO 复用过小 read index；最终由 <code>max_ts</code> 逻辑和后续证据排除为主因。</li>
+</ul>
+<h2 id="如果用-AI-辅助调查，能加速哪里"><a href="#如果用-AI-辅助调查，能加速哪里" class="headerlink" title="如果用 AI 辅助调查，能加速哪里"></a>如果用 AI 辅助调查，能加速哪里</h2><p>这类问题里，AI 最有价值的地方不是直接猜根因。早期现象确实很像 ReadIndex、Async Commit、lock 或 Remote Read 问题，AI 如果只根据表象下结论，也很可能走同样的弯路。真正能加速的是把大量日志、代码路径、假设和反证组织起来，让调查更快收敛到“哪个假设还站得住”。</p>
+<ol>
+<li>日志归并和时间线重建<br> 这个 bug 的证据分散在 endless 报错、TiFlash MPPTask、LearnerReadWorker、RemoteRequest、DeltaMergeStore、Segment、Proxy、TiKV raftstore 日志里。<br> AI 可以围绕同一个 <code>start_ts</code>、<code>region_id</code>、<code>applied_index</code>、<code>row_id/version</code> 自动抽取事件，重建“split -&gt; remote read -&gt; read index -&gt; resolve lock -&gt; raft apply -&gt; segment read”的时间线。</li>
+<li>维护假设和排除矩阵<br> 排查过程中出现过 remote read key range、Region Split、apply snapshot、ReadIndex 复用、<code>max_ts</code> 未推进、memory lock、bypass lock、DeltaIndex 等多个假设。<br> AI 的作用是能够快速地去探明一个可能的原因是否是真的 root cause，从而去简化上下文。这是因为随着查询链条的深入，也引入了多个分叉，链条之间的因果就不是那么牢靠。从一个角度能解释的通，但是从另一个角度可能这个原因就解释不通。<br> 更重要的是，它可以提醒“<code>fully_indexed=false</code> + 后续 shared delta index 被推进”本身就是存储读视图风险点，避免在事务层钻牛角尖，从而更早转回 DeltaMerge。</li>
+<li>生成更精准的 instrumentation<br> 排查中实际合入了 #8873 和 #8874 来增强日志。AI 可以基于当前假设建议更有针对性的打点，这能减少“先广泛加日志再人工筛”的迭代成本。</li>
+<li>从现场日志反推出确定性单测<br> 最终 #9000 的测试本质上是把线上交错压缩成一个可控序列：线程 A 先拿旧 snapshot，线程 B 先读并推进 shared delta index，然后线程 A 再用旧 snapshot 读。AI 很适合根据日志里的 happens-before 关系生成这种 test skeleton，帮助把偶发线上问题变成稳定单测。</li>
+<li>跨组件语义校验<br> <code>ReadIndexObserver</code>、<code>MsgReadIndex</code>、<code>RaftCmdRequest</code>、Async Commit、<code>max_ts</code>、<code>min_commit_ts</code>、read through lock、bypass lock 这些概念很容易混在一起。AI 可以把设计文档、代码和日志放在一起核对：当前路径到底是否推进了 <code>max_ts</code>，哪个 message 类型生效，<code>bypass_locks=[]</code> 能排除什么，<code>commit_ts &lt; read_ts</code> 的日志是否一定表示事务层错误。这个能力能帮助更快识别“看似矛盾但其实不是根因”的证据。<br> 这能够减少查问题的时候，因为涉及到不同组件，不同人之间的协调产生的损耗。</li>
+</ol>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/数据库/" rel="tag"># 数据库</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2026/03/24/new-engineer/" rel="next" title="What's left for the engineers in the AI era">
+                <i class="fa fa-chevron-left"></i> What's left for the engineers in the AI era
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">266</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">155</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#正文"><span class="nav-number">1.</span> <span class="nav-text">正文</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#结论"><span class="nav-number">1.1.</span> <span class="nav-text">结论</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#最小化后的触发序列"><span class="nav-number">1.2.</span> <span class="nav-text">最小化后的触发序列</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#现场现象和证据链"><span class="nav-number">1.3.</span> <span class="nav-text">现场现象和证据链</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#定位过程：难点主要在找到-DeltaIndex"><span class="nav-number">1.4.</span> <span class="nav-text">定位过程：难点主要在找到 DeltaIndex</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#为什么这么难查"><span class="nav-number">1.5.</span> <span class="nav-text">为什么这么难查</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#从-TiFlash-架构看，为什么一致性问题更难查"><span class="nav-number">1.6.</span> <span class="nav-text">从 TiFlash 架构看，为什么一致性问题更难查</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#关联-PR-和作用"><span class="nav-number">1.7.</span> <span class="nav-text">关联 PR 和作用</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#如果用-AI-辅助调查，能加速哪里"><span class="nav-number">1.8.</span> <span class="nav-text">如果用 AI 辅助调查，能加速哪里</span></a></li></ol></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2026/05/06/tiflash-inconsistency-retro/';
+          this.page.identifier = '2026/05/06/tiflash-inconsistency-retro/';
+          this.page.title = '例论 TiFlash 的 HTAP 架构对排查不一致问题的影响';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>

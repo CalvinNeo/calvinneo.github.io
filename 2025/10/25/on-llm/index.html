@@ -73,7 +73,7 @@
 <link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="LLM,机器学习," />
+  <meta name="keywords" content="机器学习,LLM," />
 
 
 
@@ -91,18 +91,18 @@
 
 
 
-<meta name="description" content="主要关注：  LLM 的基础原理 KVCache">
-<meta name="keywords" content="LLM,机器学习">
+<meta name="description" content="主要关注：  LLM 的基础原理 Transformer 的架构 KVCache  基本来自于我的问题，以及我对通过 chat 学习到的东西的总结，由 AI 整理。完整版我放在腾讯文档中，这里选取一些方便摘录的写成博客。">
+<meta name="keywords" content="机器学习,LLM">
 <meta property="og:type" content="article">
 <meta property="og:title" content="LLM 基础概念和核心问题整理">
 <meta property="og:url" content="http://www.calvinneo.com/2025/10/25/on-llm/index.html">
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
-<meta property="og:description" content="主要关注：  LLM 的基础原理 KVCache">
+<meta property="og:description" content="主要关注：  LLM 的基础原理 Transformer 的架构 KVCache  基本来自于我的问题，以及我对通过 chat 学习到的东西的总结，由 AI 整理。完整版我放在腾讯文档中，这里选取一些方便摘录的写成博客。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2026-01-09T18:08:41.278Z">
+<meta property="og:updated_time" content="2026-05-09T04:14:12.392Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="LLM 基础概念和核心问题整理">
-<meta name="twitter:description" content="主要关注：  LLM 的基础原理 KVCache">
+<meta name="twitter:description" content="主要关注：  LLM 的基础原理 Transformer 的架构 KVCache  基本来自于我的问题，以及我对通过 chat 学习到的东西的总结，由 AI 整理。完整版我放在腾讯文档中，这里选取一些方便摘录的写成博客。">
 
 
 
@@ -380,11 +380,104 @@
         <p>主要关注：</p>
 <ul>
 <li>LLM 的基础原理</li>
+<li>Transformer 的架构</li>
 <li>KVCache</li>
 </ul>
+<p>基本来自于我的问题，以及我对通过 chat 学习到的东西的总结，由 AI 整理。完整版我放在腾讯文档中，这里选取一些方便摘录的写成博客。</p>
 <a id="more"></a>
 
-<h1 id="Attention-机制"><a href="#Attention-机制" class="headerlink" title="Attention 机制"></a>Attention 机制</h1><p>NLP 对 token 序列 X 的三种编码方式：</p>
+<h1 id="LLM-的基础理论-AI-Infra"><a href="#LLM-的基础理论-AI-Infra" class="headerlink" title="LLM 的基础理论(AI Infra)"></a>LLM 的基础理论(AI Infra)</h1><h2 id="大模型的计算复杂度"><a href="#大模型的计算复杂度" class="headerlink" title="大模型的计算复杂度"></a>大模型的计算复杂度</h2><h3 id="Prefill-和-Decode"><a href="#Prefill-和-Decode" class="headerlink" title="Prefill 和 Decode"></a>Prefill 和 Decode</h3><p>N 为上下文长度：</p>
+<ul>
+<li>如果没有 KVCache，O(N^2)</li>
+<li>如果有 KVCache，O(N)</li>
+</ul>
+<p>O(N) 的原因：</p>
+<ul>
+<li>Prefill 阶段，需要拿一个 $N \times d$ 的 Query 矩阵，去乘以一个 $d \times N$ 的 Key 矩阵（$d$ 是维度）。这会生成一个 $N \times N$ 的注意力分数矩阵（Attention Map）。这个对应了“为什么当你扔进去一本 10 万字的小说，模型在吐出第一个字之前，会卡顿很久（首字延迟 TTFT 很高）。”<ul>
+<li>当然，这里和 N_head 也有关系。每个 head 是单独算的。</li>
+</ul>
+</li>
+<li>Decode 阶段，这里是 KVCache 的优化了。<ul>
+<li>没有 KV Cache 的傻瓜做法： 假设模型要吐出第 $N+1$ 个词。如果没缓存，它必须把前面的 $N$ 个词加上新词，重新过一遍 $O((N+1)^2)$ 的计算。这显然极其愚蠢且缓慢。</li>
+<li>有了 KV Cache 的聪明做法： 因为前 $N$ 个词的 Key 和 Value 已经存在显存里了。对于第 $N+1$ 个词，模型只需要单独为这 1 个新词计算它的 Query（大小为 $1 \times d$）。</li>
+<li>数学本质： 此时的注意力计算，变成了拿这个 $1 \times d$ 的 Query 向量，去乘以缓存中 $d \times N$ 的 Key 矩阵。</li>
+<li>复杂度： 向量乘矩阵，计算复杂度瞬间从 $O(N^2)$ 暴降到了 $O(N)$！</li>
+</ul>
+</li>
+</ul>
+<p>两个耗时：</p>
+<ul>
+<li><p>TTFT (Time To First Token - 首字时间)： 衡量 Prefill（预填充） 阶段的耗时。即你按下回车，到屏幕上蹦出第一个字等了多久。</p>
+<ul>
+<li>优势： 它是高度并行的。现代 GPU 非常擅长干这种巨大的矩阵乘法，虽然计算量大，但 GPU 的几万个核心都在同时工作，效率极高。这被称为 Compute-bound（算力瓶颈）。</li>
+</ul>
+</li>
+<li><p>TPOT (Time Per Output Token - 每输出词元时间)： 衡量 Decode（解码） 阶段的速度。即后续的字像吐牙膏一样，每个字蹦出来平均要多久。</p>
+<ul>
+<li>为什么耗时： 它必须是串行（Sequential）的！因为模型必须等第 1 个字出来，才能去算第 2 个字。在这个阶段，计算量虽然降到了 $O(N)$，但就像我们之前说的，为了算这 1 个新词，GPU 必须把显存里庞大的 KV Cache 重新搬运一遍到计算单元。</li>
+<li>劣势： 此时 GPU 的算力核心其实大部分时间在“闲置摸鱼”，它在等显存（HBM）把数据一点点搬过来。这被称为 Memory-bound（内存带宽瓶颈）。</li>
+</ul>
+</li>
+<li><p>场景 A：长输入，短输出（Prefill 耗时长）</p>
+</li>
+<li><p>场景 B：短输入，长输出（Decode 耗时长）</p>
+</li>
+</ul>
+<p>尽管如此，O(N) 依然是恐怖的：<br>当 $N$ 达到 1,000,000 时，即便只是单步 $O(N)$ 的计算，对于内存带宽的压力也是极其巨大的。因为你要为了这一个新词，把显存里 100 万个历史 Key 和 Value 全都搬运到计算单元里比对一次。这种现象叫做 Memory Bound（内存带宽瓶颈），此时 GPU 算力可能只发挥了 5%，剩下的时间都在等显存传输数据。</p>
+<h3 id="关于注意力头"><a href="#关于注意力头" class="headerlink" title="关于注意力头"></a>关于注意力头</h3><p>在阅读大模型论文或源码时，经常会看到两个容易混用的“维度”概念：</p>
+<ul>
+<li>模型的总维度 ($d_{\text{model}}$)： 这是模型在每一层之间传递数据的整体“宽度”。比如一个典型的 13B 模型，它的 $d_{\text{model}}$ 可能是 5120。</li>
+<li>注意力头的维度 ($d_{\text{head}}$)： 因为大模型采用的是“多头机制（Multi-Head）”，它不会拿 5120 这么庞大的向量直接去算，而是把它“切分”给多个不同的“头”去并行计算，让每个头关注不同的特征。</li>
+</ul>
+<p>它们的严格数学关系是：<br>$$<br>d_{\text{model}} = N_{\text{heads}} \times d_{\text{head}}<br>$$</p>
+<p>例如，把 5120 的总维度分给 40 个头（$N_{\text{heads}} = 40$），那么每个头的维度 $d_{\text{head}}$ 就是 128。</p>
+<h2 id="PagedAttention"><a href="#PagedAttention" class="headerlink" title="PagedAttention"></a>PagedAttention</h2><p>vLLM 是一个用于大语言模型（LLM）的开源高性能推理和服务引擎。vLLM 最具革命性的特性是 PagedAttention 技术：传统方法分配 KV Cache 像住宾馆，必须预留连续的、足够大的房间（连续显存），导致大量显存碎片被浪费。PagedAttention 借鉴了操作系统的虚拟内存机制，将 KV Cache 拆分成一个个极小的“内存页”（Block），按需分配，非连续存放。这几乎消灭了显存碎片，让系统能同时服务的用户数翻了好几倍。</p>
+<p>架构层面：</p>
+<ul>
+<li>vLLM 就像是生产线上的“超级组装机”，负责飞速地计算和吐出 Token</li>
+<li>3FS 则是紧挨着生产线的“超高速立体仓库”，专门负责存放那些流水线上放不下的半成品（KV Cache）。<br>  vLLM 本身自带了前缀缓存（Prefix Caching）功能，但这通常局限在单台服务器内部。3FS 的目的是全局视角的缓存共享。</li>
+</ul>
+<p>PagedAttention 是如何实现的，如下其实还是比较传统的：</p>
+<ul>
+<li>它将每个用户请求的 KV Cache 划分成固定大小的“块”（Block）。每个块不再是以字节（Byte）为单位，而是以 Token 数量为单位（默认通常是 16 个或 32 个 Token）。</li>
+<li>逻辑与物理分离 ➕ 维护块表（Block Table）</li>
+</ul>
+<p>不同点：</p>
+<ul>
+<li>OS 是以 Bytes 为基础。PA 以 Token 为基础。一个 Block 占用多少显存，取决于模型的层数、注意力头数和数据精度。例如，在 Llama-2 13B 模型中，一个 16-Token 的 Block 可能占用几兆字节（MB）的显存。</li>
+<li>访问模式不同：OS 是随机访问多。PA 是可预测的，大模型的文本生成（自回归）是严格按顺序追加（Append-only）的。模型永远是一个词一个词往后吐，KV Cache 只会顺着时间轴往后写。</li>
+<li>触发 offloading 的时机不同：OS 就是缺页中断。vLLM 是在<strong>应用层（框架层）</strong>预测显存够不够。如果不够了，vLLM 会主动把一些 Block 踢到系统内存（Offload），这被称为抢占（Preemption）或重计算（Recomputation），完全由软件逻辑控制。</li>
+</ul>
+<p>那么如何利用这个特性？</p>
+<ul>
+<li>减少碎片<ul>
+<li>消灭内部碎片： 一个物理块一旦分配，模型就会按顺序把它填满。除了当前正在生成的最后那个未填满的 Block，所有已分配的 Block 的空间利用率都是 100%。</li>
+<li>消灭外部碎片： 因为物理块在显存中是不连续的，只要显存里还有任何一个空闲的 Block，就可以立刻分配给任何请求。这让显存的整体利用率从传统方案的 20%-40% 瞬间飙升到了 90% 以上。</li>
+</ul>
+</li>
+<li>由于 PagedAttention 是纯软件层面的控制，它拥有“全局视野”。所以它可以选择重新计算，还是 offload 到 3FS 中。</li>
+</ul>
+<h3 id="Hybrid-Sparse-Attention"><a href="#Hybrid-Sparse-Attention" class="headerlink" title="Hybrid Sparse Attention"></a>Hybrid Sparse Attention</h3><p>DeepSeek（特别是在其最新的 V4 架构中）采用的 Hybrid Sparse Attention，是从算法数学层面下刀，它混合了多种注意力策略来“偷懒”却不掉精度：</p>
+<ul>
+<li>滑动窗口注意力 (Sliding Window Attention, SWA)： 对最近的一小段上下文（比如最近 128 个 Token），采用全量密集注意力，保证局部的绝对精确。</li>
+<li>压缩稀疏注意力 (Compressed Sparse Attention, CSA)： 对远古的历史上下文，它不再让当前 Token 和所有历史 Token 一一比对，而是利用轻量级的“索引器（Indexer）”挑选出最相关的 Top-K 个 Token，只计算这部分极其重要的记忆，其余的直接忽略（稀疏化）。</li>
+<li>重度压缩注意力 (Heavily Compressed Attention, HCA)： 把极其冗长的历史记录，像打“压缩包”一样，将多个 Token 融合压缩成少量的特征向量，提供一个全局视角的模糊记忆。</li>
+</ul>
+<h2 id="vLLM-和训推存储底座"><a href="#vLLM-和训推存储底座" class="headerlink" title="vLLM 和训推存储底座"></a>vLLM 和训推存储底座</h2><p>vLLM 并没有完全撒手不管“存”。它管理最宝贵、最快的 GPU 显存（HBM）。一旦发现显存快满了，就立刻把暂时不用的 KV Cache 通过超高速网络（如 RDMA）卸载给 3FS。<br>RDMA（Remote Direct Memory Access，远程直接内存访问）是一种无需计算机操作系统内核接入、无需CPU参与，即可直接在两台机器内存之间读写数据的网络技术。它通过内核旁路（Kernel Bypass）和零拷贝技术，实现了高吞吐量、低延迟和低CPU占用的网络传输，适用于高性能计算和大数据中心。<br>RDMA 编程通常基于 Verbs API (如 libibverbs) 进行，核心流程是建立连接并交换内存地址信息，随后进行直接读写。 </p>
+<ul>
+<li>内存注册 (Memory Registration, MR)： RDMA 必须先将应用内存区域（Buffer）注册到网卡，锁定物理地址，并获取远程访问的键（R_Key）。</li>
+<li>队列对 (Queue Pair, QP)： 每个RDMA应用通过QP通信，包括发送队列（SQ）和接收队列（RQ）。</li>
+<li>工作请求 (Work Request, WR)： 应用通过WR提交发送/接收指令给网卡。</li>
+<li>完成队列 (Completion Queue, CQ)： 网卡完成传输后，将完成结果放入 CQ，应用通过轮询 CQ 获取结果。</li>
+</ul>
+<p>这套机制的作用：</p>
+<ul>
+<li>独立扩容：vLLM 加显卡，3FS 加 SSD</li>
+<li>无状态的 vLLM</li>
+<li>多级缓存：VRAM（显存） -&gt; DRAM（内存） -&gt; 3FS（高速网络 SSD）</li>
+</ul>
+<h2 id="前缀和位置编码"><a href="#前缀和位置编码" class="headerlink" title="前缀和位置编码"></a>前缀和位置编码</h2><p>TODO</p>
+<h1 id="Transformer"><a href="#Transformer" class="headerlink" title="Transformer"></a>Transformer</h1><h2 id="Attention-机制"><a href="#Attention-机制" class="headerlink" title="Attention 机制"></a>Attention 机制</h2><p>NLP 对 token 序列 X 的三种编码方式：</p>
 <ul>
 <li><p>RNN<br>  RNN 是递归的结构，所以只能串行计算。</p>
   <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">y_t = f(y_&#123;t-1&#125;, x_t)</span><br></pre></td></tr></table></figure></li>
@@ -393,7 +486,7 @@
 <li><p>Attention</p>
 </li>
 </ul>
-<h2 id="Q、K、V"><a href="#Q、K、V" class="headerlink" title="Q、K、V"></a>Q、K、V</h2><p>从定义上看，对于 token 流</p>
+<h3 id="Q、K、V"><a href="#Q、K、V" class="headerlink" title="Q、K、V"></a>Q、K、V</h3><p>从定义上看，对于 token 流</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">x1, x2, x3, ... xn</span><br></pre></td></tr></table></figure>
 
 <p>每个 xi 通过三组线性变换生成：</p>
@@ -424,7 +517,7 @@
 <li>tired → 疲劳的状态语义</li>
 <li>cross → 穿越动作</li>
 </ul>
-<h2 id="Self-Attention"><a href="#Self-Attention" class="headerlink" title="Self-Attention"></a>Self-Attention</h2><p>Self-Attention 指的是 Q、K、V 都来自同一组 token 的 attention。即</p>
+<h3 id="Self-Attention"><a href="#Self-Attention" class="headerlink" title="Self-Attention"></a>Self-Attention</h3><p>Self-Attention 指的是 Q、K、V 都来自同一组 token 的 attention。即</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">X → Q = XWq</span><br><span class="line">X → K = XWk</span><br><span class="line">X → V = XWv</span><br></pre></td></tr></table></figure>
 
 <p>然后</p>
@@ -442,7 +535,7 @@
 <li>K/V 来自 Encoder</li>
 </ul>
 <p>容易发现，Cross-Attention 更适合翻译或者对齐另一段文本。而 Self-Attention 更适合理解一句话内部关系。</p>
-<h2 id="Multi-Head-Attention"><a href="#Multi-Head-Attention" class="headerlink" title="Multi-Head Attention"></a>Multi-Head Attention</h2><p>如果一个 token 同时想问多种不同类型的问题怎么办？引入多组问题呗。所以上面的三个矩阵会变成三组矩阵。</p>
+<h3 id="Multi-Head-Attention"><a href="#Multi-Head-Attention" class="headerlink" title="Multi-Head Attention"></a>Multi-Head Attention</h3><p>如果一个 token 同时想问多种不同类型的问题怎么办？引入多组问题呗。所以上面的三个矩阵会变成三组矩阵。</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">Wq¹ Wk¹ Wv¹</span><br><span class="line">Wq² Wk² Wv²</span><br><span class="line">Wq³ Wk³ Wv³</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
 
 <p>还是对上面的例子而言</p>
@@ -452,7 +545,7 @@
 <li>Head2 问“是否有因果关系？”，会关注 because（因果）</li>
 <li>Head3 问“我与哪个动词相关？”，会关注 cross（动作）</li>
 </ul>
-<h1 id="KVCache"><a href="#KVCache" class="headerlink" title="KVCache"></a>KVCache</h1><h2 id="Why"><a href="#Why" class="headerlink" title="Why"></a>Why</h2><p>Token 是模型处理文本的最小离散单位。所以 LLM 并不是直接处理文字，而是直接处理 token。Token 是通过分词器从文本切出来的子串单位。</p>
+<h2 id="KVCache"><a href="#KVCache" class="headerlink" title="KVCache"></a>KVCache</h2><h3 id="Why"><a href="#Why" class="headerlink" title="Why"></a>Why</h3><p>Token 是模型处理文本的最小离散单位。所以 LLM 并不是直接处理文字，而是直接处理 token。Token 是通过分词器从文本切出来的子串单位。</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">&quot;Hello world&quot; → [15496, 2159]</span><br></pre></td></tr></table></figure>
 
 <p>但是</p>
@@ -508,14 +601,6 @@
 </li>
 </ul>
 <p>如果没有 KVCache，每生成一个新 token 需要重新计算所有历史 token 的 K/V 复杂度是 O(n²)</p>
-<h1 id="相关场景"><a href="#相关场景" class="headerlink" title="相关场景"></a>相关场景</h1><ul>
-<li>训练 infra<br>  分布式训练、参数同步、checkpoint、通信优化<br>  DeepSpeed, Megatron-LM, FSDP, NCCL, ZeRO</li>
-<li>推理 infra<br>  模型加载、KV Cache 管理、动态批处理、并发调度<br>  vLLM, TensorRT-LLM, TGI, Ray Serve</li>
-<li>模型存储与加载<br>  权重分片、lazy loading、权重格式<br>  Safetensors, GGUF, Tensor Parallel</li>
-<li>向量检索<br>  向量数据库、索引结构、量化 FAISS, Milvus, ScaNN, HNSW, IVF</li>
-<li>资源编排与调度<br>  相比传统 k8s 多了 GPU 调度、混部、弹性伸缩。<br>  相关技术：K8S, Ray, RunPod, vGPU</li>
-<li>数据管线与特征存储<br>  数据清洗、分片、版本控制<br>  Petastorm, Delta Lake, Feature Store</li>
-</ul>
 <h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ul>
 <li><a href="https://zh.d2l.ai/chapter_attention-mechanisms/attention-cues.html" target="_blank" rel="noopener">https://zh.d2l.ai/chapter_attention-mechanisms/attention-cues.html</a></li>
 <li><a href="https://transformers.run/c1/attention/" target="_blank" rel="noopener">https://transformers.run/c1/attention/</a></li>
@@ -571,9 +656,9 @@
       
         <div class="post-tags">
           
-            <a href="/tags/LLM/" rel="tag"># LLM</a>
-          
             <a href="/tags/机器学习/" rel="tag"># 机器学习</a>
+          
+            <a href="/tags/LLM/" rel="tag"># LLM</a>
           
         </div>
       
@@ -677,7 +762,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">265</span>
+                <span class="site-state-item-count">266</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -783,7 +868,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Attention-机制"><span class="nav-number">1.</span> <span class="nav-text">Attention 机制</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Q、K、V"><span class="nav-number">1.1.</span> <span class="nav-text">Q、K、V</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Self-Attention"><span class="nav-number">1.2.</span> <span class="nav-text">Self-Attention</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Multi-Head-Attention"><span class="nav-number">1.3.</span> <span class="nav-text">Multi-Head Attention</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#KVCache"><span class="nav-number">2.</span> <span class="nav-text">KVCache</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Why"><span class="nav-number">2.1.</span> <span class="nav-text">Why</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#相关场景"><span class="nav-number">3.</span> <span class="nav-text">相关场景</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">4.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#LLM-的基础理论-AI-Infra"><span class="nav-number">1.</span> <span class="nav-text">LLM 的基础理论(AI Infra)</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#大模型的计算复杂度"><span class="nav-number">1.1.</span> <span class="nav-text">大模型的计算复杂度</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Prefill-和-Decode"><span class="nav-number">1.1.1.</span> <span class="nav-text">Prefill 和 Decode</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#关于注意力头"><span class="nav-number">1.1.2.</span> <span class="nav-text">关于注意力头</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#PagedAttention"><span class="nav-number">1.2.</span> <span class="nav-text">PagedAttention</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Hybrid-Sparse-Attention"><span class="nav-number">1.2.1.</span> <span class="nav-text">Hybrid Sparse Attention</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#vLLM-和训推存储底座"><span class="nav-number">1.3.</span> <span class="nav-text">vLLM 和训推存储底座</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#前缀和位置编码"><span class="nav-number">1.4.</span> <span class="nav-text">前缀和位置编码</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Transformer"><span class="nav-number">2.</span> <span class="nav-text">Transformer</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Attention-机制"><span class="nav-number">2.1.</span> <span class="nav-text">Attention 机制</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Q、K、V"><span class="nav-number">2.1.1.</span> <span class="nav-text">Q、K、V</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Self-Attention"><span class="nav-number">2.1.2.</span> <span class="nav-text">Self-Attention</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Multi-Head-Attention"><span class="nav-number">2.1.3.</span> <span class="nav-text">Multi-Head Attention</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#KVCache"><span class="nav-number">2.2.</span> <span class="nav-text">KVCache</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Why"><span class="nav-number">2.2.1.</span> <span class="nav-text">Why</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">3.</span> <span class="nav-text">Reference</span></a></li></ol></div>
             
 
           </div>
@@ -1289,6 +1374,28 @@
   
 
   
+  
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Config({
+        tex2jax: {
+          inlineMath: [ ['$','$'], ["\\(","\\)"]  ],
+          processEscapes: true,
+          skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+        }
+      });
+    </script>
+
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax(), i;
+        for (i=0; i < all.length; i += 1) {
+          all[i].SourceElement().parentNode.className += ' has-jax';
+        }
+      });
+    </script>
+    <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+  
+
 
   
 

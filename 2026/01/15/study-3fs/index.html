@@ -99,10 +99,12 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="学习 3FS。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2026-01-15T09:26:56.813Z">
+<meta property="og:image" content="http://www.calvinneo.com/img/3fs/kvcache-complexity.png">
+<meta property="og:updated_time" content="2026-05-09T04:03:07.200Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="3FS 学习">
 <meta name="twitter:description" content="学习 3FS。">
+<meta name="twitter:image" content="http://www.calvinneo.com/img/3fs/kvcache-complexity.png">
 
 
 
@@ -380,7 +382,20 @@
         <p>学习 3FS。</p>
 <a id="more"></a>
 
-<h1 id="设计"><a href="#设计" class="headerlink" title="设计"></a>设计</h1><p>主要概括了 design notes。</p>
+<h1 id="原理"><a href="#原理" class="headerlink" title="原理"></a>原理</h1><h2 id="解决什么问题"><a href="#解决什么问题" class="headerlink" title="解决什么问题"></a>解决什么问题</h2><p>3FS 作为一个训推一体框架，解决的几个痛点是：</p>
+<ul>
+<li>痛点一：AI 训练中海量数据的“随机读取”瓶颈 在模型训练时，数据加载器（Dataloader）需要不断对海量的训练样本进行全局 Shuffle（打乱重排）以防止模型过拟合。这会产生极其庞大的纯随机读取操作。在传统架构下，为了不让 GPU 等待数据，往往需要预先将数据搬运到计算节点的本地硬盘上。3FS 聚合了全局极高的并发随机读取能力，让计算节点可以直接像访问本地文件一样，在全局数据集上进行无感知的随机采样，省去了繁琐的数据预取和搬运。</li>
+<li>痛点二：传统文件系统“读缓存失效”造成的内存浪费 主流的操作系统高度依赖 Page Cache（页缓存）和预读机制来加速文件读取。但在 AI 训练的随机洗牌场景下，读过的数据短时间内几乎不会再被重复读取。这意味着传统的“缓存”不仅完全无效，还会大量无谓地侵占计算节点的系统内存，甚至干扰训练任务的稳定性。3FS 针对这一点进行了彻底剥离，它主要依赖 Linux AIO 和 io_uring 直接处理 I/O 操作（Direct I/O），完全抛弃了对本地文件缓存的依赖，把宝贵的内存还给了计算任务。<br>  关于这一点，可以参考 Are You Sure You Want to Use MMAP in Your Database Management System？ 这个文章。我们在使用 tantivy 的时候，也发现 tantivy 的 mmap 会逃逸 tiflash 读节点的内存管理，导致频繁出现 memory over limit 的软限制，导致查询报错。<br>  我们开发的 tici 使用的 tantivy 会使用 mmap，并且会对每个 fragment 做 cache。mmap 无法直接控制，frag cache 目前也是必须的，所以这一块的内存管理很被动。</li>
+<li>痛点三：超大规模集群的“并行 Checkpoint”风暴 万卡集群在训练千亿/万亿参数大模型时，需要高频保存模型权重状态（Checkpoint）以防硬件故障导致训练白费。这就要求系统必须在极短的时间内，将几十 TB 甚至上百 TB 的数据同时且高并发地砸进磁盘。3FS 极高的吞吐上限（官方测试可达极高的 TiB/s 级别），将写入 Checkpoint 导致的集群全量停机等待时间压缩到了极致。<br>  这里面的 Checkpoint 不仅是模型参数 Weights（每一层的权重），还包括优化器的状态，如 Adam 优化器的一阶矩和二阶矩，梯度和一些元数据等。主要的内容是 Adam 部分。<br>  假设你在训练一个 1,750 亿参数（175B）的模型，以半精度（16-bit）保存，权重约 350GB。但加上优化器状态后，一个完整的 Checkpoint 可能高达 2TB 左右。如果是一个万亿参数（MoE 架构）的模型，单个 Checkpoint 达到 10TB-20TB 并不罕见。为了容灾和实验回溯，集群通常会保留多个步数的副本，因此总占用达到百 TB 级别是非常正常的。</li>
+<li>痛点四：推理阶段 KV Cache 的容量与成本限制 在处理超长上下文（Context）的 LLM 推理时，保存在昂贵 GPU 显存或系统内存（DRAM）中的 KV Cache 会迅速触及容量天花板。3FS 极低的读写延迟和超高并发，让 DeepSeek 能够实现“将 KV Cache 卸载到廉价高速磁盘（SSD）上”的技术方案。这为超长文本的推理提供了一种极具性价比的替代路径。</li>
+</ul>
+<h2 id="3FS-的方案"><a href="#3FS-的方案" class="headerlink" title="3FS 的方案"></a>3FS 的方案</h2><p>对此，3FS 的方案是：</p>
+<ol>
+<li>把显存 offload 到 SSD 上。主要还是借助 NVMe 和 RDMA 技术。</li>
+<li>Global Prefix Caching：我理解这一部分主要的优化点是超级冗长的系统提示词 (System Prompt) 以及各种套娃。</li>
+</ol>
+<p>另外，是 KVCache 的内存开销，其实是和上下文线性相关的<br><img src="/img/3fs/kvcache-complexity.png"></p>
+<h1 id="设计-–-design-notes"><a href="#设计-–-design-notes" class="headerlink" title="设计 – design notes"></a>设计 – design notes</h1><p>3FS 中有个 design notes，这里主要是概括了 design notes。</p>
 <h2 id="需要解决的问题"><a href="#需要解决的问题" class="headerlink" title="需要解决的问题"></a>需要解决的问题</h2><p>OSS 方面：</p>
 <ul>
 <li>现在的 OSS 并不支持原子地移动一系列文件或者一整个目录，或者递归地删除整个目录。而 3FS 的场景（实际上数据库的场景也是这样）涉及要创建一个临时目录，然后对这个目录写入数据，最后将这个目录 move 到最终的位置。</li>
@@ -681,7 +696,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">265</span>
+                <span class="site-state-item-count">266</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -787,7 +802,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#设计"><span class="nav-number">1.</span> <span class="nav-text">设计</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#需要解决的问题"><span class="nav-number">1.1.</span> <span class="nav-text">需要解决的问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Metadata-存储"><span class="nav-number">1.2.</span> <span class="nav-text">Metadata 存储</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#chunk-的分布"><span class="nav-number">1.2.1.</span> <span class="nav-text">chunk 的分布</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#存储-file-atributes"><span class="nav-number">1.2.2.</span> <span class="nav-text">存储 file atributes</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Chunk-存储"><span class="nav-number">1.3.</span> <span class="nav-text">Chunk 存储</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Balanced-traffic-during-recovery"><span class="nav-number">1.3.1.</span> <span class="nav-text">Balanced traffic during recovery</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Data-replication"><span class="nav-number">1.3.2.</span> <span class="nav-text">Data replication</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#实现"><span class="nav-number">2.</span> <span class="nav-text">实现</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Chain-replication"><span class="nav-number">2.1.</span> <span class="nav-text">Chain replication</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">3.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#原理"><span class="nav-number">1.</span> <span class="nav-text">原理</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#解决什么问题"><span class="nav-number">1.1.</span> <span class="nav-text">解决什么问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#3FS-的方案"><span class="nav-number">1.2.</span> <span class="nav-text">3FS 的方案</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#设计-–-design-notes"><span class="nav-number">2.</span> <span class="nav-text">设计 – design notes</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#需要解决的问题"><span class="nav-number">2.1.</span> <span class="nav-text">需要解决的问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Metadata-存储"><span class="nav-number">2.2.</span> <span class="nav-text">Metadata 存储</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#chunk-的分布"><span class="nav-number">2.2.1.</span> <span class="nav-text">chunk 的分布</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#存储-file-atributes"><span class="nav-number">2.2.2.</span> <span class="nav-text">存储 file atributes</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Chunk-存储"><span class="nav-number">2.3.</span> <span class="nav-text">Chunk 存储</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Balanced-traffic-during-recovery"><span class="nav-number">2.3.1.</span> <span class="nav-text">Balanced traffic during recovery</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Data-replication"><span class="nav-number">2.3.2.</span> <span class="nav-text">Data replication</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#实现"><span class="nav-number">3.</span> <span class="nav-text">实现</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Chain-replication"><span class="nav-number">3.1.</span> <span class="nav-text">Chain replication</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">4.</span> <span class="nav-text">Reference</span></a></li></ol></div>
             
 
           </div>
