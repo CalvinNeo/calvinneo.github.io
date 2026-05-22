@@ -99,7 +99,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="介绍一下 TiFlash 和 TiDB 云服务相关的一些设计思考。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2026-05-14T03:43:23.387Z">
+<meta property="og:updated_time" content="2026-05-14T12:52:15.501Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="云上的 TiDB 和 TiFlash">
 <meta name="twitter:description" content="介绍一下 TiFlash 和 TiDB 云服务相关的一些设计思考。">
@@ -450,7 +450,7 @@
 <h2 id="Pitfalls"><a href="#Pitfalls" class="headerlink" title="Pitfalls"></a>Pitfalls</h2><h3 id="Apply-Snapshot"><a href="#Apply-Snapshot" class="headerlink" title="Apply Snapshot"></a>Apply Snapshot</h3><p>经典思路就是 TiKV 传一个 S3 prefix，然后让 TiFlash 由此下载 sst 文件。问题在于，如何保证那时候 sst 还没有被删除。</p>
 <p>通常保证不被 compaction 的做法是 Apply Snapshot 会引用对应的 sst 文件，从而避免 compaction 的时候扫到。但是，因为存在行转列，所以 TiFlash 并不需要引用这个 sst 文件。</p>
 <p>TiKV 中 Apply Snapshot 的实现是同步地修改元数据，然后再异步地 ingest sst。这样做的安全性在于 EBS 保证了持久性，而在修改元数据后就可以临时设置数据为不可读从而保证线性一致。OP 的 TiKV 会在 Apply Snapshot 之前就持久化 sst，而 Cloud Proxy 则是在 ingest 的时候才从 S3 读，我认为并不是一个很好的设计。即使说没有持久化问题，这种方式也放大了延迟。</p>
-<p>相比之下，FAP 的 Apply Snapshot 则是会提前锁定文件，从而至少保证了持久化特性。当然，我们也犯了类似错误，例如在 <a href="https://github.com/pingcap/tiflash/pull/10201" target="_blank" rel="noopener">https://github.com/pingcap/tiflash/pull/10201</a> 中，我们发现 FAP 在二阶段 FFI 调用结束的时候就删除 snapshot 了，这个在如果重启后 replay apply snapshot 的时候是不安全的。所以后面我们加了一个 FFI 去保证这一点的安全性。</p>
+<p>相比之下，FAP 的 Apply Snapshot 则是会提前锁定文件，从而至少保证了持久化特性。当然，我们也犯了类似错误，例如在 <a href="https://github.com/pingcap/tiflash/pull/10201" target="_blank" rel="noopener">https://github.com/pingcap/tiflash/pull/10201</a> 中发现，FAP 在二阶段 FFI 调用结束的时候就删除 snapshot 了，这个在如果重启后 replay apply snapshot 的时候是不安全的。所以后面我们加了一个 FFI 去保证这一点的安全性。</p>
 <h1 id="S3"><a href="#S3" class="headerlink" title="S3"></a>S3</h1><p>本文中系统讲解了我对 S3 为代表的对象存储的认识。</p>
 <h2 id="S3-的性能"><a href="#S3-的性能" class="headerlink" title="S3 的性能"></a>S3 的性能</h2><p>对于 <a href="https://aws.amazon.com/cn/s3/storage-classes/" target="_blank" rel="noopener">S3</a> 而言：</p>
 <ol>
@@ -679,7 +679,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">266</span>
+                <span class="site-state-item-count">267</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>

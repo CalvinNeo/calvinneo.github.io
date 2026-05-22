@@ -91,21 +91,21 @@
 
 
 
-<meta name="description" content="本文主要介绍在设计需要序列化到磁盘上的数据结构时，需要考虑的点。">
+<meta name="description" content="本文主要介绍在设计需要序列化到磁盘上的数据结构时，需要考虑的点。 See also 《数据库中的压缩技术》。">
 <meta name="keywords" content="数据库,Parquet">
 <meta property="og:type" content="article">
 <meta property="og:title" content="磁盘上的数据结构">
 <meta property="og:url" content="http://www.calvinneo.com/2025/02/09/data-structure-on-disk/index.html">
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
-<meta property="og:description" content="本文主要介绍在设计需要序列化到磁盘上的数据结构时，需要考虑的点。">
+<meta property="og:description" content="本文主要介绍在设计需要序列化到磁盘上的数据结构时，需要考虑的点。 See also 《数据库中的压缩技术》。">
 <meta property="og:locale" content="zh-Hans">
 <meta property="og:image" content="http://www.calvinneo.com/img/disk-struct/parquet.gif">
 <meta property="og:image" content="http://www.calvinneo.com/img/disk-struct/dremel_column_representation.jpg">
 <meta property="og:image" content="http://www.calvinneo.com/img/disk-struct/schema.png">
-<meta property="og:updated_time" content="2026-01-11T18:52:38.194Z">
+<meta property="og:updated_time" content="2026-05-15T12:55:03.396Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="磁盘上的数据结构">
-<meta name="twitter:description" content="本文主要介绍在设计需要序列化到磁盘上的数据结构时，需要考虑的点。">
+<meta name="twitter:description" content="本文主要介绍在设计需要序列化到磁盘上的数据结构时，需要考虑的点。 See also 《数据库中的压缩技术》。">
 <meta name="twitter:image" content="http://www.calvinneo.com/img/disk-struct/parquet.gif">
 
 
@@ -382,30 +382,46 @@
 
       
         <p>本文主要介绍在设计需要序列化到磁盘上的数据结构时，需要考虑的点。</p>
+<p>See also <a href="/2024/12/21/db-compression/">《数据库中的压缩技术》</a>。</p>
 <a id="more"></a>
 
-<h1 id="设计要点"><a href="#设计要点" class="headerlink" title="设计要点"></a>设计要点</h1><h2 id="序列化和反序列化-serde"><a href="#序列化和反序列化-serde" class="headerlink" title="序列化和反序列化(serde)"></a>序列化和反序列化(serde)</h2><p>这里的要点，并不只局限在类似于 protobuf 的库上，而是在设计存储格式的时候，都会考虑的问题。</p>
-<p>需要关注的 feature：</p>
-<ul>
-<li>对于 blob 的支持<br>  解析是否需要占用大量内存？</li>
-<li>读取部分数据<br>  是否需要解压/解码全部结构，才能读取到该数据呢？</li>
+<h1 id="设计要点"><a href="#设计要点" class="headerlink" title="设计要点"></a>设计要点</h1><p>这里的要点，并不只局限在类似于 protobuf 的库上，而是在设计存储格式的时候，都会考虑的问题。</p>
+<h2 id="序列化和反序列化-serde"><a href="#序列化和反序列化-serde" class="headerlink" title="序列化和反序列化(serde)"></a>序列化和反序列化(serde)</h2><ul>
 <li>兼容性<br>  新旧版本应该能够处理彼此的数据。例如：<ul>
 <li>旧版本能够忽略新增的字段，对于后续被删除的字段，也会保留其编号。</li>
 <li>新版本对于旧消息中缺失的字段能补上默认值，或者填入 null。</li>
 </ul>
 </li>
 <li>类型的 cast<br>  例如支持从 bool 升级为 enum 或者 int。</li>
-<li>磁盘 IO 的单位</li>
-<li>压缩和解压缩的速度，以及 CPU 开销、内存开销<br>  需要注意，磁盘 IO 的单位并不一定要和解压缩的单位对应。完全可以从磁盘取一批数据到内存，以最大化利用磁盘带宽。但内存中的数据如何解压缩则纯粹是 CPU bound 的问题了。<br>  如果预期只需要读一两条的数据，那么就希望有更多的索引能够帮助我们快速 seek 到指定的位置，并解压足够小的 block。但如果预期需要读取所有数据，那么每次解压的单位就可以大很多，从而索引的大小就能做到更小。</li>
-<li>编码和解码的速度，以及 CPU 开销、内存开销<br>  这一点很重要，例如 json 的编解码性能就比较差。</li>
-<li>是否可以自描述？<br>  出于空间考虑，就不会包含，但这就会导致像 Parquet 一样的问题。因为解析库是由不同的语言和库来实现的，因此编码库会担心自己的编码用了新特性，从而导致别人解析不了。</li>
-<li>是否有足够的容错</li>
-</ul>
-<h2 id="磁盘上的数据结构"><a href="#磁盘上的数据结构" class="headerlink" title="磁盘上的数据结构"></a>磁盘上的数据结构</h2><ul>
 <li>完整性校验</li>
-<li>尽可能减少 IO 次数</li>
+<li>是否有足够的容错</li>
 <li>是否多个文件或者多级文件？</li>
 <li>是否分开存储 meta 和 data？先写 meta 还是先写 data？</li>
+<li>是否可以自描述？<br>  出于空间考虑，就不会包含，但这就会导致像 Parquet 一样的问题。因为解析库是由不同的语言和库来实现的，因此编码库会担心自己的编码用了新特性，从而导致别人解析不了。</li>
+</ul>
+<h2 id="所承载的数据类型和-workload"><a href="#所承载的数据类型和-workload" class="headerlink" title="所承载的数据类型和 workload"></a>所承载的数据类型和 workload</h2><p>需要关注的：</p>
+<ul>
+<li>对于 blob 的支持<br>  解析是否需要占用大量内存？</li>
+<li>对于多模态数据的支持<br>  例如对于向量的支持，是否便于做 ANN 等。</li>
+<li>读取部分数据/Random Access 的需求<br>  是否需要解压/解码全部结构，才能读取到该数据呢？</li>
+</ul>
+<h2 id="使用的-backend-存储"><a href="#使用的-backend-存储" class="headerlink" title="使用的 backend 存储"></a>使用的 backend 存储</h2><p>需要关注的：</p>
+<ul>
+<li>对云原生场景的支持，例如是否适合放在 OSS 上面<br>  对象存储的 TTFB（首字节响应时间）通常在几毫秒到几十毫秒之间（本地 SSD 仅为数十微秒）。因此，减少 IO 次数是关键。</li>
+<li>磁盘 IO 的次数<br>  这个关注点主要在底层的存储是内存、HDD、SDD 还是 OSS 上。</li>
+</ul>
+<h2 id="压缩和编码方式"><a href="#压缩和编码方式" class="headerlink" title="压缩和编码方式"></a>压缩和编码方式</h2><p>See also <a href="/2024/12/21/db-compression/">《数据库中的压缩技术》</a>。</p>
+<p>需要关注的：</p>
+<ul>
+<li>压缩和解压缩的速度，以及 CPU 开销、内存开销<br>  磁盘 IO 的单位并不一定要和解压缩的单位对应。完全可以<ul>
+<li>从磁盘取一批数据到内存，以最大化利用磁盘带宽。</li>
+<li>后面如何解压缩则纯粹是 CPU bound 的问题了。</li>
+<li>如果预期只需要读一两条的数据，那么就希望有索引能够帮助我们快速 seek 到指定的位置，并解压足够小的 block。这样索引就会占据更大的空间，</li>
+<li>如果预期需要读取所有数据，那么每次解压的单位就可以大很多，从而索引的大小就能做到更小。</li>
+</ul>
+</li>
+<li>编码和解码的速度，以及 CPU 开销、内存开销<br>  这一点很重要，例如 json 的编解码性能就比较差。</li>
+<li>压缩和编解码的平衡<br>  Parquet 使用的 Snappy 等压缩算法会破坏 Page 的结构，造成严重的读放大。<br>  因此更提倡的是像 Vortex 的 Adaptive 的编码。</li>
 </ul>
 <h1 id="常见格式"><a href="#常见格式" class="headerlink" title="常见格式"></a>常见格式</h1><h2 id="Parquet"><a href="#Parquet" class="headerlink" title="Parquet"></a>Parquet</h2><p>假设一个表中有 N 列，它们被分入了 M 个 row groups 中。那么每个 row groups 中的一个 Column 称为一个 Column Chunk。</p>
 <p>文件的 metadata 包含了每个 Column Chunk 的开始位置。为了能够一趟写完文件，所以最后才会写入 metadata。</p>
@@ -420,7 +436,7 @@
 <p>因为 metadata 在 parquet 文件的 Footer 处，所以需要先读取文件的倒数第 5 到 8 字节，得到它的大小，然后再往前 seek 这个大小解析出 metadata 部分。</p>
 <p>Parquet 是使用 Thrift 协议解析序列化的。它和 protobuf 其实差不多，不过 Thrift 自带了 RPC。</p>
 <h3 id="Types"><a href="#Types" class="headerlink" title="Types"></a>Types</h3><p>Parquet 会在 Column Chunk 层面保存 min max 值。</p>
-<h3 id="Nested-Encoding"><a href="#Nested-Encoding" class="headerlink" title="Nested Encoding"></a>Nested Encoding</h3><p>关于 Dremel 格式，可以看 <a href="https://paper-notes.zhjwpku.com/datalayout/dremel.html%E3%80%82" target="_blank" rel="noopener">https://paper-notes.zhjwpku.com/datalayout/dremel.html。</a></p>
+<h3 id="Nested-Encoding"><a href="#Nested-Encoding" class="headerlink" title="Nested Encoding"></a>Nested Encoding</h3><p>关于 Dremel 格式，可以看 <a href="https://paper-notes.zhjwpku.com/datalayout/dremel.html%E3%80%82%E5%90%8E%E9%9D%A2%E7%AB%A0%E8%8A%82%E4%B9%9F%E4%B8%93%E9%97%A8%E6%9C%89%E4%BB%8B%E7%BB%8D" target="_blank" rel="noopener">https://paper-notes.zhjwpku.com/datalayout/dremel.html。后面章节也专门有介绍</a></p>
 <blockquote>
 <p>To encode nested columns, Parquet uses the Dremel encoding with definition and repetition levels. Definition levels specify how many optional fields in the path for the column are defined. Repetition levels specify at what repeated field in the path has the value repeated. The max definition and repetition levels can be computed from the schema (i.e. how much nesting there is). This defines the maximum number of bits required to store the levels (levels are defined for all values in the column).</p>
 </blockquote>
@@ -430,7 +446,51 @@
 <blockquote>
 <p>Combining this with the strategy used for rc or avro files using sync markers, a reader could recover partially written files.</p>
 </blockquote>
-<h2 id="Avro"><a href="#Avro" class="headerlink" title="Avro"></a>Avro</h2><h2 id="LevelDB-RocksDB-的-WAL"><a href="#LevelDB-RocksDB-的-WAL" class="headerlink" title="LevelDB/RocksDB 的 WAL"></a>LevelDB/RocksDB 的 WAL</h2><p>见 <a href="/2021/04/23/leveldb-wal/">LevelDB 之 WAL</a></p>
+<h3 id="Parquet-的缺点以及可能的优化"><a href="#Parquet-的缺点以及可能的优化" class="headerlink" title="Parquet 的缺点以及可能的优化"></a>Parquet 的缺点以及可能的优化</h3><ol>
+<li><p>对向量等多模态数据支持不好<br> 实际上是被表示成 <code>Array&lt;Float&gt;</code>，最终按照 Dremel 的形式存储。<br> Dremel 那一套虽然很优美，但是 decode 开销巨大。<br> 进一步，这种形式的问题:</p>
+<ul>
+<li>对向量检索完全不友好。</li>
+<li>对稀疏向量的支持也不好。稀疏向量一般采用 (index, value) 这样的方式，或者 CSC / CSR 这样的存储。</li>
+</ul>
+</li>
+<li><p>点查性能不好<br> Parquet 的假设是少量列+许多行。</p>
+</li>
+<li><p>不适合高频随机写/更新</p>
+</li>
+<li><p>需要解压缩<br> 一般是找到 page -&gt; snappy 解压 -&gt; decode -&gt; 定位。<br> 非常消耗 CPU。并且这些算法也导致随机访问性能差，对应到点查性能不好。<br> 这么激进的压缩策略，是因为在 HDD 年代的带宽低，所以需要更极限的压缩。</p>
+</li>
+<li><p>Footer 在尾部，对 object store 不够友好<br> 尽管可以通过 Range HTTP Request 异步读取尾部固定大小的字节，但 Parquet 的 Footer 长度是可变的，所以首先需要获得一个 footer length。<br> 所以，通过 OSS 读取可能要</p>
+ <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">先 GET footer length</span><br><span class="line">再 GET footer 中的 metadata</span><br><span class="line">再 GET data</span><br></pre></td></tr></table></figure></li>
+<li><p>小 IO 太多了。以一次点查为例，Parquet 的读 IO 分别是：</p>
+<ul>
+<li>读取 footer，解析各种元数据，比如 schema，以及各个 row group。</li>
+<li>在每个 row group 中，读取对应列的 column metadata。对于大宽表，比如有 100 列，那么就要加载 100 次不同的 column chunk offset，开销很大。</li>
+<li>但其中有多个 page，所以要挨个找到对应的 page，形成多次 IO。<br>  <a href="https://huanglei.rocks/posts/parquet/" target="_blank" rel="noopener">在之前的版本中，统计数据（min、max）只在 column 的 metadata 和 page header 当中，当读取 page 的时候，可以根据 page header 中的统计数据决定是否需要跳过这一页，但这样还是需要遍历文件中的每一页</a>。<br>  但是在 <a href="https://github.com/apache/parquet-format/blob/master/PageIndex.md" target="_blank" rel="noopener">https://github.com/apache/parquet-format/blob/master/PageIndex.md</a> 中，支持在 RowGroup 层面，用 ColumnIndex 通过列值定位到 page。然后 OffsetIndex 可以根据 page 的编号，找到在文件中的实际偏移。<br>  当然，这个优化下，仍然没有 key index，也仍然需要整个 page 都解压并且 decode。</li>
+</ul>
+</li>
+<li><p>Encoding 算法，并不是 adaptive 的<br> 比如有的列，可能一部分适合 dict，一部分适合 FSST 这样。</p>
+</li>
+</ol>
+<p>这能看出 Parquet 在存储设计上的一些问题：</p>
+<ol>
+<li>Row Group 太粗了，读放大大，随机访问性能拉胯<br> 仅仅为了读一行一列，都需要执行度 footer -&gt; 读 row group meta -&gt; 定位 column chunk -&gt; 解压 page -&gt; decode -&gt; scan 找到这一行一列。</li>
+<li>Page 中并不能实现随机读取<br> 例如有共享的字典或者其他 encoding。</li>
+</ol>
+<h2 id="Vortex"><a href="#Vortex" class="headerlink" title="Vortex"></a>Vortex</h2><ol>
+<li>Adaptive Encoding<br> 不同的 chunk、segment 甚至不同的区域都可以选择不同的 encoding 方式。<br> encoding 是 composable 的，比如可以做 delta + bitpacking。<br> 这里的一点 tradeoff 是宁愿损失一点压缩率，也要换取 execution efficiency。所以，诸如全局字典这种 Parquet 比较喜欢的手段，在 Vortex 中就被 tradeoff 掉了。当然，全局字典还有个问题是没法做 pruning 了。因为如果每个 Page 有自己的字典，那么直接读取这个字典就能知道某个值是否存在了。</li>
+<li>Random Access：Page 可以独立 decode</li>
+<li>Arrow-native</li>
+<li>更细粒度的统计信息<br> 对 <code>WHERE ts BETWEEN ...</code> 这样的查询更友好。</li>
+<li>更适合对象存储<ul>
+<li>metadata 更局部</li>
+<li>block 更独立</li>
+<li>seek 更少</li>
+<li>RTT 更少</li>
+</ul>
+</li>
+<li>更适合向量/稀疏数据</li>
+</ol>
+<h2 id="Avro"><a href="#Avro" class="headerlink" title="Avro"></a>Avro</h2><h2 id="Arrow"><a href="#Arrow" class="headerlink" title="Arrow"></a>Arrow</h2><h2 id="Lance"><a href="#Lance" class="headerlink" title="Lance"></a>Lance</h2><h2 id="LevelDB-RocksDB-的-WAL"><a href="#LevelDB-RocksDB-的-WAL" class="headerlink" title="LevelDB/RocksDB 的 WAL"></a>LevelDB/RocksDB 的 WAL</h2><p>见 <a href="/2021/04/23/leveldb-wal/">LevelDB 之 WAL</a>。</p>
 <h2 id="Dremel"><a href="#Dremel" class="headerlink" title="Dremel"></a>Dremel</h2><p>如下图所示，dremel 可以将 nesting 的格式，例如 protobuf 或者 json 拍平成适合列式存储的格式。那么多个 doc 就会被转换成一定数量的列。如下图所示，2 个 doc 被用 6 个列存储。我们不需要记录“内部节点”，只需要记录“叶子节点”就行。</p>
 <p><img src="/img/disk-struct/dremel_column_representation.jpg"></p>
 <p>容易看到，每个列的长度是不一样的。这是因为 nesting 格式主要的复杂点是存在 option 和 repeated 的情况。</p>
@@ -561,6 +621,7 @@
 </tr>
 </table>
 
+<h1 id="Table-Format"><a href="#Table-Format" class="headerlink" title="Table Format"></a>Table Format</h1><h2 id="Hive"><a href="#Hive" class="headerlink" title="Hive"></a>Hive</h2><h2 id="Iceberg"><a href="#Iceberg" class="headerlink" title="Iceberg"></a>Iceberg</h2><p>Iceberg 解决的问题是如何把对象存储上的一堆 Parquet 文件，组织成一个像数据库表一样可管理、可事务化、可演进的数据集。但是它本身并不是数据集，</p>
 <h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ol>
 <li><a href="https://parquet.apache.org/docs/file-format/" target="_blank" rel="noopener">https://parquet.apache.org/docs/file-format/</a></li>
 <li><a href="https://paper-notes.zhjwpku.com/datalayout/dremel.html" target="_blank" rel="noopener">https://paper-notes.zhjwpku.com/datalayout/dremel.html</a></li>
@@ -722,7 +783,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">266</span>
+                <span class="site-state-item-count">267</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -828,7 +889,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#设计要点"><span class="nav-number">1.</span> <span class="nav-text">设计要点</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#序列化和反序列化-serde"><span class="nav-number">1.1.</span> <span class="nav-text">序列化和反序列化(serde)</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#磁盘上的数据结构"><span class="nav-number">1.2.</span> <span class="nav-text">磁盘上的数据结构</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#常见格式"><span class="nav-number">2.</span> <span class="nav-text">常见格式</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Parquet"><span class="nav-number">2.1.</span> <span class="nav-text">Parquet</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Types"><span class="nav-number">2.1.1.</span> <span class="nav-text">Types</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Nested-Encoding"><span class="nav-number">2.1.2.</span> <span class="nav-text">Nested Encoding</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Column-chunks"><span class="nav-number">2.1.3.</span> <span class="nav-text">Column chunks</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#错误恢复"><span class="nav-number">2.1.4.</span> <span class="nav-text">错误恢复</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Avro"><span class="nav-number">2.2.</span> <span class="nav-text">Avro</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#LevelDB-RocksDB-的-WAL"><span class="nav-number">2.3.</span> <span class="nav-text">LevelDB/RocksDB 的 WAL</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Dremel"><span class="nav-number">2.4.</span> <span class="nav-text">Dremel</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">3.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#设计要点"><span class="nav-number">1.</span> <span class="nav-text">设计要点</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#序列化和反序列化-serde"><span class="nav-number">1.1.</span> <span class="nav-text">序列化和反序列化(serde)</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#所承载的数据类型和-workload"><span class="nav-number">1.2.</span> <span class="nav-text">所承载的数据类型和 workload</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#使用的-backend-存储"><span class="nav-number">1.3.</span> <span class="nav-text">使用的 backend 存储</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#压缩和编码方式"><span class="nav-number">1.4.</span> <span class="nav-text">压缩和编码方式</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#常见格式"><span class="nav-number">2.</span> <span class="nav-text">常见格式</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Parquet"><span class="nav-number">2.1.</span> <span class="nav-text">Parquet</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Types"><span class="nav-number">2.1.1.</span> <span class="nav-text">Types</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Nested-Encoding"><span class="nav-number">2.1.2.</span> <span class="nav-text">Nested Encoding</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Column-chunks"><span class="nav-number">2.1.3.</span> <span class="nav-text">Column chunks</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#错误恢复"><span class="nav-number">2.1.4.</span> <span class="nav-text">错误恢复</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Parquet-的缺点以及可能的优化"><span class="nav-number">2.1.5.</span> <span class="nav-text">Parquet 的缺点以及可能的优化</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Vortex"><span class="nav-number">2.2.</span> <span class="nav-text">Vortex</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Avro"><span class="nav-number">2.3.</span> <span class="nav-text">Avro</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Arrow"><span class="nav-number">2.4.</span> <span class="nav-text">Arrow</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Lance"><span class="nav-number">2.5.</span> <span class="nav-text">Lance</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#LevelDB-RocksDB-的-WAL"><span class="nav-number">2.6.</span> <span class="nav-text">LevelDB/RocksDB 的 WAL</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Dremel"><span class="nav-number">2.7.</span> <span class="nav-text">Dremel</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Table-Format"><span class="nav-number">3.</span> <span class="nav-text">Table Format</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Hive"><span class="nav-number">3.1.</span> <span class="nav-text">Hive</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Iceberg"><span class="nav-number">3.2.</span> <span class="nav-text">Iceberg</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">4.</span> <span class="nav-text">Reference</span></a></li></ol></div>
             
 
           </div>

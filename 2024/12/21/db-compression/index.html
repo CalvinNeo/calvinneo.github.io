@@ -91,18 +91,18 @@
 
 
 
-<meta name="description" content="主要包含了数据库中的压缩和编码技术。">
+<meta name="description" content="主要包含了数据库中的压缩和编码技术。 分离自《磁盘上的数据结构》。">
 <meta name="keywords" content="数据库,论文阅读">
 <meta property="og:type" content="article">
-<meta property="og:title" content="数据库中的压缩技术">
+<meta property="og:title" content="数据库中的压缩和编码技术">
 <meta property="og:url" content="http://www.calvinneo.com/2024/12/21/db-compression/index.html">
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
-<meta property="og:description" content="主要包含了数据库中的压缩和编码技术。">
+<meta property="og:description" content="主要包含了数据库中的压缩和编码技术。 分离自《磁盘上的数据结构》。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2026-05-12T12:57:15.627Z">
+<meta property="og:updated_time" content="2026-05-15T12:23:07.843Z">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="数据库中的压缩技术">
-<meta name="twitter:description" content="主要包含了数据库中的压缩和编码技术。">
+<meta name="twitter:title" content="数据库中的压缩和编码技术">
+<meta name="twitter:description" content="主要包含了数据库中的压缩和编码技术。 分离自《磁盘上的数据结构》。">
 
 
 
@@ -138,7 +138,7 @@
 
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5487541356791902"
      crossorigin="anonymous"></script>
-  <title>数据库中的压缩技术 | Calvin's Marbles</title>
+  <title>数据库中的压缩和编码技术 | Calvin's Marbles</title>
 </head>
 
 <body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
@@ -322,7 +322,7 @@
             
             
               
-                数据库中的压缩技术
+                数据库中的压缩和编码技术
               
             
           </h1>
@@ -378,18 +378,80 @@
 
       
         <p>主要包含了数据库中的压缩和编码技术。</p>
+<p><a href="/2025/02/09/data-structure-on-disk/">分离自《磁盘上的数据结构》</a>。</p>
 <a id="more"></a>
 
-<h1 id="常见的编码"><a href="#常见的编码" class="headerlink" title="常见的编码"></a>常见的编码</h1><h2 id="Dictionary-Encoding"><a href="#Dictionary-Encoding" class="headerlink" title="Dictionary Encoding"></a>Dictionary Encoding</h2><h2 id="Run-Length-Encoding-RLE"><a href="#Run-Length-Encoding-RLE" class="headerlink" title="Run-Length Encoding, RLE"></a>Run-Length Encoding, RLE</h2><p>重复出现的数字用重复次数代替。</p>
+<h1 id="常见的编码-encoding-方法"><a href="#常见的编码-encoding-方法" class="headerlink" title="常见的编码(encoding)方法"></a>常见的编码(encoding)方法</h1><h2 id="Dictionary-Encoding"><a href="#Dictionary-Encoding" class="headerlink" title="Dictionary Encoding"></a>Dictionary Encoding</h2><h3 id="布隆过滤器-Bloomfilter"><a href="#布隆过滤器-Bloomfilter" class="headerlink" title="布隆过滤器(Bloomfilter)"></a>布隆过滤器(Bloomfilter)</h3><p>功能性上，字典是布隆过滤器的超集，但 Bloomfilter 有如下优势：</p>
+<ul>
+<li>高基数场景下，字典本身会占用很多内存，因此只能 fallback 到普通存储，但是 Bloomfilter 仍然可以运行</li>
+<li>布隆过滤器是定长且紧凑，因此天生适合 OSS 场景</li>
+</ul>
+<p>总的来说，对于低基数，确实可以只使用字典。但是对于中高技术，Bloomfilter 的优势会越来越明显。</p>
+<h3 id="关于全局字典"><a href="#关于全局字典" class="headerlink" title="关于全局字典"></a>关于全局字典</h3><p>优势：</p>
+<ol>
+<li>对 Late Materialization 友好<br> 因为全表或全文件的 ID 是完全一致的。在进行 GROUP BY、DISTINCT 或 JOIN 时，计算引擎完全不需要看原始字符串，直接对底层的整数 ID 进行哈希、比较和聚合。只有在最终向用户展示结果的那一刻，才查一次全局字典。<br> 而如果使用局部字典，则可能需要提前物化。或者引入一个字典对齐（Dictionary Unification）的转换步骤。</li>
+<li>极致的全局压缩率<br> 消除了一切跨块的字典数据冗余。对于低基数但全局分布均匀的字段（如枚举值、性别、状态码），全局字典体积最小。</li>
+<li>支持更快的谓词下推（Predicate Pushdown）<br> 查询 <code>WHERE 城市 = &#39;北京&#39;</code> 时，只需要在全局字典中查到 <code>&quot;北京&quot; -&gt; ID 5</code>。然后所有数据块的过滤条件直接变成 <code>WHERE ID = 5</code>，匹配极快。</li>
+</ol>
+<p>劣势：</p>
+<ol>
+<li>构建成本极高（Two-Pass 限制）<br> 在写入数据前，必须先扫描全量数据以生成完整的全局字典。</li>
+<li>字典体积爆炸风险（Global Dictionary Bloat）<br> 如果列的基数随着时间推移不断变大（例如：用户 ID、设备 UUID），全局字典会变得无比巨大。</li>
+<li>破坏数据局部性优势<br> 如果某些值只在特定的时间段出现，全局字典依然要把它们塞进那张大表里，导致原本可以只用 1 字节（Local ID）表示的数据，被迫用 2 字节或 4 字节（Global ID）表示。</li>
+<li>没法做 pruning<br> 因为如果每个 Page 有自己的字典，那么直接读取这个字典就能知道某个值是否存在了。</li>
+</ol>
+<h2 id="Run-Length-Encoding-RLE"><a href="#Run-Length-Encoding-RLE" class="headerlink" title="Run-Length Encoding, RLE"></a>Run-Length Encoding, RLE</h2><p>重复出现的数字用重复次数代替。</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">AAAAABB</span><br><span class="line">==&gt;</span><br><span class="line">A5B2</span><br></pre></td></tr></table></figure>
 
-<h2 id="Bitmap-Encoding"><a href="#Bitmap-Encoding" class="headerlink" title="Bitmap Encoding"></a>Bitmap Encoding</h2><p>在布尔类型等 low cardinality 数据列中效率好。对位操作很友好。</p>
+<h2 id="Variable-length-Encoding"><a href="#Variable-length-Encoding" class="headerlink" title="Variable-length Encoding"></a>Variable-length Encoding</h2><p>优势：</p>
+<ul>
+<li>对非均匀分布极其友好：如果 Delta 结果中存在大量极小值（如 0, 1, -1），同时混有少量极大值（异常跳跃），变长编码能对小值实现极致压缩（只占 1 字节），且完美兼容大值。</li>
+<li>无需前瞻元数据：每个数字的长度信息都嵌入在其自身的字节中，属于流式编码，不需要提前计算整块数据的最大值，适合流式处理。</li>
+</ul>
+<p>劣势：</p>
+<ul>
+<li>CPU 分支预测失败率高：解码时必须逐个字节解析标志位，导致大量的 if-else 分支判断。在现代 CPU 上，这会引发严重的分支预测失败，导致流水线停顿。</li>
+<li>无法利用 SIMD 加速：由于每个数字的字节长度不固定，数据之间存在位置依赖。</li>
+</ul>
+<h3 id="Prefix-Encoding-Huffman-Encoding"><a href="#Prefix-Encoding-Huffman-Encoding" class="headerlink" title="Prefix Encoding / Huffman Encoding"></a>Prefix Encoding / Huffman Encoding</h3><h2 id="Bitpacking"><a href="#Bitpacking" class="headerlink" title="Bitpacking"></a>Bitpacking</h2><blockquote>
+<p>在现代时序数据库（如 InfluxDB、ClickHouse）和大数据列存（如 Parquet、ORC）中，Delta 编码后的首选通常是 Bit-packing。<br>为了解决 Bit-packing 害怕离群值的缺点，通常会搭配 FOR（Frame of Reference） 或 Patched Item 机制：将异常放大的差值单独剥离到另一个数组存储，而主体继续保持极低位宽的 Bit-packing。</p>
+</blockquote>
+<p>以数据块（Block，如 32 或 64 个数字）为单位，找出该块内最大绝对值所需的固定位数 b（Bit-width），然后所有数字统一用 b 个 bit 紧凑存储。</p>
+<p>优势：</p>
+<ul>
+<li>吞吐量吞吐量极高（CPU 极其友好）<ul>
+<li>读性能是 O(1) 的<br>  解码时没有任何条件分支，只有固定的位移（Shift）和位与（And）操作。<br>  只要知道 index，就能推出 offset。</li>
+<li>所有数字在块内对齐且长度完全一致，完美支持 SIMD</li>
+</ul>
+</li>
+<li>向量化：可以利用 SIMD 指令（如 AVX-512）一次性并行解码 16 或 32 个数字，解码速度通常比变长编码快一个数量级。</li>
+</ul>
+<p>劣势：</p>
+<ul>
+<li>极易受到“离群值/异常值”的惩罚（Outlier Vulnerability）<br>  解决该痛点通常需引入 FOR/FastPFOR 框架</li>
+<li>块级延迟与元数据开销<br>  必须攒满一个 Block 才能计算最大位宽并写入，且每个块需要额外存储位宽 b 的元数据。</li>
+</ul>
+<h2 id="Bitmap-Encoding"><a href="#Bitmap-Encoding" class="headerlink" title="Bitmap Encoding"></a>Bitmap Encoding</h2><p>为列中的每一个唯一值（Category）都单独创建一个由 0 和 1 组成的位数组（Bitmap）。位数组的长度等于数据的总行数。如果第 i 行等于该值，则第 j 个 bit 置为 1，否则置为 0。</p>
+<p>优势：</p>
+<ol>
+<li>在布尔类型等 low cardinality 数据列中效率好。</li>
+<li>对位操作很友好，因此适合处理很多 AND OR 的这种复杂条件。特别地，还能用上 SIMD 来加速。</li>
+<li>对于等值查询比较友好。</li>
+</ol>
+<p>劣势：</p>
+<ol>
+<li>对基数很敏感，如果基数高，特别是还有很大的数字，那么开销就很大</li>
+</ol>
+<p>对比字典，字典的优势在：</p>
+<ol>
+<li>对聚合操作如 GROUP BY 等更友好。</li>
+<li>对高基数的情况，效果没有 Bitmap 那么差。</li>
+</ol>
 <h2 id="Delta-Encoding"><a href="#Delta-Encoding" class="headerlink" title="Delta Encoding"></a>Delta Encoding</h2><p>计算连续值之间的差值。</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">9999 10000 9998</span><br><span class="line">==&gt;</span><br><span class="line">9999 +1 -2</span><br></pre></td></tr></table></figure>
 
 <h2 id="ZigZag-Encoding"><a href="#ZigZag-Encoding" class="headerlink" title="ZigZag Encoding"></a>ZigZag Encoding</h2><p>主要解决负数的补码前导零太多影响压缩的问题。</p>
 <p>把负数最前面的符号位，移动到尾部。</p>
-<h2 id="Prefix-Encoding-Huffman-Encoding"><a href="#Prefix-Encoding-Huffman-Encoding" class="headerlink" title="Prefix Encoding / Huffman Encoding"></a>Prefix Encoding / Huffman Encoding</h2><p>使用短编码表示高频数据，长编码表示低频数据。</p>
 <h1 id="常见的压缩算法"><a href="#常见的压缩算法" class="headerlink" title="常见的压缩算法"></a>常见的压缩算法</h1><h2 id="LZ4"><a href="#LZ4" class="headerlink" title="LZ4"></a>LZ4</h2><h2 id="LZMA-Lempel-Ziv-Markov-Chain-Algorithm"><a href="#LZMA-Lempel-Ziv-Markov-Chain-Algorithm" class="headerlink" title="LZMA(Lempel-Ziv-Markov Chain Algorithm)"></a>LZMA(Lempel-Ziv-Markov Chain Algorithm)</h2><h2 id="Zstd"><a href="#Zstd" class="headerlink" title="Zstd"></a>Zstd</h2><h2 id="Snappy"><a href="#Snappy" class="headerlink" title="Snappy"></a>Snappy</h2><h2 id="Zlib"><a href="#Zlib" class="headerlink" title="Zlib"></a>Zlib</h2><h2 id="GZip"><a href="#GZip" class="headerlink" title="GZip"></a>GZip</h2>
       
     </div>
@@ -546,7 +608,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">266</span>
+                <span class="site-state-item-count">267</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -652,7 +714,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#常见的编码"><span class="nav-number">1.</span> <span class="nav-text">常见的编码</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Dictionary-Encoding"><span class="nav-number">1.1.</span> <span class="nav-text">Dictionary Encoding</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Run-Length-Encoding-RLE"><span class="nav-number">1.2.</span> <span class="nav-text">Run-Length Encoding, RLE</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Bitmap-Encoding"><span class="nav-number">1.3.</span> <span class="nav-text">Bitmap Encoding</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Delta-Encoding"><span class="nav-number">1.4.</span> <span class="nav-text">Delta Encoding</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#ZigZag-Encoding"><span class="nav-number">1.5.</span> <span class="nav-text">ZigZag Encoding</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Prefix-Encoding-Huffman-Encoding"><span class="nav-number">1.6.</span> <span class="nav-text">Prefix Encoding / Huffman Encoding</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#常见的压缩算法"><span class="nav-number">2.</span> <span class="nav-text">常见的压缩算法</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#LZ4"><span class="nav-number">2.1.</span> <span class="nav-text">LZ4</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#LZMA-Lempel-Ziv-Markov-Chain-Algorithm"><span class="nav-number">2.2.</span> <span class="nav-text">LZMA(Lempel-Ziv-Markov Chain Algorithm)</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Zstd"><span class="nav-number">2.3.</span> <span class="nav-text">Zstd</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Snappy"><span class="nav-number">2.4.</span> <span class="nav-text">Snappy</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Zlib"><span class="nav-number">2.5.</span> <span class="nav-text">Zlib</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#GZip"><span class="nav-number">2.6.</span> <span class="nav-text">GZip</span></a></li></ol></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#常见的编码-encoding-方法"><span class="nav-number">1.</span> <span class="nav-text">常见的编码(encoding)方法</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Dictionary-Encoding"><span class="nav-number">1.1.</span> <span class="nav-text">Dictionary Encoding</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#布隆过滤器-Bloomfilter"><span class="nav-number">1.1.1.</span> <span class="nav-text">布隆过滤器(Bloomfilter)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#关于全局字典"><span class="nav-number">1.1.2.</span> <span class="nav-text">关于全局字典</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Run-Length-Encoding-RLE"><span class="nav-number">1.2.</span> <span class="nav-text">Run-Length Encoding, RLE</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Variable-length-Encoding"><span class="nav-number">1.3.</span> <span class="nav-text">Variable-length Encoding</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Prefix-Encoding-Huffman-Encoding"><span class="nav-number">1.3.1.</span> <span class="nav-text">Prefix Encoding / Huffman Encoding</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Bitpacking"><span class="nav-number">1.4.</span> <span class="nav-text">Bitpacking</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Bitmap-Encoding"><span class="nav-number">1.5.</span> <span class="nav-text">Bitmap Encoding</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Delta-Encoding"><span class="nav-number">1.6.</span> <span class="nav-text">Delta Encoding</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#ZigZag-Encoding"><span class="nav-number">1.7.</span> <span class="nav-text">ZigZag Encoding</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#常见的压缩算法"><span class="nav-number">2.</span> <span class="nav-text">常见的压缩算法</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#LZ4"><span class="nav-number">2.1.</span> <span class="nav-text">LZ4</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#LZMA-Lempel-Ziv-Markov-Chain-Algorithm"><span class="nav-number">2.2.</span> <span class="nav-text">LZMA(Lempel-Ziv-Markov Chain Algorithm)</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Zstd"><span class="nav-number">2.3.</span> <span class="nav-text">Zstd</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Snappy"><span class="nav-number">2.4.</span> <span class="nav-text">Snappy</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Zlib"><span class="nav-number">2.5.</span> <span class="nav-text">Zlib</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#GZip"><span class="nav-number">2.6.</span> <span class="nav-text">GZip</span></a></li></ol></li></ol></div>
             
 
           </div>
@@ -818,7 +880,7 @@
         var disqus_config = function () {
           this.page.url = 'http://www.calvinneo.com/2024/12/21/db-compression/';
           this.page.identifier = '2024/12/21/db-compression/';
-          this.page.title = '数据库中的压缩技术';
+          this.page.title = '数据库中的压缩和编码技术';
         };
         var d = document, s = d.createElement('script');
         s.src = 'https://calvinneo.disqus.com/embed.js';

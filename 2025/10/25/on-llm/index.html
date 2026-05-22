@@ -99,7 +99,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="主要关注：  LLM 的基础原理 Transformer 的架构 KVCache  基本来自于我的问题，以及我对通过 chat 学习到的东西的总结，由 AI 整理。完整版我放在腾讯文档中，这里选取一些方便摘录的写成博客。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2026-05-09T04:14:12.392Z">
+<meta property="og:updated_time" content="2026-05-14T13:03:51.817Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="LLM 基础概念和核心问题整理">
 <meta name="twitter:description" content="主要关注：  LLM 的基础原理 Transformer 的架构 KVCache  基本来自于我的问题，以及我对通过 chat 学习到的东西的总结，由 AI 整理。完整版我放在腾讯文档中，这里选取一些方便摘录的写成博客。">
@@ -476,7 +476,51 @@
 <li>无状态的 vLLM</li>
 <li>多级缓存：VRAM（显存） -&gt; DRAM（内存） -&gt; 3FS（高速网络 SSD）</li>
 </ul>
-<h2 id="前缀和位置编码"><a href="#前缀和位置编码" class="headerlink" title="前缀和位置编码"></a>前缀和位置编码</h2><p>TODO</p>
+<h2 id="前缀"><a href="#前缀" class="headerlink" title="前缀"></a>前缀</h2><h3 id="关于前缀"><a href="#关于前缀" class="headerlink" title="关于前缀"></a>关于前缀</h3><ol>
+<li>最佳实践：调整 Prompt 结构（把“死”的放前面）<ol>
+<li>失效做法： [用户闲聊] + [系统指令] + [长财报]（用户一换，缓存全崩）。</li>
+<li>优化做法： [长财报] + [系统指令] + [用户闲聊]。</li>
+</ol>
+</li>
+<li>基数树（Radix Tree）管理机制<ol>
+<li>如果你的输入是 A + B（A 是闲聊，B 是财报），它会先找 A 的缓存。</li>
+<li>虽然它发现 A + B 不能直接复用 C + B 的缓存，但如果系统发现大量请求都有共同的 B，它会尝试在内部进行“多级缓存”匹配。</li>
+</ol>
+</li>
+<li>针对位置编码的魔改：相对位置编码（RoPE）与偏移</li>
+<li>DeepSeek 的特殊方案：跨序列的注意力（Multi-Head Latent Attention）</li>
+</ol>
+<h2 id="距离和位置编码"><a href="#距离和位置编码" class="headerlink" title="距离和位置编码"></a>距离和位置编码</h2><p>LLM 对“距离”的感知是弱结构化、统计性的，而不是显式离散结构化的：</p>
+<ol>
+<li><p>Transformer 本质上是“全连接注意力”</p>
+<ol>
+<li>任意 token 都可以直接看到任意 token</li>
+<li>不像 RNN 那样必须一步一步传递</li>
+<li>所以模型天然没有“近的更近、远的更远”这种 inductive bias</li>
+<li>如下所示，A attention 到 B 和 E 的距离是一样的 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">A B C D E</span><br></pre></td></tr></table></figure></li>
+</ol>
+</li>
+<li><p>Position Embedding 只是“补充位置信息”<br> 因为 attention 本身没有顺序概念，所以必须人为加 position encoding。诸如 <code>token_embedding + position_embedding</code> 或者 RoPE 等都是一种形式。</p>
+</li>
+<li><p>它“知道顺序”，但不是算法式知道</p>
+ <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Tom gave Jerry a book because he trusted him.</span><br></pre></td></tr></table></figure>
+
+<p> 大模型能够语义地知道 Tom 这里是 he。但是它不是通过 Tom – he，Jerry – him 这样的位置对应关系知道的。</p>
+</li>
+</ol>
+<p>随着上下文变长：</p>
+<ul>
+<li>nesting depth 增大</li>
+<li>distribution shift 出现</li>
+<li>模型就容易崩</li>
+</ul>
+<p>这也是下面这些比较难做的原因：</p>
+<ul>
+<li>long-context reasoning</li>
+<li>counting</li>
+<li>exact matching</li>
+</ul>
+<h3 id="Lost-in-the-Middle-问题"><a href="#Lost-in-the-Middle-问题" class="headerlink" title="Lost in the Middle 问题"></a>Lost in the Middle 问题</h3><p>指的是 Transformer 对“长距离结构”和“中间位置”缺乏稳定位置感的一种表现。</p>
 <h1 id="Transformer"><a href="#Transformer" class="headerlink" title="Transformer"></a>Transformer</h1><h2 id="Attention-机制"><a href="#Attention-机制" class="headerlink" title="Attention 机制"></a>Attention 机制</h2><p>NLP 对 token 序列 X 的三种编码方式：</p>
 <ul>
 <li><p>RNN<br>  RNN 是递归的结构，所以只能串行计算。</p>
@@ -762,7 +806,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">266</span>
+                <span class="site-state-item-count">267</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -868,7 +912,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#LLM-的基础理论-AI-Infra"><span class="nav-number">1.</span> <span class="nav-text">LLM 的基础理论(AI Infra)</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#大模型的计算复杂度"><span class="nav-number">1.1.</span> <span class="nav-text">大模型的计算复杂度</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Prefill-和-Decode"><span class="nav-number">1.1.1.</span> <span class="nav-text">Prefill 和 Decode</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#关于注意力头"><span class="nav-number">1.1.2.</span> <span class="nav-text">关于注意力头</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#PagedAttention"><span class="nav-number">1.2.</span> <span class="nav-text">PagedAttention</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Hybrid-Sparse-Attention"><span class="nav-number">1.2.1.</span> <span class="nav-text">Hybrid Sparse Attention</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#vLLM-和训推存储底座"><span class="nav-number">1.3.</span> <span class="nav-text">vLLM 和训推存储底座</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#前缀和位置编码"><span class="nav-number">1.4.</span> <span class="nav-text">前缀和位置编码</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Transformer"><span class="nav-number">2.</span> <span class="nav-text">Transformer</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Attention-机制"><span class="nav-number">2.1.</span> <span class="nav-text">Attention 机制</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Q、K、V"><span class="nav-number">2.1.1.</span> <span class="nav-text">Q、K、V</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Self-Attention"><span class="nav-number">2.1.2.</span> <span class="nav-text">Self-Attention</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Multi-Head-Attention"><span class="nav-number">2.1.3.</span> <span class="nav-text">Multi-Head Attention</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#KVCache"><span class="nav-number">2.2.</span> <span class="nav-text">KVCache</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Why"><span class="nav-number">2.2.1.</span> <span class="nav-text">Why</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">3.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#LLM-的基础理论-AI-Infra"><span class="nav-number">1.</span> <span class="nav-text">LLM 的基础理论(AI Infra)</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#大模型的计算复杂度"><span class="nav-number">1.1.</span> <span class="nav-text">大模型的计算复杂度</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Prefill-和-Decode"><span class="nav-number">1.1.1.</span> <span class="nav-text">Prefill 和 Decode</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#关于注意力头"><span class="nav-number">1.1.2.</span> <span class="nav-text">关于注意力头</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#PagedAttention"><span class="nav-number">1.2.</span> <span class="nav-text">PagedAttention</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Hybrid-Sparse-Attention"><span class="nav-number">1.2.1.</span> <span class="nav-text">Hybrid Sparse Attention</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#vLLM-和训推存储底座"><span class="nav-number">1.3.</span> <span class="nav-text">vLLM 和训推存储底座</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#前缀"><span class="nav-number">1.4.</span> <span class="nav-text">前缀</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#关于前缀"><span class="nav-number">1.4.1.</span> <span class="nav-text">关于前缀</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#距离和位置编码"><span class="nav-number">1.5.</span> <span class="nav-text">距离和位置编码</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Lost-in-the-Middle-问题"><span class="nav-number">1.5.1.</span> <span class="nav-text">Lost in the Middle 问题</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Transformer"><span class="nav-number">2.</span> <span class="nav-text">Transformer</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Attention-机制"><span class="nav-number">2.1.</span> <span class="nav-text">Attention 机制</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Q、K、V"><span class="nav-number">2.1.1.</span> <span class="nav-text">Q、K、V</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Self-Attention"><span class="nav-number">2.1.2.</span> <span class="nav-text">Self-Attention</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Multi-Head-Attention"><span class="nav-number">2.1.3.</span> <span class="nav-text">Multi-Head Attention</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#KVCache"><span class="nav-number">2.2.</span> <span class="nav-text">KVCache</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Why"><span class="nav-number">2.2.1.</span> <span class="nav-text">Why</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">3.</span> <span class="nav-text">Reference</span></a></li></ol></div>
             
 
           </div>
