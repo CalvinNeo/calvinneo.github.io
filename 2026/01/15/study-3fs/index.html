@@ -100,7 +100,7 @@
 <meta property="og:description" content="学习 3FS。">
 <meta property="og:locale" content="zh-Hans">
 <meta property="og:image" content="http://www.calvinneo.com/img/3fs/kvcache-complexity.png">
-<meta property="og:updated_time" content="2026-05-09T04:03:07.200Z">
+<meta property="og:updated_time" content="2026-05-27T13:26:57.728Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="3FS 学习">
 <meta name="twitter:description" content="学习 3FS。">
@@ -417,7 +417,7 @@
 <li>Ior<br>  user process 和 native client 通过这个 ring buffer 进行交互。具体方式类似于 io_uring。<br>  请求会被按照 io_depth 攒批执行，不同的 batch 的执行是并行的。</li>
 </ul>
 <h2 id="Metadata-存储"><a href="#Metadata-存储" class="headerlink" title="Metadata 存储"></a>Metadata 存储</h2><h3 id="chunk-的分布"><a href="#chunk-的分布" class="headerlink" title="chunk 的分布"></a>chunk 的分布</h3><p>文件按 chunk 为粒度，被条带化到多个 replication chain 中。<br>创建新文件的时候，会根据 stripe size，使用 round robin 的方式，选择一系列的 chain。选出来的这些 chain，会随机分给不同的 chunk 写入。</p>
-<h3 id="存储-file-atributes"><a href="#存储-file-atributes" class="headerlink" title="存储 file atributes"></a>存储 file atributes</h3><p>为什么 3FS 的 inode 里的 length 会不准确？因为写路径走的是 CRAQ，而 inode 是在 metadata service 里面的。如果每次写操作完都更新一下 metadata，那么会多一次 metadata RTT，写放大严重，吞吐和延迟都会变差。<br>但是如果 metadata 迟迟不更新，例如是 100mb，而客户端写到 120mb 就挂了，此时，虽然数据已经通过 CRAQ 持久化到 chunk 存储了，但因为读的时候从 metadata 获得的长度偏小，所以还是在效果上丢失数据。<br>一种方式是按照 interval 上报更新 metadata，但这就存在不一致窗口。不过先考虑容灾问题，大概有两个方案：</p>
+<h3 id="存储-file-attributes"><a href="#存储-file-attributes" class="headerlink" title="存储 file attributes"></a>存储 file attributes</h3><p>为什么 3FS 的 inode 里的 length 会不准确？因为写路径走的是 CRAQ，而 inode 是在 metadata service 里面的。如果每次写操作完都更新一下 metadata，那么会多一次 metadata RTT，写放大严重，吞吐和延迟都会变差。<br>但是如果 metadata 迟迟不更新，例如是 100mb，而客户端写到 120mb 就挂了，此时，虽然数据已经通过 CRAQ 持久化到 chunk 存储了，但因为读的时候从 metadata 获得的长度偏小，所以还是在效果上丢失数据。<br>一种方式是按照 interval 上报更新 metadata，但这就存在不一致窗口。不过先考虑容灾问题，大概有两个方案：</p>
 <ol>
 <li>重启之后，从 chunk 存储中恢复数据，并由此更新 metadata。但是从 chunk 扫描数据恢复的代价很大</li>
 <li>3FS 的设计是由 client 按照 interval 上报 max writer position，因为 client 上报的 position 一定是已经被 tail 提交了的，所以是安全的。但是如果 client 长期丢失，那么 gap 就得通过第一种方式补齐了。</li>
@@ -696,7 +696,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">267</span>
+                <span class="site-state-item-count">268</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -709,7 +709,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">155</span>
+                <span class="site-state-item-count">156</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -802,7 +802,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#原理"><span class="nav-number">1.</span> <span class="nav-text">原理</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#解决什么问题"><span class="nav-number">1.1.</span> <span class="nav-text">解决什么问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#3FS-的方案"><span class="nav-number">1.2.</span> <span class="nav-text">3FS 的方案</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#设计-–-design-notes"><span class="nav-number">2.</span> <span class="nav-text">设计 – design notes</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#需要解决的问题"><span class="nav-number">2.1.</span> <span class="nav-text">需要解决的问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Metadata-存储"><span class="nav-number">2.2.</span> <span class="nav-text">Metadata 存储</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#chunk-的分布"><span class="nav-number">2.2.1.</span> <span class="nav-text">chunk 的分布</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#存储-file-atributes"><span class="nav-number">2.2.2.</span> <span class="nav-text">存储 file atributes</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Chunk-存储"><span class="nav-number">2.3.</span> <span class="nav-text">Chunk 存储</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Balanced-traffic-during-recovery"><span class="nav-number">2.3.1.</span> <span class="nav-text">Balanced traffic during recovery</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Data-replication"><span class="nav-number">2.3.2.</span> <span class="nav-text">Data replication</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#实现"><span class="nav-number">3.</span> <span class="nav-text">实现</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Chain-replication"><span class="nav-number">3.1.</span> <span class="nav-text">Chain replication</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">4.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#原理"><span class="nav-number">1.</span> <span class="nav-text">原理</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#解决什么问题"><span class="nav-number">1.1.</span> <span class="nav-text">解决什么问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#3FS-的方案"><span class="nav-number">1.2.</span> <span class="nav-text">3FS 的方案</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#设计-–-design-notes"><span class="nav-number">2.</span> <span class="nav-text">设计 – design notes</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#需要解决的问题"><span class="nav-number">2.1.</span> <span class="nav-text">需要解决的问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Metadata-存储"><span class="nav-number">2.2.</span> <span class="nav-text">Metadata 存储</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#chunk-的分布"><span class="nav-number">2.2.1.</span> <span class="nav-text">chunk 的分布</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#存储-file-attributes"><span class="nav-number">2.2.2.</span> <span class="nav-text">存储 file attributes</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Chunk-存储"><span class="nav-number">2.3.</span> <span class="nav-text">Chunk 存储</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Balanced-traffic-during-recovery"><span class="nav-number">2.3.1.</span> <span class="nav-text">Balanced traffic during recovery</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Data-replication"><span class="nav-number">2.3.2.</span> <span class="nav-text">Data replication</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#实现"><span class="nav-number">3.</span> <span class="nav-text">实现</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Chain-replication"><span class="nav-number">3.1.</span> <span class="nav-text">Chain replication</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">4.</span> <span class="nav-text">Reference</span></a></li></ol></div>
             
 
           </div>
