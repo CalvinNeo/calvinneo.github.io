@@ -99,7 +99,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="来自：  jemalloc 的实现 分布式架构和高并发相关场景">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2025-12-10T15:20:23.312Z">
+<meta property="og:updated_time" content="2026-09-20T14:06:23.005Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="内存领域知识">
 <meta name="twitter:description" content="来自：  jemalloc 的实现 分布式架构和高并发相关场景">
@@ -384,17 +384,72 @@
 </ul>
 <a id="more"></a>
 
-<h1 id="OOMKiller"><a href="#OOMKiller" class="headerlink" title="OOMKiller"></a>OOMKiller</h1><h2 id="Linux-的-overcommit-机制"><a href="#Linux-的-overcommit-机制" class="headerlink" title="Linux 的 overcommit 机制"></a>Linux 的 overcommit 机制</h2><ul>
-<li>如果关闭 overcommit 机制，那么大部分的 OOM 现象将会消失，因为系统分配内存会更加保守</li>
-<li>如果开启 overcommit 机制，会根据物理内存、swap 和 overcommit_ratio 判断是否能够分配出内存，依然可能会分配失败  <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">CommitLimit = [swap size] + [RAM size] * vm.overcommit_ratio / 100</span><br></pre></td></tr></table></figure></li>
+<h1 id="术语"><a href="#术语" class="headerlink" title="术语"></a>术语</h1><ul>
+<li>VA (Virtual Address)：进程虚拟地址空间中的一个字节位置</li>
+<li>PA (Physical Address)：实际物理地址空间中的一个字节位置</li>
+<li>VMA (Virtual Memory Area)：描述连续用户虚拟地址区间及访问规则的内核对象</li>
+<li>PTE (Page Table Entry)：末级页表项，包含页帧、权限或软件特殊状态</li>
+<li>PFN (Page Frame Number)：物理页帧号，不包含页内偏移</li>
 </ul>
-<h1 id="mmap"><a href="#mmap" class="headerlink" title="mmap"></a>mmap</h1><h2 id="mmap-1"><a href="#mmap-1" class="headerlink" title="mmap"></a>mmap</h2><p>几个 flag：</p>
+<p>下面是几个物理内存相关的指标：</p>
 <ul>
-<li>MAP_SHARED</li>
-<li>MAP_SHARED_VALIDATE </li>
-<li>MAP_PRIVATE<br>  创建一个 private 的 COW mapping。对这个 mapping 的修改不会对其他进程可见，也不会写到下面的文件里面。<br>  It is unspecified whether changes made to the file after the mmap() call are visible in the mapped region.</li>
+<li>RSS (Resident Set Size)<br>  RSS 可以粗略理解为“该进程当前驻留在物理内存中的页面总量”，但它是进程视角的记账值，不等于进程独占的物理内存，也不等于系统实际能释放多少内存。<br>  例如，同一个 4KB 文件页被两个进程映射：<ul>
+<li>两个进程的 RSS 都可能各增加 4KB；</li>
+<li>系统实际只有一个 4KB 物理页；</li>
+<li>一个进程 munmap 后，其 RSS 减少 4KB；</li>
+<li>但物理页仍可能被另一个进程使用，或者留在 page cache 中。<br>因此：<br>RSS 下降 = 该物理页不再计入这个进程的驻留集。<br>RSS 下降 ≠ 对应物理页一定已经归还给空闲内存。<br>对于非 SHARED 的 ANONYMOUS，munmap 导致的 RSS 下降通常确实对应物理页被释放；但对文件页、共享页、fork 后的 CoW 页就不能这样推断。若关心共享后的真实占用，可以结合看 PSS。</li>
 </ul>
-<h3 id="mmap-和内存释放"><a href="#mmap-和内存释放" class="headerlink" title="mmap 和内存释放"></a>mmap 和内存释放</h3><h4 id="匿名映射"><a href="#匿名映射" class="headerlink" title="匿名映射"></a>匿名映射</h4><p>内存紧张时：</p>
+</li>
+<li>PSS 按比例分担共享库的物理内存</li>
+<li>USS 不包含共享库使用的物理内存</li>
+</ul>
+<h1 id="mmap-系列"><a href="#mmap-系列" class="headerlink" title="mmap 系列"></a>mmap 系列</h1><h2 id="mmap"><a href="#mmap" class="headerlink" title="mmap"></a>mmap</h2><p>mmap 负责分配连续的虚拟地址区间 VMA。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> *<span class="title">mmap</span><span class="params">(<span class="keyword">size_t</span> length;</span></span></span><br><span class="line"><span class="function"><span class="params">          <span class="keyword">void</span> addr[length], <span class="keyword">size_t</span> length, <span class="keyword">int</span> prot, <span class="keyword">int</span> flags,</span></span></span><br><span class="line"><span class="function"><span class="params">          <span class="keyword">int</span> fd, <span class="keyword">off_t</span> offset)</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">munmap</span><span class="params">(<span class="keyword">size_t</span> length;</span></span></span><br><span class="line"><span class="function"><span class="params">          <span class="keyword">void</span> addr[length], <span class="keyword">size_t</span> length)</span></span>;</span><br></pre></td></tr></table></figure>
+
+<p>几个参数：</p>
+<ul>
+<li>addr：是个 VA，NULL 让内核选择，非 NULL 通常只是提示<br>  不一定能满足的原因是：<ul>
+<li>mmap_min_addr</li>
+<li>[addr, addr + length) 与堆、栈、动态库或已有 mmap 的 VMA 重叠</li>
+<li>对齐不满足，不对齐 4KB 或者更大的页（HugeTLB）</li>
+<li>不正确的地址范围</li>
+</ul>
+</li>
+<li>prot：PROT_NONE/READ/WRITE/EXEC</li>
+<li>offset：映射从文件的哪个字节开始，普通映射要求是系统页大小的整数倍</li>
+</ul>
+<p>几个 flag：</p>
+<ul>
+<li><p>MAP_SHARED<br>  对其他进程可见。</p>
+</li>
+<li><p>MAP_SHARED_VALIDATE </p>
+</li>
+<li><p>MAP_PRIVATE<br>  创建一个 private 的 COW mapping，即写时复制。如果希望能真正双向共享，需要用 MAP_SHARED。<br>  It is unspecified whether changes made to the file after the <code>mmap()</code> call are visible in the mapped region.</p>
+</li>
+<li><p>MAP_FIXED_NOREPLACE<br>  类似于 MAP_FIXED，但是如果 overlap 了，会 EEXIST。</p>
+</li>
+<li><p>MAP_FIXED<br>  直接在 addr 分配，而不是将 addr 作为 hint。addr 必须对齐。<br>  If the memory region specified by addr and length overlaps pages of any existing mapping(s), then the overlapped part of the existing mapping(s) will be discarded.  If the specified address cannot be used, mmap() will fail.<br>  下面展示了一个 pitfall</p>
+  <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">时刻1: 线程A 读 /proc/pid/maps</span><br><span class="line">        → 发现地址范围 [X, Y) 空闲,决定稍后映射它</span><br><span class="line"></span><br><span class="line">时刻2: 线程B 做了一件内部会分配内存的事</span><br><span class="line">        → 比如 dlopen() 加载一个 .so</span><br><span class="line">        → 内核(或用随机地址的 mmap)恰好选了 [X, Y) 的一部分,把它占了</span><br><span class="line"></span><br><span class="line">时刻3: 线程A 调用 mmap(addr=X, MAP_FIXED)</span><br><span class="line">        → 内核发现 [X, Y) 已被线程B的映射占用</span><br><span class="line">        → MAP_FIXED 的语义是&quot;强制覆盖&quot;,内核直接替换了线程B的映射</span><br><span class="line">        → 线程B的内存被摧毁,程序崩溃或数据损坏</span><br></pre></td></tr></table></figure></li>
+<li><p>MAP_ANONYMOUS<br>  匿名映射，拿到的全 0 的一段内存。一般要求 fd 为 -1。offset 一般为 0。</p>
+</li>
+<li><p>MAP_POPULATE<br>  会尝试预先触发部分缺页，降低后续首次访问延迟</p>
+</li>
+<li><p>MAP_NONBLOCK<br>  One day, the combination of MAP_POPULATE and MAP_NONBLOCK may be reimplemented.</p>
+</li>
+<li><p>MAP_LOCKED<br>  Mark the mapped region to be locked in the same way as mlock.</p>
+</li>
+</ul>
+<p>常见用法</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/* private anonymous memory */</span></span><br><span class="line">p = mmap(<span class="literal">NULL</span>, n, PROT_READ | PROT_WRITE,</span><br><span class="line">         MAP_PRIVATE | MAP_ANONYMOUS, <span class="number">-1</span>, <span class="number">0</span>);</span><br><span class="line"><span class="comment">/* private file view: writes use copy-on-write */</span></span><br><span class="line">p = mmap(<span class="literal">NULL</span>, n, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, off);</span><br><span class="line"><span class="comment">/* shared file view: writes can dirty the file page cache */</span></span><br><span class="line">p = mmap(<span class="literal">NULL</span>, n, PROT_READ | PROT_WRITE, MAP_SHARED, fd, off);</span><br></pre></td></tr></table></figure>
+
+<p>注意点：</p>
+<ul>
+<li><p>MAP_ANONYMOUS 也可以和 MAP_SHARED 一起使用<br>  一种是类似于 shm。<br>  另一种如下，相当于通过 fork 来实现共享。</p>
+  <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">int</span> *p = mmap(<span class="literal">NULL</span>, <span class="number">4096</span>, PROT_READ | PROT_WRITE,</span><br><span class="line">          MAP_SHARED | MAP_ANONYMOUS, <span class="number">-1</span>, <span class="number">0</span>);</span><br><span class="line"><span class="keyword">pid_t</span> pid = fork();</span><br><span class="line"><span class="keyword">if</span> (pid == <span class="number">0</span>) &#123;</span><br><span class="line">    *p = <span class="number">123</span>;</span><br><span class="line">    _exit(<span class="number">0</span>);</span><br><span class="line">&#125;</span><br><span class="line">waitpid(pid, <span class="literal">NULL</span>, <span class="number">0</span>);      <span class="comment">/* synchronization */</span></span><br><span class="line"><span class="built_in">printf</span>(<span class="string">"%d\n"</span>, *p);       <span class="comment">/* prints 123 */</span></span><br></pre></td></tr></table></figure></li>
+<li><p>对于具名映射，MAP_SHARED 修改通常先进入 page cache。其他映射看到修改与数据何时落到持久介质是两个问题；后者涉及 writeback、msync、fsync 和存储设备语</p>
+</li>
+</ul>
+<h3 id="持久化、内存释放"><a href="#持久化、内存释放" class="headerlink" title="持久化、内存释放"></a>持久化、内存释放</h3><h4 id="匿名映射"><a href="#匿名映射" class="headerlink" title="匿名映射"></a>匿名映射</h4><p>内存紧张时：</p>
 <ul>
 <li>如果有 swap，则：<ul>
 <li>内核会对匿名页做 swap-out：写入 swap 区并释放物理页</li>
@@ -409,9 +464,13 @@
 </ul>
 <h4 id="具名映射"><a href="#具名映射" class="headerlink" title="具名映射"></a>具名映射</h4><p>文件映射物理页的回收规则与匿名页不同，文件页属于 page cache：</p>
 <ol>
-<li>只读文件映射 (PROT_READ) 或 shared clean pages<br> 可以随时被内核回收（因为内容可以从文件重新加载）<br> 在内存不足时，文件页会被优先回收</li>
+<li>只读文件映射 (PROT_READ) 或 shared clean pages<br> 可以随时被内核回收（因为内容可以从文件重新加载）。<br> 在内存不足时，文件页会被优先回收。</li>
 <li>dirty shared pages（MAP_SHARED + write）<br> 这些属于 dirty file-backed pages。<br> 必须先执行 writeback 将这些 page flush 到文件，然后才能回收，称为 drop clean page。</li>
 </ol>
+<p>注意 fd 在 mmap 成功后可以关闭。映射持有底层文件对象的引用，因此 close(fd) 不等于 munmap。</p>
+<h2 id="mlock"><a href="#mlock" class="headerlink" title="mlock"></a>mlock</h2><p>把一部分 VMA pin 在物理内存里，防止它们被换到 swap 里面。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">mlock</span><span class="params">(<span class="keyword">size_t</span> size;</span></span></span><br><span class="line"><span class="function"><span class="params">         <span class="keyword">const</span> <span class="keyword">void</span> addr[size], <span class="keyword">size_t</span> size)</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">mlock2</span><span class="params">(<span class="keyword">size_t</span> size;</span></span></span><br><span class="line"><span class="function"><span class="params">         <span class="keyword">const</span> <span class="keyword">void</span> addr[size], <span class="keyword">size_t</span> size, <span class="keyword">unsigned</span> <span class="keyword">int</span> flags)</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">munlock</span><span class="params">(<span class="keyword">size_t</span> size;</span></span></span><br><span class="line"><span class="function"><span class="params">         <span class="keyword">const</span> <span class="keyword">void</span> addr[size], <span class="keyword">size_t</span> size)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">mlockall</span><span class="params">(<span class="keyword">int</span> flags)</span></span>;</span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">munlockall</span><span class="params">(<span class="keyword">void</span>)</span></span>;</span><br></pre></td></tr></table></figure>
+
 <h2 id="msync"><a href="#msync" class="headerlink" title="msync"></a>msync</h2><p>表示从内存刷回到底层文件中。除此之外，只有 munmap 能确保进行这样的刷盘。</p>
 <ul>
 <li>MS_ASYNC</li>
@@ -455,23 +514,63 @@
 <li><p>MADV_HWPOISON<br>  强制将页面标记为硬件错误（仅管理员权限可用）。</p>
 </li>
 </ul>
-<p>三个释放内存：</p>
-<ul>
-<li>munmap<br>  即时释放物理内存(RSS)以及虚拟地址。<br>  注意，虚拟地址(VMA)只在 munmap() 或进程退出时消失。</li>
-<li>MADV_DONTNEED<br>  即时释放物理内存(RSS)。保留虚拟地址，但可能会造成虚拟地址紧张。</li>
-<li>MADV_FREE<br>  延迟释放。</li>
-</ul>
+<p>三个释放内存：<br>| 操作 | 私有匿名映射 | 文件映射 |<br>| — | — | — |<br>| <code>munmap</code> | 删除 VMA，释放虚拟地址，RSS 下降；物理页在没有其他引用时被释放 | 删除 VMA，RSS 下降；文件页仍可能保留在 page cache 中 |<br>| <code>MADV_DONTNEED</code> | 保留 VMA，立即降低 RSS 并丢弃页面内容；再次访问时得到零页 | 保留 VMA 并立即降低 RSS；page cache 中的物理页未必被释放，再次访问时重新触发 page fault |<br>| <code>MADV_FREE</code> | 保留 VMA，将页面标记为可回收；RSS 通常要等到实际回收后才下降。回收前可能仍能读到旧内容，重新写入会取消该页的回收状态 | 不支持；<code>MADV_FREE</code> 只适用于私有匿名映射 |</p>
+<p>注意， <code>munmap</code> 和 <code>MADV_DONTNEED</code> 都不能保证文件脏页已经持久化；需要持久化时，应使用 <code>msync</code>、<code>fsync</code> 等接口。</p>
 <p>进一步可以参考 <a href="https://zhuanlan.zhihu.com/p/570033679%E3%80%82%E6%88%91%E7%90%86%E8%A7%A3%E4%BB%8E" target="_blank" rel="noopener">https://zhuanlan.zhihu.com/p/570033679。我理解从</a> munmap 到 MADV_FREE 代价越来越小。</p>
-<h2 id="关于透明大页"><a href="#关于透明大页" class="headerlink" title="关于透明大页"></a>关于透明大页</h2><p>使用透明大页的缺点：</p>
-<ul>
-<li>透明大页的后台进程 khugepaged 在扫描到目标页时，会短暂挂起进程，这会影响内存读写操作的延迟。</li>
-<li>在 CoW 时，会产生写放大。</li>
-<li>出现 NUMA 跨节点访问的时候，也会出现放大。</li>
-</ul>
+<h2 id="mmap-的实现原理"><a href="#mmap-的实现原理" class="headerlink" title="mmap 的实现原理"></a>mmap 的实现原理</h2><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line">user mmap()</span><br><span class="line">  -&gt; libc wrapper</span><br><span class="line">  -&gt; architecture syscall entry</span><br><span class="line">  -&gt; __x64_sys_mmap() / sys_mmap_pgoff()       [representative]</span><br><span class="line">  -&gt; ksys_mmap_pgoff()</span><br><span class="line">       -&gt; fget(fd) when file-backed</span><br><span class="line">       -&gt; setup explicit hugetlb object when requested</span><br><span class="line">  -&gt; vm_mmap_pgoff()</span><br><span class="line">       -&gt; security checks</span><br><span class="line">       -&gt; mmap_write_lock(mm)</span><br><span class="line">       -&gt; do_mmap()</span><br><span class="line">            -&gt; choose address / validate flags and permissions</span><br><span class="line">            -&gt; mmap_region()</span><br><span class="line">                 -&gt; merge or create VMA</span><br><span class="line">                 -&gt; file or driver mmap preparation</span><br><span class="line">                 -&gt; install VMA metadata</span><br><span class="line">       -&gt; mmap_write_unlock(mm)</span><br><span class="line">       -&gt; optional mm_populate()</span><br><span class="line">  -&gt; return mapped address to userspace</span><br></pre></td></tr></table></figure>
+
+<h2 id="mmap-的性能"><a href="#mmap-的性能" class="headerlink" title="mmap 的性能"></a>mmap 的性能</h2><p>比较集中常见的读写模型的延迟</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">mmap 热访问</span><br><span class="line">≈ CPU load + cache/TLB</span><br><span class="line">  + 首次访问可能发生的 minor fault</span><br><span class="line"></span><br><span class="line">mmap 冷访问</span><br><span class="line">≈ major fault + VM/page-cache 路径</span><br><span class="line">  + NVMe I/O + 页表建立 + TLB</span><br><span class="line">  + 可能的预读、回收和写回</span><br><span class="line"></span><br><span class="line">buffered read/pread</span><br><span class="line">≈ syscall + page-cache 查找 + 一次内核到用户拷贝</span><br><span class="line">  + 必要时的 NVMe I/O</span><br><span class="line"></span><br><span class="line">io_uring/O_DIRECT</span><br><span class="line">≈ 批量提交/完成 + NVMe I/O + DMA</span><br><span class="line">  + 应用自己的缓存管理</span><br></pre></td></tr></table></figure>
+
+<p>基于此场景的判断：</p>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>对 <code>mmap</code> 的判断</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>RO + Random + 常驻</td>
+<td>最优选</td>
+</tr>
+<tr>
+<td>多进程共享 RO</td>
+<td>通常很合适，物理页可以在进程间共享</td>
+</tr>
+<tr>
+<td>冷数据顺序扫描</td>
+<td>不应默认选择 <code>mmap</code>；大块 <code>read</code>、<code>pread</code> 或 buffered <code>io_uring</code> 往往更容易跑满带宽</td>
+</tr>
+<tr>
+<td>冷数据随机读取，追求最高 NVMe IOPS</td>
+<td>Page-fault 驱动不利于主动维持较深的 I/O 队列，应优先测试异步 I/O</td>
+</tr>
+<tr>
+<td>工作集明显大于 RAM</td>
+<td>风险较高；页面回收、反复 fault 和读放大可能造成严重尾延迟</td>
+</tr>
+<tr>
+<td>高并发或使用多块 SSD</td>
+<td>Page-fault 路径及内核同步点可能成为扩展性瓶颈（详见《Are You Sure You Want to Use MMAP in Your Database Management System》）</td>
+</tr>
+<tr>
+<td>事务</td>
+<td>需要明确持久化边界，性能和正确性都较难控制；显式缓冲池、WAL、<code>pwrite</code>/<code>fdatasync</code> 通常更合适</td>
+</tr>
+<tr>
+<td>access pattern 明确且可 prefetch</td>
+<td><code>mmap</code> 配合 <code>madvise</code> 可以改善表现，但需要实测</td>
+</tr>
+<tr>
+<td>数据只访问一次</td>
+<td><code>mmap</code> 优势有限，可能产生不必要的页表和缺页处理开销</td>
+</tr>
+</tbody></table>
 <h1 id="Linux-的物理内存管理"><a href="#Linux-的物理内存管理" class="headerlink" title="Linux 的物理内存管理"></a>Linux 的物理内存管理</h1><h2 id="分页机制"><a href="#分页机制" class="headerlink" title="分页机制"></a>分页机制</h2><h3 id="原理"><a href="#原理" class="headerlink" title="原理"></a>原理</h3><p>当 CR0 寄存器中的 PG 位被设置时标志着分页机制启动，分页机制负责将线性空间中的内存按照页映射到物理空间中的页框(page frame)中。以 386 为例，页面地址按照 4K 边界对齐，这样一个进程 4G 的地址空间就会被映射成为 1M 个页面。这些页的地址占共 4M 的内存。<br>等下，不是说按照 4K 边界对齐的么，这样 20 位就够了呀，为什么页面项还要占用 4 个字节共 32 位呢？</p>
 <ul>
 <li>这 20 位不整齐</li>
-<li>低12位会被用来放一些控制相关的信息。例如<ul>
+<li>低 12 位会被用来放一些控制相关的信息。例如<ul>
 <li>标记页的特权级</li>
 <li>页是否在内存中</li>
 <li>PWT 指示是否写透，也就是既写 Cache 又写 RAM</li>
@@ -484,6 +583,12 @@
 <p>因此现在一个 32 位的地址被分成了三段，高 10 位用来索引一个页目录表项（描述一个页表的基址），中 10 位用来索引一个页表项（描述一个页的基址），低 12 位用来确定在页面内的具体偏移。<br>当系统接受到一个线性地址时，它首先会使用高 10 位在页目录表中索引出对应的页目录表项，用中 10 位索引出对应的页表项，再加上最后 12 位的偏移。</p>
 <p>不过页目录表的基址在哪里呢？处理器用 CR3 来放置这个值。</p>
 <p>此外，CPU 中有了一个页面高速缓存(TLB)，能够自动保存 32 项最近使用过的页面地址，也就是能覆盖 128K 的地址，所以在访存时可以先查 TLB 来获得直接的内存地址，找不到再查页表。</p>
+<h3 id="关于透明大页"><a href="#关于透明大页" class="headerlink" title="关于透明大页"></a>关于透明大页</h3><p>使用透明大页的缺点：</p>
+<ul>
+<li>透明大页的后台进程 khugepaged 在扫描到目标页时，会短暂挂起进程，这会影响内存读写操作的延迟。</li>
+<li>在 CoW 时，会产生写放大。</li>
+<li>出现 NUMA 跨节点访问的时候，也会出现放大。</li>
+</ul>
 <h3 id="物理内存用途"><a href="#物理内存用途" class="headerlink" title="物理内存用途"></a>物理内存用途</h3><p>Linux 把物理内存页按用途大致分为：</p>
 <ul>
 <li>Anonymous pages<br>  进程堆、栈、匿名 mmap</li>
@@ -492,7 +597,19 @@
 <li>Free pages<br>  空闲页</li>
 </ul>
 <p>在 Anonymous pages 和 Page cache 中的 page 可能是 inactive 的。对于前者，可以 swap，对于后者，可以写回或者丢弃。</p>
-<h2 id="PageCache-和缺页中断"><a href="#PageCache-和缺页中断" class="headerlink" title="PageCache 和缺页中断"></a>PageCache 和缺页中断</h2><h2 id="伙伴系统和-slab"><a href="#伙伴系统和-slab" class="headerlink" title="伙伴系统和 slab"></a>伙伴系统和 slab</h2><p>在<a href="/2016/08/12/csapp-malloc/">CSAPP Malloc Lab</a>中介绍了 Linux 的伙伴系统，这个机制维护了大小以 2 位底数的空闲内存块。但在一些方面，空闲链表是有缺陷的，链表的特性导致我们没有一个较好的办法去知道全局的状态。<br>Slab 将不同对象划分为高速缓存组，以储存不同的对象。这是因为 Jeff Bonwick 认为 Linux 中的对象，例如互斥锁、<code>task_struct</code>、inode 这些会频繁地创建或者释放的结构，他们的初始化的代价是较高的，因此与其将这些对象释放会内存池，不如将其保留下来一遍下一次使用。因此 Slab 层将这些对象按类型放到不同的高速缓存 <code>kmem_cache</code> 中。每一个高速缓存中分了多个 slab，通常对应着物理内存上的若干页面。</p>
+<h1 id="内核内存分配"><a href="#内核内存分配" class="headerlink" title="内核内存分配"></a>内核内存分配</h1><h2 id="PageCache-和缺页中断"><a href="#PageCache-和缺页中断" class="headerlink" title="PageCache 和缺页中断"></a>PageCache 和缺页中断</h2><p>缺页中断的顺序：</p>
+<ul>
+<li>TLB miss</li>
+<li>找不到 PTE</li>
+<li>触发缺页中断</li>
+<li>内核定位 VMA</li>
+</ul>
+<p>两种 pagefault 的处理：</p>
+<ul>
+<li>minor：通常不需要等待存储 I/O，例如目标页已经在 page cache 中、只需建立 PTE，或完成普通匿名页映射。</li>
+<li>major：需要等待磁盘、网络文件系统或其他后端 I/O 把数据带入内存，延迟通常明显更高。</li>
+</ul>
+<h2 id="伙伴系统和-slab"><a href="#伙伴系统和-slab" class="headerlink" title="伙伴系统和 slab"></a>伙伴系统和 slab</h2><p>在<a href="/2016/08/12/csapp-malloc/">CSAPP Malloc Lab</a>中介绍了 Linux 的伙伴系统，这个机制维护了大小以 2 位底数的空闲内存块。但在一些方面，空闲链表是有缺陷的，链表的特性导致我们没有一个较好的办法去知道全局的状态。<br>Slab 将不同对象划分为高速缓存组，以储存不同的对象。这是因为 Jeff Bonwick 认为 Linux 中的对象，例如互斥锁、<code>task_struct</code>、inode 这些会频繁地创建或者释放的结构，他们的初始化的代价是较高的，因此与其将这些对象释放会内存池，不如将其保留下来一遍下一次使用。因此 Slab 层将这些对象按类型放到不同的高速缓存 <code>kmem_cache</code> 中。每一个高速缓存中分了多个 slab，通常对应着物理内存上的若干页面。</p>
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 2.6.39.4</span></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">slab</span> &#123;</span></span><br><span class="line">    <span class="keyword">union</span> &#123;</span><br><span class="line">        <span class="class"><span class="keyword">struct</span> &#123;</span></span><br><span class="line">            <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">list</span>;</span></span><br><span class="line">            <span class="keyword">unsigned</span> <span class="keyword">long</span> colouroff;</span><br><span class="line">            <span class="keyword">void</span> *s_mem;        <span class="comment">/* including colour offset */</span></span><br><span class="line">            <span class="keyword">unsigned</span> <span class="keyword">int</span> inuse; <span class="comment">/* num of objs active in slab */</span></span><br><span class="line">            <span class="keyword">kmem_bufctl_t</span> <span class="built_in">free</span>;</span><br><span class="line">            <span class="keyword">unsigned</span> <span class="keyword">short</span> nodeid;</span><br><span class="line">        &#125;;</span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">slab_rcu</span> __<span class="title">slab_cover_slab_rcu</span>;</span></span><br><span class="line">    &#125;;</span><br><span class="line">&#125;;</span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">kmem_list3</span> &#123;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">slabs_partial</span>;</span> <span class="comment">/* partial list first, better asm code */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">slabs_full</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">slabs_free</span>;</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> free_objects;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span> free_limit;</span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">int</span> colour_next;   <span class="comment">/* Per-node cache coloring */</span></span><br><span class="line">    <span class="keyword">spinlock_t</span> list_lock;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">array_cache</span> *<span class="title">shared</span>;</span> <span class="comment">/* shared per node */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">array_cache</span> **<span class="title">alien</span>;</span> <span class="comment">/* on other nodes */</span></span><br><span class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> next_reap;    <span class="comment">/* updated without locking */</span></span><br><span class="line">    <span class="keyword">int</span> free_touched;       <span class="comment">/* updated without locking */</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
 
 <p>创建一个高速缓存的函数如下。其中：</p>
@@ -511,7 +628,7 @@
 <p>在已有高速缓存后可以通过下面的函数获取一个对象</p>
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> *<span class="title">kmem_cache_alloc</span><span class="params">(struct kmem_cache *cachep, <span class="keyword">gfp_t</span> flags)</span></span></span><br></pre></td></tr></table></figure>
 
-<h1 id="NUMA-架构"><a href="#NUMA-架构" class="headerlink" title="NUMA 架构"></a>NUMA 架构</h1><p>UMA(Uniform Memory Access)：</p>
+<h2 id="kmalloc-和-vmalloc"><a href="#kmalloc-和-vmalloc" class="headerlink" title="kmalloc 和 vmalloc"></a>kmalloc 和 vmalloc</h2><h1 id="NUMA-架构"><a href="#NUMA-架构" class="headerlink" title="NUMA 架构"></a>NUMA 架构</h1><p>UMA(Uniform Memory Access)：</p>
 <ul>
 <li>所有 CPU 访问内存的延迟相同，常见于单处理器或 SMP</li>
 <li>这种情况下，CPU 通过 FSB 总线连接到北桥，然后北桥的内存控制器连接到内存。</li>
@@ -528,16 +645,20 @@
 </ul>
 <h2 id="numactl"><a href="#numactl" class="headerlink" title="numactl"></a>numactl</h2><p>一个进程在 numa 上运行，需要考虑：</p>
 <ul>
-<li><p>它的各个线程在哪个 cpu 上运行<br>  指定 –cpubind 表示在哪些节点上的 cpu 上运行。<br>  指定 –physcpubind 表示在哪些 cpu 核心上运行。<br>  可以通过 numactl –hardware 查看节点与 cpu 核心的映射：</p>
+<li><p>它的各个线程在哪个 cpu 上运行<br>  指定 <code>--cpubind</code> 表示在哪些节点上的 cpu 上运行。<br>  指定 <code>--physcpubind</code> 表示在哪些 cpu 核心上运行。<br>  可以通过 <code>numactl --hardware</code> 查看节点与 cpu 核心的映射：</p>
   <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">available: 2 nodes (0-1)</span><br><span class="line">node 0 cpus: 0-7</span><br><span class="line">node 1 cpus: 8-15</span><br></pre></td></tr></table></figure></li>
-<li><p>内存从哪个节点分配<br>  指定 –membind 则一定在指定的节点上分配，如果无法分配则失败。<br>  指定 –interleave 则表示在这些节点上按照 round robin 的方式分配。</p>
+<li><p>内存从哪个节点分配<br>  指定 <code>--membind</code> 则一定在指定的节点上分配，如果无法分配则失败。<br>  指定 <code>--interleave</code> 则表示在这些节点上按照 round robin 的方式分配。</p>
 </li>
 </ul>
 <h2 id="numa-和-swap"><a href="#numa-和-swap" class="headerlink" title="numa 和 swap"></a>numa 和 swap</h2><ul>
 <li>每个节点的压力过高，则该节点就可能触发 swap</li>
 <li>swap 到的磁盘设备是共享的，不同的节点可能 swap 到一个设备上</li>
 </ul>
-<h1 id="shm"><a href="#shm" class="headerlink" title="shm"></a>shm</h1><h1 id="访存问题"><a href="#访存问题" class="headerlink" title="访存问题"></a>访存问题</h1><p>访存问题主要是各种 cache miss、inter-core cache 的调优。</p>
+<h1 id="shm"><a href="#shm" class="headerlink" title="shm"></a>shm</h1><p>常见用法如下</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">int</span> fd = shm_open(<span class="string">"/example"</span>, O_CREAT | O_RDWR, <span class="number">0600</span>);</span><br><span class="line"><span class="keyword">if</span> (fd == <span class="number">-1</span>)                         <span class="comment">/* handle error */</span>;</span><br><span class="line"><span class="keyword">if</span> (ftruncate(fd, <span class="number">4096</span>) == <span class="number">-1</span>)        <span class="comment">/* handle error */</span>;</span><br><span class="line"><span class="keyword">void</span> *p = mmap(<span class="literal">NULL</span>, <span class="number">4096</span>, PROT_READ | PROT_WRITE,</span><br><span class="line">               MAP_SHARED, fd, <span class="number">0</span>);</span><br><span class="line"><span class="keyword">if</span> (p == MAP_FAILED)                  <span class="comment">/* handle error */</span>;</span><br></pre></td></tr></table></figure>
+
+<p>注意这里 ftruncate 把底层对象的逻辑长度从 0 扩大为 4096 字节。这个要和 mmap 的 length 区分开来。</p>
+<h1 id="访存问题"><a href="#访存问题" class="headerlink" title="访存问题"></a>访存问题</h1><p>访存问题主要是各种 cache miss、inter-core cache 的调优。</p>
 <h2 id="TLB-miss"><a href="#TLB-miss" class="headerlink" title="TLB miss"></a>TLB miss</h2><p>程序使用的是虚拟地址 Virtual Address，实际访问内存要用物理地址 Physical Address。虚拟地址到物理地址的映射存储在页表 Page Table 中。如果每次访问内存都要查页表就很很慢，因此 CPU 中增加了 TLB 来缓存最近的页表项。</p>
 <p>需要考虑 TLB miss 的场景：</p>
 <ul>
@@ -553,8 +674,10 @@
 <h1 id="内存问题诊断"><a href="#内存问题诊断" class="headerlink" title="内存问题诊断"></a>内存问题诊断</h1><h2 id="如何诊断内存问题？"><a href="#如何诊断内存问题？" class="headerlink" title="如何诊断内存问题？"></a>如何诊断内存问题？</h2><ul>
 <li>O11y 机制</li>
 <li>heap profiling</li>
-<li>mallctl 探查</li>
+<li>malloctl 探查</li>
 <li>valgrind 工具探查</li>
+<li>eBPF 探查 mm 相关系统调用</li>
+<li>一些工具如 pmap 等</li>
 </ul>
 <h2 id="内存错误"><a href="#内存错误" class="headerlink" title="内存错误"></a>内存错误</h2><h3 id="空指针"><a href="#空指针" class="headerlink" title="空指针"></a>空指针</h3><p>C++ 中的空指针影响会比较大。比如对 <code>nullptr</code> 调用 <code>operator-&gt;()</code> 就会得到一个 segfault，对应的 addr 可能漂到不知道哪里去了，很难定位问题。</p>
 <p>特别地，C++ 还不太容易实现 Rust 中的 NotNull 指针，从而减少心智负担。这是因为 C++ 本身的移动语义会将移动后的对象的指针设置为空，而这就导致 NotNull 无法移动。而 unique_ptr 又是天生只支持移动的，这就导致了 NotNull 和 unique_ptr 无法兼容。Rust 能支持是因为编译期保证了使用移动后的对象一定是不能通过编译的。</p>
@@ -565,7 +688,11 @@
 <li>使用一些 not_null ptr 的实现，这些实现能够 workaround 掉 unique_ptr 的相关问题<br> <a href="https://github.com/bitwizeshift/not_null/blob/master/include/not_null.hpp" target="_blank" rel="noopener">https://github.com/bitwizeshift/not_null/blob/master/include/not_null.hpp</a> 这样的库可以选择使用 check_not_null 在创建的时候执行运行期检查，也可以使用 assume_not_null 执行有限的编译期检查（但如果值在编译期无法确定，则编译期检查无效）。<br> 这个库也支持移动语义 <figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// Should never be null, but not yet refactored to be 'not_null'</span></span><br><span class="line">auto old_api(std::unique_ptr&lt;Widget&gt; p) -&gt; void;</span><br><span class="line"></span><br><span class="line">auto new_api(cpp::not_null&lt;std::unique_ptr&lt;Widget&gt;&gt; p) -&gt; void</span><br><span class="line">&#123;</span><br><span class="line">  <span class="comment">// Extract the move-only unique_ptr, and push along to 'old_api'</span></span><br><span class="line">  old_api(<span class="built_in">std</span>::move(p).as_nullable());</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></li>
 </ol>
 <p>特别地，我不觉得 <code>if likely(!ptr) throw_or_panic();</code> 这样的写法有太大问题，因为现代 CPU 的 speculation 机制让这个 if 的开销变得很低。但毫无疑问，每次都要判断，无疑加重了开发人员的心智负担，每一个函数的开头需要防御性编程写一堆 check。而实际上至少从某一层开始，工具函数就可以要求传入的 ptr 是 not null 了。特别地，对于一个全新 init 的工程，可以始终通过 <code>std::optional&lt;not_null&gt;</code> 来代替 <code>std::shared_ptr</code>。</p>
-<h2 id="OOM"><a href="#OOM" class="headerlink" title="OOM"></a>OOM</h2><h2 id="内存观测"><a href="#内存观测" class="headerlink" title="内存观测"></a>内存观测</h2><h3 id="线程级别的内存分配记录"><a href="#线程级别的内存分配记录" class="headerlink" title="线程级别的内存分配记录"></a>线程级别的内存分配记录</h3><p>详见<a href="/2024/08/23/monitor-alloc-in-C++/">C++ 内存监控方案</a></p>
+<h2 id="OOM"><a href="#OOM" class="headerlink" title="OOM"></a>OOM</h2><h3 id="Linux-的-overcommit-机制"><a href="#Linux-的-overcommit-机制" class="headerlink" title="Linux 的 overcommit 机制"></a>Linux 的 overcommit 机制</h3><ul>
+<li>如果关闭 overcommit 机制，那么大部分的 OOM 现象将会消失，因为系统分配内存会更加保守</li>
+<li>如果开启 overcommit 机制，会根据物理内存、swap 和 overcommit_ratio 判断是否能够分配出内存，依然可能会分配失败  <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">CommitLimit = [swap size] + [RAM size] * vm.overcommit_ratio / 100</span><br></pre></td></tr></table></figure></li>
+</ul>
+<h2 id="内存观测"><a href="#内存观测" class="headerlink" title="内存观测"></a>内存观测</h2><h3 id="线程级别的内存分配记录"><a href="#线程级别的内存分配记录" class="headerlink" title="线程级别的内存分配记录"></a>线程级别的内存分配记录</h3><p>详见<a href="/2024/08/23/monitor-alloc-in-C++/">C++ 内存监控方案</a></p>
 <h2 id="内存泄露"><a href="#内存泄露" class="headerlink" title="内存泄露"></a>内存泄露</h2><p>并不是野指针才算内存泄露。如果有一些结构存在于某些队列或者哈希表中，但并不是所有路径都会最终回收掉该结构，那么同样可以认为存在内存泄露。</p>
 <h2 id="访存问题-1"><a href="#访存问题-1" class="headerlink" title="访存问题"></a>访存问题</h2><h3 id="memory-bound"><a href="#memory-bound" class="headerlink" title="memory bound"></a>memory bound</h3><p>观测：</p>
 <ul>
@@ -732,7 +859,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">271</span>
+                <span class="site-state-item-count">274</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -745,7 +872,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">155</span>
+                <span class="site-state-item-count">156</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -838,7 +965,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#OOMKiller"><span class="nav-number">1.</span> <span class="nav-text">OOMKiller</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Linux-的-overcommit-机制"><span class="nav-number">1.1.</span> <span class="nav-text">Linux 的 overcommit 机制</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#mmap"><span class="nav-number">2.</span> <span class="nav-text">mmap</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#mmap-1"><span class="nav-number">2.1.</span> <span class="nav-text">mmap</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#mmap-和内存释放"><span class="nav-number">2.1.1.</span> <span class="nav-text">mmap 和内存释放</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#匿名映射"><span class="nav-number">2.1.1.1.</span> <span class="nav-text">匿名映射</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#具名映射"><span class="nav-number">2.1.1.2.</span> <span class="nav-text">具名映射</span></a></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#msync"><span class="nav-number">2.2.</span> <span class="nav-text">msync</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#madvise"><span class="nav-number">2.3.</span> <span class="nav-text">madvise</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#关于透明大页"><span class="nav-number">2.4.</span> <span class="nav-text">关于透明大页</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Linux-的物理内存管理"><span class="nav-number">3.</span> <span class="nav-text">Linux 的物理内存管理</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#分页机制"><span class="nav-number">3.1.</span> <span class="nav-text">分页机制</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#原理"><span class="nav-number">3.1.1.</span> <span class="nav-text">原理</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#物理内存用途"><span class="nav-number">3.1.2.</span> <span class="nav-text">物理内存用途</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#PageCache-和缺页中断"><span class="nav-number">3.2.</span> <span class="nav-text">PageCache 和缺页中断</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#伙伴系统和-slab"><span class="nav-number">3.3.</span> <span class="nav-text">伙伴系统和 slab</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#NUMA-架构"><span class="nav-number">4.</span> <span class="nav-text">NUMA 架构</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#numactl"><span class="nav-number">4.1.</span> <span class="nav-text">numactl</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#numa-和-swap"><span class="nav-number">4.2.</span> <span class="nav-text">numa 和 swap</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#shm"><span class="nav-number">5.</span> <span class="nav-text">shm</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#访存问题"><span class="nav-number">6.</span> <span class="nav-text">访存问题</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#TLB-miss"><span class="nav-number">6.1.</span> <span class="nav-text">TLB miss</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#TLB-Shootdown"><span class="nav-number">6.2.</span> <span class="nav-text">TLB Shootdown</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#内存问题诊断"><span class="nav-number">7.</span> <span class="nav-text">内存问题诊断</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#如何诊断内存问题？"><span class="nav-number">7.1.</span> <span class="nav-text">如何诊断内存问题？</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#内存错误"><span class="nav-number">7.2.</span> <span class="nav-text">内存错误</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#空指针"><span class="nav-number">7.2.1.</span> <span class="nav-text">空指针</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#OOM"><span class="nav-number">7.3.</span> <span class="nav-text">OOM</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#内存观测"><span class="nav-number">7.4.</span> <span class="nav-text">内存观测</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#线程级别的内存分配记录"><span class="nav-number">7.4.1.</span> <span class="nav-text">线程级别的内存分配记录</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#内存泄露"><span class="nav-number">7.5.</span> <span class="nav-text">内存泄露</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#访存问题-1"><span class="nav-number">7.6.</span> <span class="nav-text">访存问题</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#memory-bound"><span class="nav-number">7.6.1.</span> <span class="nav-text">memory bound</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">8.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#术语"><span class="nav-number">1.</span> <span class="nav-text">术语</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#mmap-系列"><span class="nav-number">2.</span> <span class="nav-text">mmap 系列</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#mmap"><span class="nav-number">2.1.</span> <span class="nav-text">mmap</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#持久化、内存释放"><span class="nav-number">2.1.1.</span> <span class="nav-text">持久化、内存释放</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#匿名映射"><span class="nav-number">2.1.1.1.</span> <span class="nav-text">匿名映射</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#具名映射"><span class="nav-number">2.1.1.2.</span> <span class="nav-text">具名映射</span></a></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#mlock"><span class="nav-number">2.2.</span> <span class="nav-text">mlock</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#msync"><span class="nav-number">2.3.</span> <span class="nav-text">msync</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#madvise"><span class="nav-number">2.4.</span> <span class="nav-text">madvise</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#mmap-的实现原理"><span class="nav-number">2.5.</span> <span class="nav-text">mmap 的实现原理</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#mmap-的性能"><span class="nav-number">2.6.</span> <span class="nav-text">mmap 的性能</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Linux-的物理内存管理"><span class="nav-number">3.</span> <span class="nav-text">Linux 的物理内存管理</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#分页机制"><span class="nav-number">3.1.</span> <span class="nav-text">分页机制</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#原理"><span class="nav-number">3.1.1.</span> <span class="nav-text">原理</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#关于透明大页"><span class="nav-number">3.1.2.</span> <span class="nav-text">关于透明大页</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#物理内存用途"><span class="nav-number">3.1.3.</span> <span class="nav-text">物理内存用途</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#内核内存分配"><span class="nav-number">4.</span> <span class="nav-text">内核内存分配</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#PageCache-和缺页中断"><span class="nav-number">4.1.</span> <span class="nav-text">PageCache 和缺页中断</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#伙伴系统和-slab"><span class="nav-number">4.2.</span> <span class="nav-text">伙伴系统和 slab</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#kmalloc-和-vmalloc"><span class="nav-number">4.3.</span> <span class="nav-text">kmalloc 和 vmalloc</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#NUMA-架构"><span class="nav-number">5.</span> <span class="nav-text">NUMA 架构</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#numactl"><span class="nav-number">5.1.</span> <span class="nav-text">numactl</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#numa-和-swap"><span class="nav-number">5.2.</span> <span class="nav-text">numa 和 swap</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#shm"><span class="nav-number">6.</span> <span class="nav-text">shm</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#访存问题"><span class="nav-number">7.</span> <span class="nav-text">访存问题</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#TLB-miss"><span class="nav-number">7.1.</span> <span class="nav-text">TLB miss</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#TLB-Shootdown"><span class="nav-number">7.2.</span> <span class="nav-text">TLB Shootdown</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#内存问题诊断"><span class="nav-number">8.</span> <span class="nav-text">内存问题诊断</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#如何诊断内存问题？"><span class="nav-number">8.1.</span> <span class="nav-text">如何诊断内存问题？</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#内存错误"><span class="nav-number">8.2.</span> <span class="nav-text">内存错误</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#空指针"><span class="nav-number">8.2.1.</span> <span class="nav-text">空指针</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#OOM"><span class="nav-number">8.3.</span> <span class="nav-text">OOM</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Linux-的-overcommit-机制"><span class="nav-number">8.3.1.</span> <span class="nav-text">Linux 的 overcommit 机制</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#内存观测"><span class="nav-number">8.4.</span> <span class="nav-text">内存观测</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#线程级别的内存分配记录"><span class="nav-number">8.4.1.</span> <span class="nav-text">线程级别的内存分配记录</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#内存泄露"><span class="nav-number">8.5.</span> <span class="nav-text">内存泄露</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#访存问题-1"><span class="nav-number">8.6.</span> <span class="nav-text">访存问题</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#memory-bound"><span class="nav-number">8.6.1.</span> <span class="nav-text">memory bound</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">9.</span> <span class="nav-text">Reference</span></a></li></ol></div>
             
 
           </div>
