@@ -100,7 +100,7 @@
 <meta property="og:description" content="记录了自己在执行 CPU Profiling 的时候遇到的一些经验。 相关文章：  heap profiling">
 <meta property="og:locale" content="zh-Hans">
 <meta property="og:image" content="https://www.brendangregg.com/blog/images/2017/cpubusystalledidle.png">
-<meta property="og:updated_time" content="2025-12-03T08:27:22.878Z">
+<meta property="og:updated_time" content="2026-09-21T14:34:39.405Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="CPU Profiling 经验之谈">
 <meta name="twitter:description" content="记录了自己在执行 CPU Profiling 的时候遇到的一些经验。 相关文章：  heap profiling">
@@ -449,13 +449,75 @@
 <p>在一些很老的 C 库中，没有提供 pthread_setname_np 函数。CK 会写一个 dummy 的函数来替换，这可能导致<a href="https://github.com/pingcap/tiflash/issues/6616" target="_blank" rel="noopener">一些情况下</a>不能设置成功线程名。</p>
 <h2 id="线程名的切换问题"><a href="#线程名的切换问题" class="headerlink" title="线程名的切换问题"></a>线程名的切换问题</h2><p>一些程序会同时记录所有线程的 CPU 用量，以及当前进程的 CPU 总用量。这两个是一致的么？至少在一个使用线程池的程序中，未必一致。</p>
 <p>这里的原因是线程池中往往会将线程按照 <code>${task_name}_${task_id}</code> 这样重新命名，从而区分用途。而处于避免线程启动和销毁的开销，又倾向于维护一个全局常驻线程池，新开辟的线程池会先尝试从这个全局线程池中取，然后用完之后再归还。这就导致如果在这个过程中线程名字发生了从 A 到 B 的变换，则可能会看到 B 对应的指标有一个很高的 delta（比如在 grafana 中能看到一个尖峰）。原因是 <code>/proc/$pid/stat</code> 或者 <code>/proc/tasks/$tid/stat</code> 里面的信息都是从启动开始经历的时钟周期，无论是 stime 还是 utime。所以，如果一开始线程名是 A，后来被某个线程池借走了，名字变成 B，但此时 A 的数据还在。如果此时，线程被归还了，名字改为 A，那么 A 的变化率就是这段时间的 jiffies 增量除以这段时间的长度。</p>
-<h1 id="常见-profiling-工具和实现原理"><a href="#常见-profiling-工具和实现原理" class="headerlink" title="常见 profiling 工具和实现原理"></a>常见 profiling 工具和实现原理</h1><h2 id="gprof-GNU-Profiler"><a href="#gprof-GNU-Profiler" class="headerlink" title="gprof(GNU Profiler)"></a>gprof(GNU Profiler)</h2><p>采用插桩(instrumentation)的方式。</p>
-<h2 id="perf-Linux-Perf-Events"><a href="#perf-Linux-Perf-Events" class="headerlink" title="perf(Linux Perf Events)"></a>perf(Linux Perf Events)</h2><ul>
+<h1 id="常见-profiling-工具和实现原理"><a href="#常见-profiling-工具和实现原理" class="headerlink" title="常见 profiling 工具和实现原理"></a>常见 profiling 工具和实现原理</h1><table>
+<thead>
+<tr>
+<th>名称</th>
+<th>主要作用</th>
+<th>所在位置</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>CPU PMU（性能监控单元）</td>
+<td>对周期、完成的指令、缓存未命中等硬件事件计数</td>
+<td>CPU 硬件</td>
+</tr>
+<tr>
+<td>perf_events</td>
+<td>Linux 的性能观测子系统，管理事件、计数、采样及数据接口</td>
+<td>内核态</td>
+</tr>
+<tr>
+<td>perf 命令</td>
+<td>配置采集、读取结果、保存数据和生成报告</td>
+<td>用户态</td>
+</tr>
+<tr>
+<td>用于性能采集的 eBPF 程序</td>
+<td>在事件触发时执行自定义采集、过滤和统计逻辑</td>
+<td>内核态</td>
+</tr>
+<tr>
+<td>eBPF agent / 加载器</td>
+<td>加载 BPF 程序、读取结果、解析和导出数据</td>
+<td>用户态</td>
+</tr>
+<tr>
+<td>pprof 命令</td>
+<td>读取 profile，生成热点排行、调用图、火焰图等</td>
+<td>用户态</td>
+</tr>
+<tr>
+<td>Go runtime/pprof</td>
+<td>在 Go 应用内部提供 CPU、堆、阻塞等 profiling 功能</td>
+<td>用户态进程内部</td>
+</tr>
+</tbody></table>
+<h2 id="Linux-内核"><a href="#Linux-内核" class="headerlink" title="Linux 内核"></a>Linux 内核</h2><p>kprobe / uprobe 在 Linux kernel 中，负责在内核态或者用户态<strong>动态</strong>插桩，真正 hook 某条指令。</p>
+<h2 id="gprof-GNU-Profiler"><a href="#gprof-GNU-Profiler" class="headerlink" title="gprof(GNU Profiler)"></a>gprof(GNU Profiler)</h2><p>采用函数级别插桩(instrumentation)+ 周期性的 PC sampling 的方式。基础功能如看调用耗时和调用关系是没问题的。但是涉及如下的就比较捉襟见肘：</p>
+<ul>
+<li>CPU hardware counters</li>
+<li>Kernel profiling</li>
+<li>多线程</li>
+<li>动态 prob</li>
+</ul>
+<h2 id="perf"><a href="#perf" class="headerlink" title="perf"></a>perf</h2><ul>
 <li>使用 Linux 内核的 <code>perf_event</code> 接口，这个接口在后面专门介绍</li>
 <li>支持 sample-based 和事件统计 event-based</li>
 <li>基于硬件性能计数器如 CPU cycles, cache misses</li>
 </ul>
-<h2 id="Intel-VTune-Profiler"><a href="#Intel-VTune-Profiler" class="headerlink" title="Intel VTune Profiler"></a>Intel VTune Profiler</h2><h2 id="Google-CPU-Profiler-pprof-gperftools"><a href="#Google-CPU-Profiler-pprof-gperftools" class="headerlink" title="Google CPU Profiler(pprof + gperftools)"></a>Google CPU Profiler(pprof + gperftools)</h2><h1 id="关于-benchmark"><a href="#关于-benchmark" class="headerlink" title="关于 benchmark"></a>关于 benchmark</h1><h2 id="pitfall"><a href="#pitfall" class="headerlink" title="pitfall"></a>pitfall</h2><ul>
+<p>其实现原理大概是由 CPU PMU / timer / software event 驱动的。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">perf</span><br><span class="line"> │</span><br><span class="line"> │ perf_event_open()</span><br><span class="line"> ↓</span><br><span class="line">Linux perf_event subsystem</span><br><span class="line"> │</span><br><span class="line"> ↓</span><br><span class="line">CPU PMU / timer / software event</span><br><span class="line"> │</span><br><span class="line"> ├── interrupt</span><br><span class="line"> ├── sample PC</span><br><span class="line"> └── sample call stack</span><br></pre></td></tr></table></figure>
+
+<p>另一个特点是：</p>
+<ul>
+<li>gprof 是 instrumentation，对于高频调用的函数，每次调用都会执行 <code>mcount()</code>，从而产生很大的 overhead。</li>
+<li>perf 是 sampling，代价是固定的，得到的是统计意义上的 CPU 时间分布。</li>
+</ul>
+<h2 id="Intel-VTune-Profiler"><a href="#Intel-VTune-Profiler" class="headerlink" title="Intel VTune Profiler"></a>Intel VTune Profiler</h2><h2 id="Google-CPU-Profiler-pprof-gperftools"><a href="#Google-CPU-Profiler-pprof-gperftools" class="headerlink" title="Google CPU Profiler(pprof + gperftools)"></a>Google CPU Profiler(pprof + gperftools)</h2><h2 id="Linux-prof-events"><a href="#Linux-prof-events" class="headerlink" title="Linux prof_events"></a>Linux prof_events</h2><p><code>perf_events</code> 的核心位于内核，但它可以观测用户态程序。一个事件由内核报告，并不意味着它只对应内核态执行。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line">                   user space</span><br><span class="line"></span><br><span class="line">              ┌──────────────┐</span><br><span class="line">              │     perf     │</span><br><span class="line">              └──────┬───────┘</span><br><span class="line">                     │</span><br><span class="line">                     │ perf_event_open()</span><br><span class="line">                     ↓</span><br><span class="line"></span><br><span class="line">                   kernel</span><br><span class="line"></span><br><span class="line">           ┌─────────────────────┐</span><br><span class="line">           │     perf_event      │</span><br><span class="line">           │      framework      │</span><br><span class="line">           └─────────┬───────────┘</span><br><span class="line">                     │</span><br><span class="line">      ┌──────────────┼──────────────┐</span><br><span class="line">      ↓              ↓              ↓</span><br><span class="line"></span><br><span class="line">    PMU          tracepoint       kprobe</span><br><span class="line">cycles             sched          uprobe</span><br><span class="line">cache miss</span><br><span class="line">branch miss</span><br></pre></td></tr></table></figure>
+
+<h1 id="关于-benchmark"><a href="#关于-benchmark" class="headerlink" title="关于 benchmark"></a>关于 benchmark</h1><h2 id="pitfall"><a href="#pitfall" class="headerlink" title="pitfall"></a>pitfall</h2><ul>
 <li>需要多次运行</li>
 <li>需要预热，加载缓存<br>  通常可以使用启发式的方法，等待性能收敛。</li>
 <li>使用高精度时钟</li>
@@ -793,7 +855,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Profiling-基础"><span class="nav-number">1.</span> <span class="nav-text">Profiling 基础</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#CPU-常见问题分类"><span class="nav-number">1.1.</span> <span class="nav-text">CPU 常见问题分类</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#On-CPU-和-Off-CPU-time"><span class="nav-number">2.</span> <span class="nav-text">On CPU 和 Off CPU time</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#锁和等待相关的-On-CPU-时间"><span class="nav-number">2.1.</span> <span class="nav-text">锁和等待相关的 On CPU 时间</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#设计上的-pitfall"><span class="nav-number">2.2.</span> <span class="nav-text">设计上的 pitfall</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#CPU-Utilization-CPU-的理解"><span class="nav-number">2.3.</span> <span class="nav-text">CPU Utilization(%CPU) 的理解</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#使用-perf-probe-记录函数调用耗时"><span class="nav-number">2.4.</span> <span class="nav-text">使用 perf probe 记录函数调用耗时</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#关于线程池"><span class="nav-number">3.</span> <span class="nav-text">关于线程池</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#记录线程名"><span class="nav-number">3.1.</span> <span class="nav-text">记录线程名</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#线程名的切换问题"><span class="nav-number">3.2.</span> <span class="nav-text">线程名的切换问题</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#常见-profiling-工具和实现原理"><span class="nav-number">4.</span> <span class="nav-text">常见 profiling 工具和实现原理</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#gprof-GNU-Profiler"><span class="nav-number">4.1.</span> <span class="nav-text">gprof(GNU Profiler)</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#perf-Linux-Perf-Events"><span class="nav-number">4.2.</span> <span class="nav-text">perf(Linux Perf Events)</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Intel-VTune-Profiler"><span class="nav-number">4.3.</span> <span class="nav-text">Intel VTune Profiler</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Google-CPU-Profiler-pprof-gperftools"><span class="nav-number">4.4.</span> <span class="nav-text">Google CPU Profiler(pprof + gperftools)</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#关于-benchmark"><span class="nav-number">5.</span> <span class="nav-text">关于 benchmark</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#pitfall"><span class="nav-number">5.1.</span> <span class="nav-text">pitfall</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#google-benchmark"><span class="nav-number">5.2.</span> <span class="nav-text">google benchmark</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#关于死锁"><span class="nav-number">6.</span> <span class="nav-text">关于死锁</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#寻找死锁的原因"><span class="nav-number">6.1.</span> <span class="nav-text">寻找死锁的原因</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#一些元工具"><span class="nav-number">7.</span> <span class="nav-text">一些元工具</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#pstack"><span class="nav-number">7.1.</span> <span class="nav-text">pstack</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#perf-event-接口"><span class="nav-number">7.2.</span> <span class="nav-text">perf_event 接口</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#SIGPROF"><span class="nav-number">7.3.</span> <span class="nav-text">SIGPROF</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#uprobe"><span class="nav-number">7.4.</span> <span class="nav-text">uprobe</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#func-latency-工具"><span class="nav-number">7.5.</span> <span class="nav-text">func_latency 工具</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#PT-PERF-技术"><span class="nav-number">7.6.</span> <span class="nav-text">PT_PERF 技术</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#eBPF-技术原理"><span class="nav-number">7.7.</span> <span class="nav-text">eBPF 技术原理</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">8.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Profiling-基础"><span class="nav-number">1.</span> <span class="nav-text">Profiling 基础</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#CPU-常见问题分类"><span class="nav-number">1.1.</span> <span class="nav-text">CPU 常见问题分类</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#On-CPU-和-Off-CPU-time"><span class="nav-number">2.</span> <span class="nav-text">On CPU 和 Off CPU time</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#锁和等待相关的-On-CPU-时间"><span class="nav-number">2.1.</span> <span class="nav-text">锁和等待相关的 On CPU 时间</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#设计上的-pitfall"><span class="nav-number">2.2.</span> <span class="nav-text">设计上的 pitfall</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#CPU-Utilization-CPU-的理解"><span class="nav-number">2.3.</span> <span class="nav-text">CPU Utilization(%CPU) 的理解</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#使用-perf-probe-记录函数调用耗时"><span class="nav-number">2.4.</span> <span class="nav-text">使用 perf probe 记录函数调用耗时</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#关于线程池"><span class="nav-number">3.</span> <span class="nav-text">关于线程池</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#记录线程名"><span class="nav-number">3.1.</span> <span class="nav-text">记录线程名</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#线程名的切换问题"><span class="nav-number">3.2.</span> <span class="nav-text">线程名的切换问题</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#常见-profiling-工具和实现原理"><span class="nav-number">4.</span> <span class="nav-text">常见 profiling 工具和实现原理</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Linux-内核"><span class="nav-number">4.1.</span> <span class="nav-text">Linux 内核</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#gprof-GNU-Profiler"><span class="nav-number">4.2.</span> <span class="nav-text">gprof(GNU Profiler)</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#perf"><span class="nav-number">4.3.</span> <span class="nav-text">perf</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Intel-VTune-Profiler"><span class="nav-number">4.4.</span> <span class="nav-text">Intel VTune Profiler</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Google-CPU-Profiler-pprof-gperftools"><span class="nav-number">4.5.</span> <span class="nav-text">Google CPU Profiler(pprof + gperftools)</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Linux-prof-events"><span class="nav-number">4.6.</span> <span class="nav-text">Linux prof_events</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#关于-benchmark"><span class="nav-number">5.</span> <span class="nav-text">关于 benchmark</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#pitfall"><span class="nav-number">5.1.</span> <span class="nav-text">pitfall</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#google-benchmark"><span class="nav-number">5.2.</span> <span class="nav-text">google benchmark</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#关于死锁"><span class="nav-number">6.</span> <span class="nav-text">关于死锁</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#寻找死锁的原因"><span class="nav-number">6.1.</span> <span class="nav-text">寻找死锁的原因</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#一些元工具"><span class="nav-number">7.</span> <span class="nav-text">一些元工具</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#pstack"><span class="nav-number">7.1.</span> <span class="nav-text">pstack</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#perf-event-接口"><span class="nav-number">7.2.</span> <span class="nav-text">perf_event 接口</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#SIGPROF"><span class="nav-number">7.3.</span> <span class="nav-text">SIGPROF</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#uprobe"><span class="nav-number">7.4.</span> <span class="nav-text">uprobe</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#func-latency-工具"><span class="nav-number">7.5.</span> <span class="nav-text">func_latency 工具</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#PT-PERF-技术"><span class="nav-number">7.6.</span> <span class="nav-text">PT_PERF 技术</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#eBPF-技术原理"><span class="nav-number">7.7.</span> <span class="nav-text">eBPF 技术原理</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">8.</span> <span class="nav-text">Reference</span></a></li></ol></div>
             
 
           </div>

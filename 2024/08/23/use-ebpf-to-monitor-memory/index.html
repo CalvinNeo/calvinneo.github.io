@@ -99,7 +99,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="从 C++ 内存监控方案拆出。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2025-12-13T14:55:12.268Z">
+<meta property="og:updated_time" content="2026-09-21T13:48:08.574Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="使用 eBPF 监控内存分配">
 <meta name="twitter:description" content="从 C++ 内存监控方案拆出。">
@@ -386,8 +386,67 @@
 <p>输出的栈大概是这样的</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">15728640 bytes in 2 allocations from stack</span><br><span class="line">        0x000055d982b5062e        os_pages_map.llvm.2428227075819520184+0x4e [tiflash]</span><br><span class="line">        0x000055d982b503b6        pages_map+0x26 [tiflash]</span><br><span class="line">        0x000055d982b1744a        ehooks_default_alloc_impl+0xca [tiflash]</span><br><span class="line">        0x000055d982b1b5cd        ecache_alloc_grow+0x35d [tiflash]</span><br><span class="line">        0x000055d982b4e4d2        pac_alloc_impl.llvm.2573546850293068282+0x142 [tiflash]</span><br><span class="line">        0x000055d982b0d48f        arena_extent_alloc_large+0x15f [tiflash]</span><br><span class="line">        0x000055d982b497c1        large_palloc+0x301 [tiflash]</span><br><span class="line">        0x000055d982af2706        malloc_default+0x7a6 [tiflash]</span><br><span class="line">        0x000055d97b7a4074        Allocator&lt;false&gt;::alloc(unsigned long, unsigned long)+0xd4 [tiflash]</span><br><span class="line">        ...</span><br><span class="line">        0x000055d9825bf310        PreHandleSnapshot+0x250 [tiflash]</span><br><span class="line">        0x00007fd51ab59f48        proxy_ffi::engine_store_helper_impls::_$LT$impl$u20$proxy_ffi..interfaces..root..DB..EngineStoreServerHelper$GT$::pre_handle_snapshot::h9e183a85dcb8c111+0x168 [libtiflash_proxy.so]</span><br><span class="line">16777216 bytes in 1 allocations from stack</span><br></pre></td></tr></table></figure>
 
-<h2 id="TiFlash-的大事务测试"><a href="#TiFlash-的大事务测试" class="headerlink" title="TiFlash 的大事务测试"></a>TiFlash 的大事务测试</h2><p>我们基于这个 demo，用 TiFlash 的大事务进行了测试。</p>
-<h3 id="combined-mode-和-outstanding-mode"><a href="#combined-mode-和-outstanding-mode" class="headerlink" title="combined mode 和 outstanding mode"></a>combined mode 和 outstanding mode</h3><p>There are two modes in memleak, the <strong>outstanding mode</strong> and the <strong>combined outstanding mode</strong>(will be refered as combined mode later).</p>
+<h2 id="TiFlash-的大事务测试"><a href="#TiFlash-的大事务测试" class="headerlink" title="TiFlash 的大事务测试"></a>TiFlash 的大事务测试</h2><p>基于这个 demo，用 TiFlash 的大事务进行了测试。</p>
+<h3 id="combined-mode-和-outstanding-mode"><a href="#combined-mode-和-outstanding-mode" class="headerlink" title="combined mode 和 outstanding mode"></a>combined mode 和 outstanding mode</h3><h4 id="原理比较"><a href="#原理比较" class="headerlink" title="原理比较"></a>原理比较</h4><table>
+<thead>
+<tr>
+<th>对比项</th>
+<th>outstanding</th>
+<th>combined</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>报告函数</td>
+<td><code>print_outstanding()</code></td>
+<td><code>print_outstanding_combined()</code></td>
+</tr>
+<tr>
+<td>数据来源</td>
+<td><code>allocs</code>，每个分配地址一条记录</td>
+<td><code>combined_allocs</code>，每条调用栈一条聚合记录</td>
+</tr>
+<tr>
+<td>汇总位置</td>
+<td>Python 用户态，生成报告时汇总</td>
+<td>eBPF 内核态，分配和释放时更新</td>
+</tr>
+<tr>
+<td>分配年龄过滤 <code>-o</code></td>
+<td>生效，默认保留存活至少 500ms 的分配</td>
+<td>不生效，包含刚分配的内存</td>
+</tr>
+<tr>
+<td>地址明细 <code>-a</code></td>
+<td>可显示符合过滤条件的分配地址和大小</td>
+<td>不提供逐地址明细</td>
+</tr>
+<tr>
+<td>抓栈失败的处理</td>
+<td>跳过负数 <code>stack_id</code></td>
+<td>遍历栈失败时可能显示 <code>stack information lost</code></td>
+</tr>
+<tr>
+<td>排序与 Top N</td>
+<td>支持按字节数或分配数量排序，再选 Top N</td>
+<td>支持按字节数或分配数量排序，再选 Top N</td>
+</tr>
+<tr>
+<td>单份报告的读取工作量</td>
+<td>遍历所有逐地址记录</td>
+<td>遍历聚合后的调用栈记录，通常更少</td>
+</tr>
+</tbody></table>
+<p>outstanding 的方式：用 <code>allocs</code> 保存每笔分配的地址、大小、记录时间和调用栈 ID。下面是逻辑示意：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">allocs[分配地址] = &#123;</span><br><span class="line">    size: 分配大小,</span><br><span class="line">    timestamp_ns: 分配被记录的时间,</span><br><span class="line">    stack_id: 分配时的调用栈 ID</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>combined 的方式：<code>combined_allocs</code> 直接保存每条调用栈的当前汇总值：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">combined_allocs[调用栈 ID] = &#123;</span><br><span class="line">    total_size: 尚未释放的总字节数,</span><br><span class="line">    number_of_allocs: 尚未释放的分配数量</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>allocs</code> 和 <code>combined_allocs</code> 都是 BPF Hash Map。两种报告都描述<strong>生成报告时</strong>仍在账上的未释放分配。但是，outstanding 可以因为传入非 0 的 <code>-o</code> 导致过滤掉一些已存活时间过短的对象。</p>
+<p>直观的例子如下</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">stack_traces[7] = [函数地址 1, 函数地址 2, ...]</span><br><span class="line"></span><br><span class="line">allocs[0x1000] = &#123;size: 100, timestamp_ns: t1, stack_id: 7&#125;</span><br><span class="line">allocs[0x2000] = &#123;size: 200, timestamp_ns: t2, stack_id: 7&#125;</span><br><span class="line"></span><br><span class="line">combined_allocs[7] = &#123;total_size: 300, number_of_allocs: 2&#125;</span><br></pre></td></tr></table></figure>
+
+<h4 id="实际测试"><a href="#实际测试" class="headerlink" title="实际测试"></a>实际测试</h4><p>There are two modes in memleak, the <strong>outstanding mode</strong> and the <strong>combined outstanding mode</strong>(will be refered as combined mode later).</p>
 <p>combined mode 比 outstanding mode 返回的数据要少不少。例如在一次测试中，我们发现：</p>
 <ul>
 <li>jeprof 是 2188 MiB。</li>
@@ -411,7 +470,75 @@
 <h3 id="read-carllerche-bytes-的奇怪函数"><a href="#read-carllerche-bytes-的奇怪函数" class="headerlink" title="read_carllerche_bytes 的奇怪函数"></a>read_carllerche_bytes 的奇怪函数</h3><p>Still, the <code>read_carllerche_bytes</code> function takes 19% memory. However, if we only hook the <code>malloc</code> call, such function disappears. So it may due to some malfunction of monitoring different memory allocation methods. In TiFlash, we seldomly using <code>mmap</code> to allocate memory, so it works fine if we only hook <code>malloc</code> calls.</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">876616479 bytes in 16369 allocations from stack</span><br><span class="line">    protobuf::stream::CodedInputStream::read_carllerche_bytes::he73c610ff7dfb55f+0x186 [libtiflash_proxy.so]</span><br></pre></td></tr></table></figure>
 
-<h2 id="memleak、jemalloc-和-RSS-的比较"><a href="#memleak、jemalloc-和-RSS-的比较" class="headerlink" title="memleak、jemalloc 和 RSS 的比较"></a>memleak、jemalloc 和 RSS 的比较</h2><ul>
+<h2 id="memleak、jemalloc-和-RSS-的比较"><a href="#memleak、jemalloc-和-RSS-的比较" class="headerlink" title="memleak、jemalloc 和 RSS 的比较"></a>memleak、jemalloc 和 RSS 的比较</h2><h3 id="理论"><a href="#理论" class="headerlink" title="理论"></a>理论</h3><table>
+<thead>
+<tr>
+<th>本程序的指标或报告</th>
+<th>最接近的常见指标</th>
+<th>对应关系</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>combined 的 <code>total_size</code></td>
+<td>pprof <code>inuse_space</code></td>
+<td>观测范围内，未释放对象的请求字节数之和</td>
+</tr>
+<tr>
+<td>outstanding，设置 <code>-o 0</code></td>
+<td>pprof <code>inuse_space</code></td>
+<td>同类口径，通过逐地址记录重新计算，并跳过抓栈失败的记录</td>
+</tr>
+<tr>
+<td>outstanding，默认 <code>-o 500</code></td>
+<td>带存活年龄过滤的 <code>inuse_space</code></td>
+<td>只统计至少存活 500ms 的未释放分配，已经不是完整存活量</td>
+</tr>
+<tr>
+<td><code>number_of_allocs</code> 或报告中的 allocations</td>
+<td>pprof <code>inuse_objects</code></td>
+<td>当前符合报告条件的未释放分配笔数</td>
+</tr>
+<tr>
+<td>用户态对象分配字节数总体口径</td>
+<td>jemalloc <code>stats.allocated</code></td>
+<td>都关注应用当前分配的对象空间；具体字节数不保证一致</td>
+</tr>
+</tbody></table>
+<p>memleak 关注分配接口请求了多少字节、相应对象有没有释放。RSS 关注进程当前有哪些页面驻留在 RAM 中；进程 RSS 还包括代码、共享库、线程栈、文件映射等驻留部分，不只包含被跟踪的堆对象。<a href="https://man7.org/linux/man-pages/man5/proc_pid_status.5.html" target="_blank" rel="noopener">进程驻留内存的组成</a></p>
+<ul>
+<li>对象已经分配但相应页面尚未实际分配，memleak 可以增加，RSS 不一定同步增加。</li>
+<li>对象仍未释放，但页面被换出，memleak 可以保持不变，RSS 减少。</li>
+<li>对象已经释放，但分配器保留驻留页面供复用，memleak 减少，RSS 可以保持不变。</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>动作</th>
+<th>这笔分配在 memleak 中的记录</th>
+<th>虚拟映射大小</th>
+<th>RSS</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>分配成功，尚未写入缓冲区</td>
+<td>100 MiB</td>
+<td>可能增加，也可能复用已有映射</td>
+<td>不一定增加 100 MiB；新匿名页可按需分配</td>
+</tr>
+<tr>
+<td>逐页写入缓冲区</td>
+<td>仍为 100 MiB</td>
+<td>通常不因写入本身改变</td>
+<td>原先未驻留的页得到实际内存后，RSS 可能增长</td>
+</tr>
+<tr>
+<td><code>free</code>，且释放事件已处理</td>
+<td>该笔记录归零</td>
+<td>分配器可能保留映射供复用</td>
+<td>分配器保留物理页时，RS</td>
+</tr>
+</tbody></table>
+<h3 id="实际实验"><a href="#实际实验" class="headerlink" title="实际实验"></a>实际实验</h3><ul>
 <li>memleak 输出的内存分配情况，可能会超过 RSS。</li>
 <li>但是无论使用 memleak 还是 jeprof，对于一个具体的函数，例如 <code>DB::Region::insert</code>，它占用的内存比例是相近的。</li>
 </ul>
@@ -769,7 +896,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#memleak-的-Demo"><span class="nav-number">1.</span> <span class="nav-text">memleak 的 Demo</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#TiFlash-的大事务测试"><span class="nav-number">1.1.</span> <span class="nav-text">TiFlash 的大事务测试</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#combined-mode-和-outstanding-mode"><span class="nav-number">1.1.1.</span> <span class="nav-text">combined mode 和 outstanding mode</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#read-carllerche-bytes-的奇怪函数"><span class="nav-number">1.1.2.</span> <span class="nav-text">read_carllerche_bytes 的奇怪函数</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#memleak、jemalloc-和-RSS-的比较"><span class="nav-number">1.2.</span> <span class="nav-text">memleak、jemalloc 和 RSS 的比较</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#进一步实验"><span class="nav-number">1.2.1.</span> <span class="nav-text">进一步实验</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#memleak-简介"><span class="nav-number">2.</span> <span class="nav-text">memleak 简介</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#blazesym"><span class="nav-number">2.1.</span> <span class="nav-text">blazesym</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#stack-id"><span class="nav-number">2.2.</span> <span class="nav-text">stack_id</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#环境依赖"><span class="nav-number">2.3.</span> <span class="nav-text">环境依赖</span></a></li></ol></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#memleak-的-Demo"><span class="nav-number">1.</span> <span class="nav-text">memleak 的 Demo</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#TiFlash-的大事务测试"><span class="nav-number">1.1.</span> <span class="nav-text">TiFlash 的大事务测试</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#combined-mode-和-outstanding-mode"><span class="nav-number">1.1.1.</span> <span class="nav-text">combined mode 和 outstanding mode</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#原理比较"><span class="nav-number">1.1.1.1.</span> <span class="nav-text">原理比较</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#实际测试"><span class="nav-number">1.1.1.2.</span> <span class="nav-text">实际测试</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#read-carllerche-bytes-的奇怪函数"><span class="nav-number">1.1.2.</span> <span class="nav-text">read_carllerche_bytes 的奇怪函数</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#memleak、jemalloc-和-RSS-的比较"><span class="nav-number">1.2.</span> <span class="nav-text">memleak、jemalloc 和 RSS 的比较</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#理论"><span class="nav-number">1.2.1.</span> <span class="nav-text">理论</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#实际实验"><span class="nav-number">1.2.2.</span> <span class="nav-text">实际实验</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#进一步实验"><span class="nav-number">1.2.3.</span> <span class="nav-text">进一步实验</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#memleak-简介"><span class="nav-number">2.</span> <span class="nav-text">memleak 简介</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#blazesym"><span class="nav-number">2.1.</span> <span class="nav-text">blazesym</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#stack-id"><span class="nav-number">2.2.</span> <span class="nav-text">stack_id</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#环境依赖"><span class="nav-number">2.3.</span> <span class="nav-text">环境依赖</span></a></li></ol></li></ol></div>
             
 
           </div>

@@ -120,7 +120,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/wisckey/6.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/wisckey/7.png">
 <meta property="og:image" content="http://www.calvinneo.com/img/dbpaper/wisckey/19.png">
-<meta property="og:updated_time" content="2025-01-19T09:08:15.422Z">
+<meta property="og:updated_time" content="2026-09-21T15:32:50.556Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Database paper part 2">
 <meta name="twitter:description" content="这篇文章中，包含 Greenplum、Aurora、Dynamo、WiscKey。 特别地，也会介绍 Titan 这个类似 WiscKey 的一个实现。">
@@ -560,8 +560,15 @@
 <p>The runtime state maintained by the database lets us use single segment reads rather than quorum reads except on recovery when the state is lost and has to be rebuilt. </p>
 </blockquote>
 <p>The database may have multiple outstanding isolated transactions, which can complete (reach a finished and durable state) in a different order than initiated. Supposing the database crashes or reboots, the determination of whether to roll back is separate for each of these individual transactions. The logic for tracking partially completed transactions and undoing them is kept in the database engine, just as if it were writing to simple disks.<br>但是在重启后，在数据库能够访问存储前，存储服务能够执行自己的 restore 逻辑。在恢复的时候，并不是关注事务，而是关注数据库能够看到一致性的存储视图。</p>
-<p>存储服务应决定一个最大的 LSN，称为 VCL(Volume Complete LSN)。在存储恢复过程中，所有 LSN 大于 VCL 的日志都需要被截断。数据库可以进一步标记一个 CPL(Consistency Point LSNs)从而进一步截断日志。我们定义 VDL(Volumn Durable LSN)为所有副本中最大的 CPL，并且要小于等于 VCL。然后截断 LSN 大于 VDL 的所有日志。比如，即使我们有一份完整的直到 LSN 1007 的数据，但是数据库定义了 CPL 分别是 900/1000/1100，这样的话必须 truncate 到 1000。也就是 we are complete to 1007, but only durable to 1000.</p>
-<p>因此，完整性和持久性是不同的，CPL 可以被看做一种必须被按序 accept 的存储层事务。如果客户端不关注这些区别，就可以将所有日志标志为 CPL。在实际应用时，数据库和存储服务的交互如下：</p>
+<p>几个定义：</p>
+<ul>
+<li>MTR<br>  必须区分 MTR 与 SQL 事务：MTR 是 InnoDB 内部的一小组原子结构修改，例如一次 B-tree 页分裂；CPL/VDL 保证不会暴露半个 MTR。SQL 用户事务是否提交，仍取决于事务提交记录、undo 状态和 commit LSN。</li>
+<li>VCL(Volume Complete LSN)<br>  存储服务应决定一个最大的 LSN，称为 VCL。 the highest LSN for which it can guarantee availability of all prior log records.<br>  在存储恢复过程中，所有 LSN 大于 VCL 的日志都需要被截断。</li>
+<li>CPLs(Consistency Point LSNs)<br>  数据库可以进一步标记一系列 CPL 从而进一步截断日志。</li>
+<li>VDL(Volumn Durable LSN)<br>  不超过 VCL 的最大 CPL。<br>  我们会截断 LSN 大于 VDL 的所有日志。</li>
+</ul>
+<p>比如，即使我们有一份完整的直到 LSN 1007 的数据，但是数据库定义了 CPL 分别是 900/1000/1100，这样的话必须 truncate 到 1000。也就是 we are complete to 1007, but only durable to 1000.</p>
+<p>因此，<strong>完整性</strong>和<strong>持久性</strong>是不同的，CPL 可以被看做一种必须被按序 accept 的存储层事务。如果客户端不关注这些区别，就可以将所有日志标志为 CPL。在实际应用时，数据库和存储服务的交互如下：</p>
 <ol>
 <li>数据库层的事务被分为多个 MTR，这些 MTR 是有序的，并且必须要原子地被执行</li>
 <li>所有的 MTR 由多个连续的 Log Record 组成</li>
@@ -601,7 +608,7 @@
 <p>Dynamo 用了一些经典的技术达到高可用性和可扩展性：</p>
 <ol>
 <li>一致性哈希</li>
-<li>object versioning 实现一致性<br> 给的论文是 Lamport clock</li>
+<li>object versioning 实现一致性<br> 给的论文是 Lamport clock 还是 Vector clock 的</li>
 <li>quorum-like technique 保证一致性，以及 decentralized replica synchronization protocol</li>
 <li>基于 gossip 的分布式 failure 检测和 membership protocol</li>
 </ol>
@@ -715,7 +722,7 @@
 <p>在一些场景下，用户愿意牺牲持久性去换取更高的性能。此时，每个 storage node 可以维护一个 object buffer。每个操作会先存在 buffer 中，然后通过一个 writer 线程去写入到 storage 里面。这个优化可以将峰值流量期间的 P99.9 下降到原来的 1/5，并且只需要一个存放 1000 个对象的缓存即可。从图中还能看到，write buffering 能够对 P99.9 进行平滑。</p>
 <p>当然，这种情况下，只需要一个节点挂掉，那么对应缓存里面的没有落盘的数据就消失了。To reduce the durability risk, the write operation is refined to have the coordinator choose one out of the N replicas to perform a “durable write”. Since the coordinator waits only for W responses, the performance of the write operation is not affected by the performance of the durable write operation performed by a single replica. </p>
 <p><img src="/img/dbpaper/dynamo/5.png"></p>
-<p>【Q】这里的意思我理解照样是写 W 个结果就返回了，写盘的那个节点很慢，但是我们不一定需要它成为那 W 个中的一个，我理解是这样。</p>
+<p>【Q】这里的意思我理解照样是写 W 个结果就返回了，写盘的那个节点很慢，但是不一定需要它成为那 W 个中的一个，我理解是这样。所以，执行耐久写的副本未必位于用户请求的确认关键路径上。所以这里面的容灾还是不完备的。</p>
 <h3 id="Ensuring-Uniform-Load-distribution"><a href="#Ensuring-Uniform-Load-distribution" class="headerlink" title="Ensuring Uniform Load distribution"></a>Ensuring Uniform Load distribution</h3><h3 id="Divergent-Versions-When-and-How-Many"><a href="#Divergent-Versions-When-and-How-Many" class="headerlink" title="Divergent Versions: When and How Many?"></a>Divergent Versions: When and How Many?</h3><p>从实验上来看，导致版本分叉增多的原因并不是故障，而是并发写数量的增加。</p>
 <h3 id="Client-driven-or-Server-driven-Coordination"><a href="#Client-driven-or-Server-driven-Coordination" class="headerlink" title="Client-driven or Server-driven Coordination"></a>Client-driven or Server-driven Coordination</h3><p>每个 Dynamo 节点都可以充当 read coordinator，但是只有 preference list 中的 node 才能当 write coordinator。这是因为这些 node 可以生成一个 version stamp，从而 causally subsumes the version that has been updated by the write request. 特别地，如果 Dynamo 的 versioning scheme 是基于物理时钟的，那么任何的节点都可以 coordinate 一个写入请求了。当然我个人理解就需要要原子钟那一套了。</p>
 <p>另一种 request coordination 的方式是将 state machine 移动到 client node 上。客户端阶段性请求一个 Dynamo 节点，获取 membership 状态。这样的好处是能减少一跳。另一个重要的优势是，不再需要一个 load balancer 去均匀分发客户的负载了。</p>
@@ -776,18 +783,18 @@
 <p>一个简单的从 vLog 回收的方式是，首先扫描 LSM 拿到所有有效的 value 地址，然后 vLog 中没有被 LSM 引用的 value 就会被回收掉。显然这个方式很重，最关键的是，它只能适用于 offline 的场景。</p>
 <p>WiscKey 的方案需要引入一个小的 data layout 变动。在存储 value 的时候，同时也要存储对应的 key。也就是 <code>&lt;key size, value size, key, value&gt;</code>。</p>
 <p>WiscKey 的思路是让 valid 的值在 vLog 中处于一个连续的区段内。在这个区段的一端，也就是 head 的位置，是新的 value 被 append 的地方。在这个 range 的另一端，也就是 tail 的位置，是 GC 开始释放空间的位置。只有在 head 和 tail 之间包含了 valid 的 value 的部分，才可能在查询中被访问。<br><img src="/img/dbpaper/wisckey/7.png"></p>
-<p>在 GC 时，WiscKey 首先会从 tail 读取一个 chunk，比如几个 MB 的 KV 对，然后会查询 LSM 树，看这些 key 是否被删除了。然后 WiscKey 会将 valid 的 key 添加回 head 位置。最后，它更新 tail 的位置，并释放空间。</p>
+<p>在 GC 时，WiscKey 首先会从 tail 读取一个 chunk，比如几个 MB 的 KV 对，然后会查询 LSM 树，看这些 key 是否被删除了，或者看这些 key 是否已经被更新。然后 WiscKey 会将 valid 的 key 添加回 head 位置。最后，它更新 tail 的位置，并释放空间。</p>
 <p>为了避免 GC 过程中丢失数据，WiscKey 需要保证新 append 的 valid 的 value 和新的 tail 首先被 persist，然后才能真的去 free 掉 space。WiscKey 的方案是：</p>
 <ol>
 <li>在 appending the valid values to the vLog 之后，GC 会调用一次 fsync</li>
 <li>将这些新的 value 的地址和当前的 tail 同步地写入 LSM 中<br> tail 在 LSM 中存放的格式是 <code>&lt;tail-marker, tail-vLog-offset&gt;</code>。</li>
 <li>最后，在 vLog 中回收空间</li>
 </ol>
-<h4 id="Crash-Consistency"><a href="#Crash-Consistency" class="headerlink" title="Crash Consistency"></a>Crash Consistency</h4><p>WiscKey 保证了和 LSM 树同样的 crash guarantee，原因是利用了现代文件系统的一个特性。考虑一个文件包含了 <code>b1 b2 b3 ... bn</code> 这样的序列，然后后续 append 了 <code>bn+1 bn+2 bn+3 ... bn+m</code> 这些序列。如果发生了 crash，恢复后，会看到 <code>b1 b2 b3 ... bn bn+1 bn+2 bn+3 ... bn+x</code> 这样的序列，并且 x 是小于 m 的。也就是说，实际被添加的只可能是前缀，不可能是某个随机字节，或者多出来添加某些序列。进一步又可以推论，如果 X 在 vLog 中因为 crash 丢失了，那么所有在 X 之后被添加的也会丢失。</p>
-<p>如果 key 在系统 crash 的时候丢失了，如果是 LSM 里面找不到的情况，会按照 LSM 的模式来处理。即使 value 已经被写进去了 vLog，它也可以在随后被 GC 掉。但是如果 LSM 中能找到key，就需要额外步骤。首先 WiscKey 会查询 value 的地址是否在 vLog 的有效范围，也就是 head 到 tail 这个区间内。如果不在，就说明 value 在系统崩溃中丢失了，从 LSM 中删除 key，并且通知用户 key 不存在。</p>
+<h4 id="Crash-Consistency"><a href="#Crash-Consistency" class="headerlink" title="Crash Consistency"></a>Crash Consistency</h4><p>WiscKey 保证了和 LSM 树同样的 crash guarantee，原因是利用了大部分现代文件系统的一个特性。考虑一个文件包含了 <code>b1 b2 b3 ... bn</code> 这样的序列，然后后续 append 了 <code>bn+1 bn+2 bn+3 ... bn+m</code> 这些序列。如果发生了 crash，恢复后，会看到 <code>b1 b2 b3 ... bn bn+1 bn+2 bn+3 ... bn+x</code> 这样的序列，并且 x 是小于 m 的。也就是说，实际被添加的只可能是前缀，不可能是某个随机字节，或者多出来添加某些序列。进一步又可以推论，如果 X 在 vLog 中因为 crash 丢失了，那么所有在 X 之后被添加的也会丢失。</p>
+<p>如果 key 在系统 crash 的时候丢失了，如果是 LSM 里面找不到的情况，会按照 LSM 的模式来处理。即使 value 已经被写进去了 vLog，它也可以在随后被 GC 掉。但是如果 LSM 中能找到 key，就需要额外步骤。首先 WiscKey 会查询 value 的地址是否在 vLog 的有效范围，也就是 head 到 tail 这个区间内。如果不在，就说明 value 在系统崩溃中丢失了，从 LSM 中删除 key，并且通知用户 key 不存在。</p>
 <h3 id="Optimization"><a href="#Optimization" class="headerlink" title="Optimization"></a>Optimization</h3><h4 id="Value-log-Write-Buffer"><a href="#Value-log-Write-Buffer" class="headerlink" title="Value-log Write Buffer"></a>Value-log Write Buffer</h4><h4 id="Optimizing-the-LSM-Tree-Log"><a href="#Optimizing-the-LSM-Tree-Log" class="headerlink" title="Optimizing the LSM-Tree Log"></a>Optimizing the LSM-Tree Log</h4><p>LSM 的 log 中存放了 key 和 value。WiscKey 中 LSM 的 log 只存 key 和 value 的地址。进一步地，vLog 也会记录被插入了的 key，从而更好支持 GC。</p>
 <p>如果在 key 在被持久化到 LSM 之前 crash 了，它们可以从 vLog 中被扫描从而恢复。但简便的做法需要扫描全部的 vLog 才能会的结果。为了减少这一点开销，WiscKey 会定期在 LSM 中记录 vLog 的 head：<code>&lt;head-marker, head-vLog-offset&gt;</code>。【Q】这里可以对比看下记录 head 和 tail 的不同原因。当一个数据库被打开之后，WiscKey 会从最新的 head 开始扫描 vLog，直到 tail。因为 head 被存储在了 LSM 树里面，所以 LSM 就 inherently 能够保证被插入 LSM 的 key 可以按照插入的顺序恢复，从而满足 crash consistency。</p>
-<p>因此，从 WiscKey 中移除 LSM 的 WAL 是一个安全的优化。</p>
+<p>因此，从 WiscKey 在实现 LSM 时移除了 WAL 是一个安全的优化。</p>
 <h3 id="性能"><a href="#性能" class="headerlink" title="性能"></a>性能</h3><h4 id="空间放大"><a href="#空间放大" class="headerlink" title="空间放大"></a>空间放大</h4><p><img src="/img/dbpaper/wisckey/19.png"></p>
 <h1 id="Titan"><a href="#Titan" class="headerlink" title="Titan"></a>Titan</h1><p>Titan 的思路是将 RocksDB 中的 value 拿出来存，减少 Compaction 对 CPU 和 IO 的开销，但会带来空间放大。并且数据局部性差，所以范围查询性能较差。</p>
 <p>Titan 将这些大 value 有序地存放在一些 blob file 中，并且保存了 value 对应的 user key 用来反查 RocksDB。反查的原因是 blob file 本身需要 gc，所以要通过 user key 来查询是否过期，这会带来一些写放大。</p>
