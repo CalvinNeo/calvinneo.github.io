@@ -99,7 +99,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="学习 RDMA 的基本知识。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2026-09-20T13:51:51.035Z">
+<meta property="og:updated_time" content="2026-09-23T14:03:52.588Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="RDMA 学习">
 <meta name="twitter:description" content="学习 RDMA 的基本知识。">
@@ -402,7 +402,7 @@
 <li>InfiniBand 可以理解为很屌的专有实现</li>
 <li>RoCE 在以太网上的实现</li>
 </ul>
-<h1 id="RDMA-Write-的基本链路"><a href="#RDMA-Write-的基本链路" class="headerlink" title="RDMA Write 的基本链路"></a>RDMA Write 的基本链路</h1><p>A 通过 rdma 往 B 写操作的流程，A 大概是：</p>
+<h2 id="RDMA-Write-的基本链路"><a href="#RDMA-Write-的基本链路" class="headerlink" title="RDMA Write 的基本链路"></a>RDMA Write 的基本链路</h2><p>A 通过 rdma 往 B 写操作的流程，A 大概是：</p>
 <ol>
 <li>通过 ibv_get_device_list、ibv_open_device、ibv_free_device_list 打开设备。</li>
 <li>通过 ibv_query_gid 获得 gid。</li>
@@ -435,36 +435,36 @@
 <li>用 ibv_modify_qp 切换到 RTS 状态。</li>
 <li>告诉 A 自己已经 READY 了。</li>
 <li>从控制面直到 A 已经完成了传输。</li>
-<li>调用 __sync_synchronize</li>
+<li>调用 <code>__sync_synchronize</code></li>
 <li>发送 OK 给 A。后面就销毁掉。</li>
 </ol>
 <p>控制面的交互大概是：</p>
 <ol>
 <li><p>B 启动 TCP Server</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">B: listen()</span><br><span class="line">B: accept()</span><br></pre></td></tr></table></figure></li>
+ <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">B: listen()</span><br><span class="line">B: accept()</span><br></pre></td></tr></table></figure></li>
 <li><p>A 连接 B</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">A: connect()</span><br></pre></td></tr></table></figure></li>
+ <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">A: connect()</span><br></pre></td></tr></table></figure></li>
 <li><p>A 把自己的 QP 信息发给 B</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">A -&gt; B:</span><br><span class="line">&lt;a_qpn&gt; &lt;a_psn&gt; &lt;a_gid&gt;</span><br></pre></td></tr></table></figure></li>
+ <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">A -&gt; B:</span><br><span class="line">&lt;a_qpn&gt; &lt;a_psn&gt; &lt;a_gid&gt;</span><br></pre></td></tr></table></figure></li>
 <li><p>B 把自己的 QP 信息和 MR 授权发给 A</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">B -&gt; A:</span><br><span class="line">&lt;b_qpn&gt; &lt;b_psn&gt; &lt;b_gid&gt; &lt;b_buffer_address&gt; &lt;b_rkey&gt;</span><br></pre></td></tr></table></figure></li>
+ <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">B -&gt; A:</span><br><span class="line">&lt;b_qpn&gt; &lt;b_psn&gt; &lt;b_gid&gt; &lt;b_buffer_address&gt; &lt;b_rkey&gt;</span><br></pre></td></tr></table></figure></li>
 <li><p>A 和 B 分别设置自己的 QP</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">RESET -&gt; INIT -&gt; RTR -&gt; RTS</span><br></pre></td></tr></table></figure></li>
+ <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">RESET -&gt; INIT -&gt; RTR -&gt; RTS</span><br></pre></td></tr></table></figure></li>
 <li><p>B 告诉 A，B 已经准备完成</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">B -&gt; A:</span><br><span class="line">READY</span><br></pre></td></tr></table></figure></li>
+ <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">B -&gt; A:</span><br><span class="line">READY</span><br></pre></td></tr></table></figure></li>
 <li><p>A 执行一次 RDMA Write</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">A buffer --RDMA Write--&gt; B buffer</span><br></pre></td></tr></table></figure>
+ <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">A buffer --RDMA Write--&gt; B buffer</span><br></pre></td></tr></table></figure>
 
-<p>A 使用：</p>
+<p> A 使用：</p>
 <ul>
 <li>本地 a_buffer、length、a_lkey</li>
 <li>远端 b_buffer_address、b_rkey，目的是能够获得授权写入 B buffer</li>
 </ul>
 </li>
 <li><p>A 轮询 CQ，确认 RDMA Write 完成，然后通知 B</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">A -&gt; B:</span><br><span class="line">DONE</span><br></pre></td></tr></table></figure></li>
+ <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">A -&gt; B:</span><br><span class="line">DONE</span><br></pre></td></tr></table></figure></li>
 <li><p>B 检查自己的 buffer，验证成功后回复 A</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">B -&gt; A:</span><br><span class="line">OK</span><br></pre></td></tr></table></figure></li>
+ <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">B -&gt; A:</span><br><span class="line">OK</span><br></pre></td></tr></table></figure></li>
 <li><p>A 和 B 关闭 TCP 连接并清理 RDMA 资源</p>
 </li>
 </ol>
@@ -478,7 +478,15 @@
 <li>源端可以把大量 TransferEntry 批量转成 RDMA Write WR。</li>
 <li>目标 CPU 不参与每一次数据搬运，适合大块 GPU/Host 内存复制。</li>
 </ul>
-<h1 id="SEDN-RECV"><a href="#SEDN-RECV" class="headerlink" title="SEDN/RECV"></a>SEDN/RECV</h1><h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ul>
+<h2 id="SEND-RECV"><a href="#SEND-RECV" class="headerlink" title="SEND/RECV"></a>SEND/RECV</h2><h1 id="同步原语"><a href="#同步原语" class="headerlink" title="同步原语"></a>同步原语</h1><ul>
+<li>cuPointerSetAttribute<br>  设置 SYNC_MEMOPS=1，是要求涉及这块显存的 CUDA 同步内存操作真正完成后，函数才返回 CPU，避免 CPU 随后安排网卡读取时，CUDA 复制还没完成。<br>  前者通常每块显存设置一次，约束 CUDA 自身的同步内存操作。</li>
+<li>cuFlushGPUDirectRDMAWrites<br>  数据由网卡通过 RDMA 写入显存，网卡报告完成后，GPU kernel 不一定立即能读到新数据，因此需要在确认 RDMA 写完成后、启动 kernel 读取前按需调用 flush，等待这些写入对 GPU 可见。<br>  在需要的消费点调用，保证外部 RDMA 写入的可见性。设置 SYNC_MEMOPS 并不意味着后续每次 RDMA 写入都会自动 flush。</li>
+</ul>
+<h1 id="InfiniBand"><a href="#InfiniBand" class="headerlink" title="InfiniBand"></a>InfiniBand</h1><ul>
+<li>SL<br>  流量属于哪一类，类似包裹上的分类标签。</li>
+<li>VL(VirtualLane，虚拟通道)<br>  流量具体走哪个逻辑通道。网络设备通过 SL -&gt; VL 映射表分配通道，再按配置的优先级和权重调度发送。<br>  即使映射到了不同 VL，它们仍然共享同一条物理链路，可以理解成“分了排队通道，但共用出口”。</li>
+</ul>
+<h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ul>
 <li><a href="https://zhuanlan.zhihu.com/p/652925814" target="_blank" rel="noopener">https://zhuanlan.zhihu.com/p/652925814</a></li>
 </ul>
 
@@ -553,6 +561,10 @@
           <span class="post-nav-divider"></span>
 
           <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2026/09/22/redis-blog-source-review/" rel="prev" title="既有 Redis 论文修订">
+                既有 Redis 论文修订 <i class="fa fa-chevron-right"></i>
+              </a>
             
           </div>
         </div>
@@ -631,7 +643,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">274</span>
+                <span class="site-state-item-count">278</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -644,7 +656,7 @@
             
             <div class="site-state-item site-state-tags">
               <a href="/tags/index.html">
-                <span class="site-state-item-count">156</span>
+                <span class="site-state-item-count">157</span>
                 <span class="site-state-item-name">标签</span>
               </a>
             </div>
@@ -737,7 +749,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#基本概念"><span class="nav-number">1.</span> <span class="nav-text">基本概念</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#RDMA-Write-的基本链路"><span class="nav-number">2.</span> <span class="nav-text">RDMA Write 的基本链路</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#SEDN-RECV"><span class="nav-number">3.</span> <span class="nav-text">SEDN/RECV</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">4.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#基本概念"><span class="nav-number">1.</span> <span class="nav-text">基本概念</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#RDMA-Write-的基本链路"><span class="nav-number">1.1.</span> <span class="nav-text">RDMA Write 的基本链路</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#SEND-RECV"><span class="nav-number">1.2.</span> <span class="nav-text">SEND/RECV</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#同步原语"><span class="nav-number">2.</span> <span class="nav-text">同步原语</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#InfiniBand"><span class="nav-number">3.</span> <span class="nav-text">InfiniBand</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">4.</span> <span class="nav-text">Reference</span></a></li></ol></div>
             
 
           </div>
