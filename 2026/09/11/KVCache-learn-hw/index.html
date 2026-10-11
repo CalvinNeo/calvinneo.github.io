@@ -1,0 +1,1293 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="机器学习,AIGen,LLM," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="在设计 KVCache 的时候，需要考虑我们能接触到的硬件的性能，在作出设计，包含显卡、网卡、HBM、DRAM 和 SSD。">
+<meta name="keywords" content="机器学习,AIGen,LLM">
+<meta property="og:type" content="article">
+<meta property="og:title" content="学习 KVCache：硬件和架构">
+<meta property="og:url" content="http://www.calvinneo.com/2026/09/11/KVCache-learn-hw/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="在设计 KVCache 的时候，需要考虑我们能接触到的硬件的性能，在作出设计，包含显卡、网卡、HBM、DRAM 和 SSD。">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2026-10-11T14:15:29.575Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="学习 KVCache：硬件和架构">
+<meta name="twitter:description" content="在设计 KVCache 的时候，需要考虑我们能接触到的硬件的性能，在作出设计，包含显卡、网卡、HBM、DRAM 和 SSD。">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2026/09/11/KVCache-learn-hw/"/>
+
+
+
+
+
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5487541356791902"
+     crossorigin="anonymous"></script>
+  <title>学习 KVCache：硬件和架构 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2026/09/11/KVCache-learn-hw/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                学习 KVCache：硬件和架构
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2026-09-11T22:48:32+08:00">
+                2026-09-11
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>在设计 KVCache 的时候，需要考虑我们能接触到的硬件的性能，在作出设计，包含显卡、网卡、HBM、DRAM 和 SSD。</p>
+<a id="more"></a>
+
+<h1 id="基础知识"><a href="#基础知识" class="headerlink" title="基础知识"></a>基础知识</h1><p>大模型生成回答时，会不断用到前面的上下文。在常规 Transformer 中，attention 会为历史 token 保存 Key 和 Value 两类向量，也就是 KVCache。保留这些向量后，生成下一个 token 时就不用把历史 token 的 K/V 重新计算一遍。代价是上下文越长、同时处理的请求越多，KVCache 占用的内存也越大。</p>
+<p>为了理解后面的取舍，可以把一次推理分成两个阶段。<strong>Prefill</strong> 是处理输入提示词、建立其 KVCache 的阶段。<strong>Decode</strong> 是利用已有 KVCache，逐步生成后续 token 的阶段。对于读取全部历史上下文的注意力计算，也就是本文所说的 dense attention，历史 KV 会在后续 decode 中反复被访问。</p>
+<p>既然要反复读，最直接的办法就是把活跃请求的 KV 放在 GPU 的 <strong>HBM</strong> 中。HBM 是 High Bandwidth Memory，也就是高带宽内存，通过封装内的宽接口连接 GPU。它很快，但容量有限，而且模型权重、计算临时数据也要占用它。因此，HBM 用完之后，系统通常会考虑把暂时不用的 KV 搬到 CPU 内存，或者保存到其他机器上，以便之后再取回来。</p>
+<p>本文把 CPU 一侧的普通系统内存简称为 <strong>DRAM</strong>，也会称它为 <strong>Host 内存</strong>。严格说，HBM 本身也是一种 DRAM 技术，这里的区分是为了说明数据放在 GPU 旁边，还是放在 CPU 一侧。<strong>NIC</strong> 就是网卡，CX-7 和 CX-8 是 NVIDIA ConnectX 系列网卡的两个代际。跨机器共享 KV 时，网卡负责把这些数据运过去。</p>
+<p>由此会出现两个不同的问题。第一个是“有多少空间可以保存 KV”，这是容量问题。第二个是“GPU 要用的时候，能不能及时把 KV 搬回来”，这是带宽和延迟问题。增加 DRAM 可以解决一部分容量压力，但不会自动缩短搬运时间。</p>
+<p>后文提到的 <strong>KV 恢复</strong>，泛指把一个推理请求要用的 KV 从本地或远端 DRAM 加载到 GPU。它可能是新请求复用了缓存前缀，也可能是暂停的请求重新开始执行。一个推理请求可以分布在多张 GPU 上，一次恢复也可以拆成很多次传输。</p>
+<h1 id="一张大表看架构"><a href="#一张大表看架构" class="headerlink" title="一张大表看架构"></a>一张大表看架构</h1><table>
+<thead>
+<tr>
+<th>资源</th>
+<th align="right">容量</th>
+<th>带宽数值与口径</th>
+<th>同时双向 / 混合读写如何计算</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>CX-7，400 Gb/s 配置</td>
+<td align="right">—</td>
+<td><strong>单向 50 GB/s</strong>，网卡线速</td>
+<td>全双工：理论上可同时发送 50、接收 50 GB/s；<strong>双向合计 100 GB/s</strong></td>
+</tr>
+<tr>
+<td>CX-8，800 Gb/s 总速率配置</td>
+<td align="right">—</td>
+<td><strong>单向合计 100 GB/s</strong>，整卡网络标称总速率</td>
+<td>全双工：理论上可同时发送合计 100、接收合计 100 GB/s；<strong>双向合计 200 GB/s</strong>；Ethernet 的 2×400GbE 配置需同时利用两个端口</td>
+</tr>
+<tr>
+<td>PCIe 4.0 ×16</td>
+<td align="right">—</td>
+<td><strong>单向约 31.5 GB/s</strong>，编码后理论值</td>
+<td>全双工：两个方向理论上各约 31.5 GB/s；<strong>双向合计约 63 GB/s</strong></td>
+</tr>
+<tr>
+<td>PCIe 5.0 ×16</td>
+<td align="right">—</td>
+<td><strong>单向约 63 GB/s</strong>，编码后理论值</td>
+<td>全双工：两个方向理论上各约 63 GB/s；<strong>双向合计约 126 GB/s</strong></td>
+</tr>
+<tr>
+<td>PCIe 6.0 ×16</td>
+<td align="right">—</td>
+<td><strong>单向标称 128 GB/s</strong>，原始带宽，未扣除协议开销</td>
+<td>全双工：两个方向标称各 128 GB/s；<strong>双向合计 256 GB/s</strong>；有效载荷吞吐低于此值</td>
+</tr>
+<tr>
+<td>H200 SXM HBM</td>
+<td align="right">141 GB/卡</td>
+<td><strong>最高 4.8 TB/s</strong>，单张 GPU 所有 HBM 通道合计峰值</td>
+<td>纯读理论上限为 4.8 TB/s，<strong>无需除以 2</strong>；混合读写共享总带宽，不能同时读 4.8、写 4.8 TB/s</td>
+</tr>
+<tr>
+<td>B200 SXM HBM</td>
+<td align="right">180 GB/卡</td>
+<td><strong>最高 8 TB/s</strong>，单张 GPU 所有 HBM 通道合计峰值</td>
+<td>纯读理论上限为 8 TB/s，<strong>无需除以 2</strong>；混合读写共享总带宽，不能同时读 8、写 8 TB/s</td>
+</tr>
+</tbody></table>
+<h2 id="速度差距"><a href="#速度差距" class="headerlink" title="速度差距"></a>速度差距</h2><p>当 KV 已经在 GPU 的 HBM 中时，GPU 通过本地内存接口读取它。当 KV 在本机 CPU 内存中时，需要通过 <strong>PCIe</strong> 搬到 GPU。PCIe 是连接 CPU、GPU、网卡等设备的高速互联。如果 KV 在另一台机器，还需要先跨越网络，再经过目标侧的设备连接到达 GPU。</p>
+<p>这几种路径的物理条件不同。HBM 紧邻 GPU，可以使用大量并行的短距离连接。PCIe 要连接板卡和主机，网络还要连接不同机器，接口规模、传输距离和可靠性要求都不同。因此，GPU 读取本地 HBM 的速度远高于从外部获取数据，是很自然的结果。</p>
+<h2 id="详细说明"><a href="#详细说明" class="headerlink" title="详细说明"></a>详细说明</h2><p>用这张表估算 KV 搬运时，最重要的是选对路径和方向。比如，从 CPU 内存往 GPU 写入一份 KV，只能使用 PCIe 的一个方向，不能拿双向合计的 126 GB/s 来算。数据已经在 B200 的 HBM 中之后，GPU 才能通过本地内存接口反复读取它。此时的标称上限是 <code>8 TB/s = 8,000 GB/s</code>，与从外部搬进来的速度属于两条不同路径。</p>
+<p>表里的“峰值”也不等于应用实际能拿到的速度。接口上传输的内容除了 KV 本身，还有报头、控制信息和用于保证可靠性的冗余数据。设备排队、访问模式以及软件提交是否及时，也会影响最后测到的吞吐。因此，做容量规划时可以参考规格，估算请求延迟时则应尽量使用实测的有效带宽，也就是每秒真正搬完了多少 KV 字节。</p>
+<p>如果想进一步理解为什么 PCIe 的数字不是整齐的 32、64、128，可以从 PCIe 5.0 ×16 看起。<code>×16</code> 表示这条连接有 16 条并行 lane，也就是传输通道。Gen5 是 PCIe 5.0 的简称，每条通道的原始单向速率是 32 Gb/s，但它采用 128b/130b 编码，即每 128 bit 内容需要占用 130 bit 传输空间。因此，扣除这部分开销后得到：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">32 Gb/s × 16 条通道 ÷ 8 × 128/130 ≈ 63.0 GB/s</span><br></pre></td></tr></table></figure>
+
+<p>PCIe 4.0 每条通道的速率是 Gen5 的一半，所以同样计算得到约 31.5 GB/s。这些数值还没有扣除 <strong>TLP（Transaction Layer Packet，事务层数据包）</strong> 的开销。TLP 是 PCIe 用来表达内存读写等操作的数据包，其中除了数据，还要携带地址、操作类型等信息。也就是说，表里的 63 GB/s 依然不是应用有效吞吐。</p>
+<p>PCIe 6.0 在更高速度下还要兼顾传输可靠性，因此引入了固定大小的数据打包和纠错机制。<strong>FLIT（Flow Control Unit，流控单元）</strong> 是链路使用的固定大小传输单元，PCIe 6.0 将其定为 256 byte。<strong>FEC（Forward Error Correction，前向纠错）</strong> 则通过附加冗余信息，让接收方能直接纠正一部分传输错误，减少重传。一个 FLIT 中也要容纳控制和校验信息，所以 256 byte 不会全部用于承载应用数据。这就是表中 128 GB/s 被标为“原始带宽”的原因。理解 KV 搬运时，不必记住它们的每个字段，只需要知道可靠传输会占用一部分链路能力。<a href="https://pcisig.com/blog/pcie%C2%AE-60-specification-webinar-qa-deeper-dive-flit-mode-pam4-and-forward-error-correction-fec" target="_blank" rel="noopener">PCI-SIG 对 FLIT 和 FEC 的解释</a></p>
+<h2 id="关于-GDR"><a href="#关于-GDR" class="headerlink" title="关于 GDR"></a>关于 GDR</h2><p>跨机器读取 KV 时，如果每一批数据都需要 CPU 执行网络收发、拷贝和转交，CPU 开销和额外内存访问就可能拖慢过程。<strong>RDMA（Remote Direct Memory Access，远程直接内存访问）</strong> 允许网卡直接访问事先授权和注册的内存，从而减少 CPU 对数据搬运的参与。这里的“注册”是把指定内存区域及其访问权限交给网卡，并不是把数据复制一份。</p>
+<p><strong>GPUDirect RDMA</strong> 把这条直接访问路径延伸到 GPU 显存。在硬件和驱动支持的情况下，远端数据可以由目标网卡直接写入 GPU，不必先落到目标机器的 CPU 内存，再进行一次 CPU 内存到 GPU 的复制。下面将它与另外两条路径对比，其中本地复制可以通过 CUDA，也就是 NVIDIA 的 GPU 编程与运行时平台来发起。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">本机内存中已有 KV，使用本地 CUDA 拷贝：</span><br><span class="line">本机 DRAM ── PCIe ──&gt; GPU HBM</span><br><span class="line"></span><br><span class="line">远端 KV 直接写入 GPU，使用 GPUDirect RDMA：</span><br><span class="line">远端 DRAM ── 源端 PCIe/网卡 ── 网络 ── 目标网卡/PCIe ──&gt; GPU HBM</span><br><span class="line"></span><br><span class="line">远端 KV 先落到本机内存，再送入 GPU：</span><br><span class="line">远端 DRAM ── RDMA ──&gt; 本机 DRAM ── PCIe ──&gt; GPU HBM</span><br></pre></td></tr></table></figure>
+
+<p>GPUDirect RDMA 省掉的是目标侧的内存中转，并没有省掉网卡到 GPU 的 PCIe 连接。远端取数、网络传输和目标 GPU 接收数据仍然要花时间，所以整体速度取决于这条路径中最慢的一段。<a href="https://docs.nvidia.com/cuda/gpudirect-rdma/" target="_blank" rel="noopener">NVIDIA GPUDirect RDMA 文档</a></p>
+<p>实际服务器还需要考虑设备接在哪里。多路 CPU 机器的内存通常分属不同 CPU，本地访问与跨 CPU 访问的代价不同，这就是 <strong>NUMA（非统一内存访问）</strong>。同样，多个 GPU 和网卡也可能共用 PCIe 交换芯片及其上行连接。即使每个设备单独测试都很快，并发时仍可能争用同一条通道。后面计算多 GPU 的总带宽时，必须说明是否存在这种共享瓶颈。</p>
+<p>上图第一条是可选的本地拷贝方案，并不等于 KVCache 当前一定这么实现。</p>
+<h2 id="关于网卡"><a href="#关于网卡" class="headerlink" title="关于网卡"></a>关于网卡</h2><p>升级网卡的直接收益是提高网络这段的传输能力。CX-7 的 400G 配置单向为 50 GB/s，CX-8 的 800G 总速率配置则为 100 GB/s。只有原来的瓶颈确实在网络上，而且源端取数和目标端写入都能跟上时，KV 搬运才可能获得接近两倍的提升。</p>
+<p>先看端口。InfiniBand 和 Ethernet 是两种不同的网络体系，RDMA 可以在它们上面实现，但可用的端口速率不一定相同。当前官方手册列出的 CX-8 C8180 支持单端口 800G XDR InfiniBand，XDR 是这里的 InfiniBand 速率代际名称。它的 Ethernet 配置包括两个 400GbE 端口，C8240 的默认配置也是两个 400GbE 端口。因此，在这类 Ethernet 配置下，单向 100 GB/s 是两个端口加起来的能力，每个端口仍是单向 50 GB/s。搬运软件必须把工作分配到两个端口，才能利用整卡总带宽。<a href="https://networking-docs.nvidia.com/connectx8hw/port-configurations" target="_blank" rel="noopener">CX-8 官方端口配置</a></p>
+<p>再看网卡接入主机的通道。CX-8 支持 PCIe 6.0 ×16。如果服务器只有 PCIe 5.0，适用的 <strong>Socket Direct</strong> 型号可以通过辅助卡和线缆，额外接入一条 PCIe ×16 连接，让网卡使用两条 Gen5 路径的总 I/O 能力。它解决的是单条 Gen5 ×16 带宽不足的问题，需要对应的网卡、插槽和配件。只插一条 Gen5 ×16 时，经过该连接的数据仍受约 63 GB/s 的单向理论上限约束。<a href="https://networking-docs.nvidia.com/connectx8hw/introduction" target="_blank" rel="noopener">CX-8 接口与 Socket Direct 说明</a></p>
+<p>最后还要看 GPU 怎样接收数据。即使网卡已经接在 Gen6 上，如果某个请求的 KV 全部要写入同一张、仅通过 Gen5 ×16 接收数据的 GPU，这条 GPU 连接仍会限制速度。多个 GPU 分担传输时，可能利用上更高的网卡总带宽，但前提是这些 GPU 的连接没有再汇聚到一条更窄的共享通道上。因此，换成 CX-8 后不能直接把所有恢复耗时除以 2。</p>
+<h2 id="KVCache-的架构比较"><a href="#KVCache-的架构比较" class="headerlink" title="KVCache 的架构比较"></a>KVCache 的架构比较</h2><p>比较实现方案时，先问“这份 KV 接下来会怎样被使用”通常比先选传输库更有用。如果它马上要被连续读取几十次，放在 HBM 的价值很大。如果它只是可能被未来请求复用，放在更便宜的 DRAM 中通常更合适。</p>
+<p>在这个前提下，各种方案可以理解为对“容量、第一次等待时间、后续重复访问成本”的不同取舍。</p>
+<table>
+<thead>
+<tr>
+<th>方案</th>
+<th>为什么会选择它</th>
+<th>为此要付出什么</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>活跃 KV 留在 HBM</td>
+<td>后续每个生成步骤都能直接访问本地内存，适合对响应速度要求高的请求。</td>
+<td>需要为当前请求保留显存，能够同时容纳的上下文和请求数有限。</td>
+</tr>
+<tr>
+<td>本机 DRAM 保存 KV，用时再搬入 HBM</td>
+<td>利用本机较大的内存扩充缓存，命中后只需经过本地设备连接。</td>
+<td>加载速度受 PCIe 和内存位置影响，也不能天然与其他机器共享。</td>
+</tr>
+<tr>
+<td>远端 DRAM 保存 KV，直接写入目标 HBM</td>
+<td>多个推理实例可以复用同一批历史 KV，并省掉目标侧内存中转。</td>
+<td>请求开始计算前要等待网络搬运，还可能与其他 GPU 通信争用网卡。</td>
+</tr>
+<tr>
+<td>远端 KV 先放本机 DRAM，再搬入 HBM</td>
+<td>可以提前从远端取回数据，并在本机留下后续可复用的副本。</td>
+<td>第一次使用需要两段搬运，本机内存也要额外读写一遍。</td>
+</tr>
+<tr>
+<td>Prefill GPU 直接把 KV 交给 Decode GPU</td>
+<td>把处理提示词和生成回答交给不同 GPU，以便分别调度这两类工作。</td>
+<td>源 GPU 必须等传输完成才能释放对应数据，跨节点交接仍受网络限制。</td>
+</tr>
+<tr>
+<td>每步计算前从 DRAM 读取所需 KV</td>
+<td>即使 GPU 装不下全部历史 KV，也能继续运行较长上下文。</td>
+<td>同一份历史 KV 可能被反复搬运，每个 token 的生成时间容易受外部带宽限制。</td>
+</tr>
+<tr>
+<td>更冷的 KV 放到 NVMe SSD</td>
+<td>对很久以后才可能复用的数据，用 SSD 换取更大的低成本容量。</td>
+<td>SSD 还引入存储 I/O 等待，需要更早预取并单独评估恢复时间。</td>
+</tr>
+</tbody></table>
+<p>其中，把 prefill 和 decode 分给不同 GPU 的方式通常叫 <strong>P/D 分离</strong>。把 GPU 内存中的数据转移到 CPU 内存或存储设备，通常叫 <strong>offload</strong>，也就是卸载。表中的 NVMe 是访问固态硬盘的协议，NVMe SSD 在这里承担较慢但容量更大的存储层。这些设计可以组合使用，例如活跃 KV 留在 HBM，历史前缀保存在共享 DRAM，更冷的数据再下沉到 SSD。</p>
+<p>这里还要区分两种收益。<strong>前缀缓存</strong>是在模型、位置等计算条件兼容时，复用已有提示词前缀的 KV，从而省掉这一段 prefill。它并不会自动减少后续 dense decode 对历史 KV 的读取，所以前缀命中率提高，通常首先影响的是请求开始生成之前的等待时间。<a href="https://docs.vllm.ai/en/v0.30.0/features/automatic_prefix_caching/" target="_blank" rel="noopener">vLLM 前缀缓存说明</a></p>
+<p>已有系统也遵循这种思路。SGLang HiCache 把 GPU、Host 内存和共享存储组织成多层缓存，并支持预先取回后面要用的数据。Mooncake 则围绕共享 KV 组织存储和推理调度。它们提供了可参考的实现方式，但具体收益仍要放回自己的请求复用模式和硬件路径中判断。<a href="https://docs.sglang.io/docs/advanced_features/hicache_design" target="_blank" rel="noopener">HiCache 设计</a>、<a href="https://arxiv.org/abs/2407.00079" target="_blank" rel="noopener">Mooncake 论文</a></p>
+<h2 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h2><ul>
+<li><a href="https://networking-docs.nvidia.com/connectx7hw/introduction" target="_blank" rel="noopener">CX-7 规格</a></li>
+<li><a href="https://networking-docs.nvidia.com/connectx8hw/introduction" target="_blank" rel="noopener">CX-8 规格与 PCIe 接口</a></li>
+<li><a href="https://networking-docs.nvidia.com/connectx8hw/port-configurations" target="_blank" rel="noopener">CX-8 端口模式</a></li>
+<li><a href="https://pcisig.com/blog/pci-express-delivering-needed-bandwidth-open-compute-project" target="_blank" rel="noopener">PCI-SIG 带宽说明</a>-</li>
+<li><a href="https://docs.nvidia.com/enterprise-reference-architectures/hgx-ai-factory-h100-h200-b200/latest/components.html" target="_blank" rel="noopener">NVIDIA HGX 组件规格</a>。</li>
+</ul>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/机器学习/" rel="tag"># 机器学习</a>
+          
+            <a href="/tags/AIGen/" rel="tag"># AIGen</a>
+          
+            <a href="/tags/LLM/" rel="tag"># LLM</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2026/08/09/meet-in-south-africa/" rel="next" title="南非游记">
+                <i class="fa fa-chevron-left"></i> 南非游记
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2026/09/18/rdma-assessment/" rel="prev" title="RDMA 评估指标">
+                RDMA 评估指标 <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">279</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">157</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#基础知识"><span class="nav-number">1.</span> <span class="nav-text">基础知识</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#一张大表看架构"><span class="nav-number">2.</span> <span class="nav-text">一张大表看架构</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#速度差距"><span class="nav-number">2.1.</span> <span class="nav-text">速度差距</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#详细说明"><span class="nav-number">2.2.</span> <span class="nav-text">详细说明</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#关于-GDR"><span class="nav-number">2.3.</span> <span class="nav-text">关于 GDR</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#关于网卡"><span class="nav-number">2.4.</span> <span class="nav-text">关于网卡</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#KVCache-的架构比较"><span class="nav-number">2.5.</span> <span class="nav-text">KVCache 的架构比较</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Reference"><span class="nav-number">2.6.</span> <span class="nav-text">Reference</span></a></li></ol></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2026/09/11/KVCache-learn-hw/';
+          this.page.identifier = '2026/09/11/KVCache-learn-hw/';
+          this.page.title = '学习 KVCache：硬件和架构';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
