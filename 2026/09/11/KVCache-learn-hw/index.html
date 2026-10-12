@@ -99,7 +99,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="在设计 KVCache 的时候，需要考虑我们能接触到的硬件的性能，在作出设计，包含显卡、网卡、HBM、DRAM 和 SSD。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2026-10-11T14:15:29.575Z">
+<meta property="og:updated_time" content="2026-10-12T15:08:03.331Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="学习 KVCache：硬件和架构">
 <meta name="twitter:description" content="在设计 KVCache 的时候，需要考虑我们能接触到的硬件的性能，在作出设计，包含显卡、网卡、HBM、DRAM 和 SSD。">
@@ -514,6 +514,337 @@
 <li><a href="https://pcisig.com/blog/pci-express-delivering-needed-bandwidth-open-compute-project" target="_blank" rel="noopener">PCI-SIG 带宽说明</a>-</li>
 <li><a href="https://docs.nvidia.com/enterprise-reference-architectures/hgx-ai-factory-h100-h200-b200/latest/components.html" target="_blank" rel="noopener">NVIDIA HGX 组件规格</a>。</li>
 </ul>
+<h2 id="搬一份-KV-要多久：从输入假设算到结果"><a href="#搬一份-KV-要多久：从输入假设算到结果" class="headerlink" title="搬一份 KV 要多久：从输入假设算到结果"></a>搬一份 KV 要多久：从输入假设算到结果</h2><h3 id="为什么先用“字节数除以带宽”估算"><a href="#为什么先用“字节数除以带宽”估算" class="headerlink" title="为什么先用“字节数除以带宽”估算"></a>为什么先用“字节数除以带宽”估算</h3><p>对已经建立连接的大块传输，最基本的关系就是“耗时 = 数据量 ÷ 有效带宽”。它能先告诉我们数量级是否可行。例如，单靠更快的索引查询，不可能把一次需要百毫秒才能搬完的数据传输压到几毫秒。</p>
+<p>本节用 CX-7 和 PCIe 5.0 构造一个简化算例。下面的两个带宽是为了演示计算而选的参数，<strong>属于计算假设，不是实测结果或设备保证达到的速度</strong>。</p>
+<table>
+<thead>
+<tr>
+<th>输入参数</th>
+<th align="right">算例取值</th>
+<th>为什么取这个值</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>每张 GPU 的本地 DRAM→HBM 有效带宽 <code>Bp</code></td>
+<td align="right">50 GB/s</td>
+<td>Gen5 ×16 扣除编码后的理论值约为 63 GB/s。算例进一步留出约两成余量，取方便计算的 50 GB/s。</td>
+</tr>
+<tr>
+<td>每张 CX-7 可用于远端 KV 搬运的有效带宽 <code>Bn</code></td>
+<td align="right">40 GB/s</td>
+<td>400G 单向标称速率是 50 GB/s。算例同样留出两成余量，取 40 GB/s。</td>
+</tr>
+</tbody></table>
+<p>这两个余量只是演算选择，不能用来推断所有服务器都具有固定的 80% 利用率。HBM→Host DRAM 的速度也可能与 Host DRAM→HBM 不同，所以这里的数字仅用于讨论把 KV 加载到 HBM 的方向。</p>
+<p>设总搬运量为 <code>S</code>，同时接收数据的 GPU 数为 <code>G</code>，能够独立提供带宽的网卡数为 <code>N</code>。如果各张 GPU 的 PCIe 路径都能并行工作，本地总带宽就是 <code>G × Bp</code>。远端传输还要经过网卡，因此它受网络总带宽 <code>N × Bn</code> 和 GPU 总接收能力中较小的一项限制。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">本地 DRAM→HBM：                 Tlocal ≈ S / (G × Bp)</span><br><span class="line">远端 DRAM→目标 HBM：            Tdirect ≈ S / min(N × Bn, G × Bp)</span><br><span class="line">远端 DRAM→本机 DRAM→HBM，串行： Tstaged ≈ S / (N × Bn) + S / (G × Bp)</span><br></pre></td></tr></table></figure>
+
+<p>最后一条之所以相加，是因为它假设先把整份 KV 从远端搬到本机 DRAM，然后才开始往 HBM 搬。若改成分块流水线，第一块写入本机 DRAM 后就立即开始向 HBM 复制，同时接收第二块，两段工作就有机会重叠。理想情况下，总时间可以趋近于较慢的那一段，再加上流水线启动和收尾所需的时间。这里重叠的是不同块的搬运，同一块仍要先完成本机 DRAM 接收，才能开始第二段复制。</p>
+<p>为简化比较，公式还用同一个 <code>Bp</code> 表示两种路径向 HBM 写入的带宽约束。真实机器上，本地 CUDA 拷贝和 GPUDirect RDMA 的有效带宽可能不同，规划时应分别测量，不能拿本地拷贝结果直接代替直达路径的结果。</p>
+<p>为了把路径本身的差别看清楚，这组计算采用以下前提：</p>
+<ul>
+<li><strong>准备工作已完成。</strong> 数据已经准备好，连接已经建立，所需内存也已注册。</li>
+<li><strong>传输资源没有额外竞争。</strong> 没有其他业务抢占算例中的带宽。</li>
+<li><strong>多卡可以并行。</strong> 数据均匀分配，源端内存、两端网卡、网络和 PCIe 都能提供所需的并行能力。</li>
+</ul>
+<p>真实服务还要加上排队、查询、校验和同步等时间，因此这些计算不是请求完成时间的保证值。</p>
+<h3 id="以每张-GPU-加载-4-GiB-为例，数字怎样算出来"><a href="#以每张-GPU-加载-4-GiB-为例，数字怎样算出来" class="headerlink" title="以每张 GPU 加载 4 GiB 为例，数字怎样算出来"></a>以每张 GPU 加载 4 GiB 为例，数字怎样算出来</h3><p><strong>4 GiB 是为了比较不同搬运路径而选的数据量，并不是“一个请求固定占 4 GiB”，也不是一个传输块的规定大小。</strong> 后面的三行都保持每张 GPU 要接收 4 GiB，因此从一张 GPU 增加到八张时，总数据量也从 4 GiB 增加到 32 GiB。这是在比较不同规模的数据搬运，不是在把同一个固定大小的请求拆到更多 GPU 上。</p>
+<p>这个数据量也可以对应一种具体的 KV 布局。假设某张 GPU 负责 32 层，每层为一个 token 保存 8 组 K 和 V 向量，每个向量有 128 个元素，使用 BF16 这种 16 位浮点格式，每元素占 2 byte。那么每个 token 的 KV 大小是：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">2（K 和 V）× 32 层 × 8 组 × 128 个元素 × 2 byte</span><br><span class="line">= 131,072 byte</span><br><span class="line">= 128 KiB</span><br><span class="line"></span><br><span class="line">保留 32,768 个 token 时：</span><br><span class="line">128 KiB × 32,768 = 4 GiB</span><br></pre></td></tr></table></figure>
+
+<p>这里的模型参数同样是假设，用来说明 4 GiB 可能怎样产生，并不声称某个线上模型就是这个配置。实际大小应按模型布局和该 GPU 负责的分片计算，后文“HBM 和 DRAM 配比，为什么应该从工作负载推导”会说明容量规划的方法。</p>
+<p>现在把 4 GiB 换成 byte，再代入上一节的带宽。注意这里容量用的是 GiB、带宽用的是 GB/s：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">4 GiB = 4 × 2^30 byte = 4,294,967,296 byte</span><br><span class="line"></span><br><span class="line">本地加载：4,294,967,296 ÷ (50 × 10^9) 秒 ≈ 85.9 ms</span><br><span class="line">远端直达：4,294,967,296 ÷ (40 × 10^9) 秒 ≈ 107.4 ms</span><br><span class="line">整批中转：107.4 + 85.9 ≈ 193.3 ms</span><br></pre></td></tr></table></figure>
+
+<p>所以，下面表格第一行的三个结果完全来自数据量和假设带宽。表中的“加载时间”只统计 KV 搬运，并不包括模型生成 token 的时间。</p>
+<table>
+<thead>
+<tr>
+<th align="right">同时接收数据的 GPU 数</th>
+<th align="right">可独立工作的 CX-7 数</th>
+<th align="right">总搬运量</th>
+<th align="right">本地 DRAM→HBM</th>
+<th align="right">远端 DRAM→目标 HBM</th>
+<th align="right">远端 DRAM→本机 DRAM→HBM，整批串行</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="right">1</td>
+<td align="right">1</td>
+<td align="right">4 GiB</td>
+<td align="right">85.9 ms</td>
+<td align="right">107.4 ms</td>
+<td align="right">193.3 ms</td>
+</tr>
+<tr>
+<td align="right">8</td>
+<td align="right">1</td>
+<td align="right">32 GiB</td>
+<td align="right">85.9 ms</td>
+<td align="right">859.0 ms</td>
+<td align="right">944.9 ms</td>
+</tr>
+<tr>
+<td align="right">8</td>
+<td align="right">8</td>
+<td align="right">32 GiB</td>
+<td align="right">85.9 ms</td>
+<td align="right">107.4 ms</td>
+<td align="right">193.3 ms</td>
+</tr>
+</tbody></table>
+<p>第二行最能说明共享网卡的影响。八张 GPU 各自通过本地路径搬 4 GiB，理想情况下可以并行，所以仍是 85.9 ms。但从远端搬入时，一张 CX-7 要负责全部 32 GiB，时间变成 <code>32 × 2^30 ÷ (40 × 10^9) ≈ 859.0 ms</code>。如果再经本机 DRAM 整批中转到 HBM，就在此基础上加 85.9 ms，得到约 944.9 ms。这里网络这段已经比本地加载慢约十倍，原因是总数据量增加了八倍，网卡总带宽却没有增加。</p>
+<p>第三行把网卡也增加到八张，网络总有效带宽在假设下变成 <code>8 × 40 = 320 GB/s</code>。于是 <code>32 × 2^30 ÷ (320 × 10^9) ≈ 107.4 ms</code>，回到了第一行的时间。这个结果要求源端和目标端都能提供相应的总带宽，而不只是目标机器插了八张网卡。</p>
+<p>至于 Host 中转，它的代价取决于实现是否流水化。第一行的 193.3 ms 是两段整批串行的结果。如果分块后能够充分重叠，两段分别需要 107.4 ms 和 85.9 ms，整体就可能接近较慢的 107.4 ms，再加启动和收尾时间。不过，本机 DRAM 仍然要先写入 4 GiB，再读出 4 GiB。若这两段争用同一组内存或 PCIe 资源，就不能假设它们同时达到独立测试时的带宽。</p>
+<h3 id="为什么已经能流水化，仍然希望绕过本机-DRAM"><a href="#为什么已经能流水化，仍然希望绕过本机-DRAM" class="headerlink" title="为什么已经能流水化，仍然希望绕过本机 DRAM"></a>为什么已经能流水化，仍然希望绕过本机 DRAM</h3><p>因为系统要优化的不只是一次传输的完成时间，还包括完成它要占用多少共享资源。<strong>流水线让两段工作同时进行，GPUDirect RDMA 则省掉了本机 DRAM 中转这份工作。</strong> 如果内存和设备连接都很空闲，被重叠的工作可能不影响这次请求的耗时。并发上来之后，它仍然要和其他请求争用资源。</p>
+<p>先沿用前面的 4 GiB 算例看一次传输。假设网络有效带宽为 40 GB/s，本机 DRAM→HBM 为 50 GB/s，而且二者并发时不降速，那么充分流水化的中转路径确实可能接近直达 HBM 的 107.4 ms。原因是网络更慢，后面的复制能够跟上接收速度。因此，不能拿整批串行的 193.3 ms 来断言“绕过 DRAM 一定能快这么多”。在这组假设下，直达路径的主要收益会体现在资源消耗和并发余量上，单次大块传输的吞吐未必明显提高。</p>
+<p>这些额外资源消耗来自哪里？网卡先把收到的 KV 写入本机 DRAM，随后复制引擎再把相同的数据读出来，写入 HBM。以同一份 4 GiB KV 为例，按有效载荷统计，两条路径的工作量如下。表中的本机指接收端，不包含远端源 DRAM 的读取，也不包含报头和控制信息。</p>
+<table>
+<thead>
+<tr>
+<th>接收端需要完成的工作</th>
+<th align="right">直达 HBM</th>
+<th align="right">本机 DRAM 中转，包括流水化实现</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>接收网络上的 KV 数据</td>
+<td align="right">4 GiB</td>
+<td align="right">4 GiB</td>
+</tr>
+<tr>
+<td>向本机 DRAM 写入中转 KV</td>
+<td align="right">0</td>
+<td align="right">4 GiB</td>
+</tr>
+<tr>
+<td>从本机 DRAM 读出中转 KV</td>
+<td align="right">0</td>
+<td align="right">4 GiB</td>
+</tr>
+<tr>
+<td>最终写入 HBM</td>
+<td align="right">4 GiB</td>
+<td align="right">4 GiB</td>
+</tr>
+</tbody></table>
+<p>因此，中转多出了 <code>4 + 4 = 8 GiB</code> 的 Host 内存读写工作量。这里的 8 GiB 是累计流量，不是需要分配 8 GiB 缓冲区，分块循环使用缓冲区可以降低容量占用。表里的 0 也只表示没有这份 KV 的中转读写，软件元数据和控制逻辑仍然会使用 Host 内存。实际 DRAM 芯片上的总线流量还会受缓存和平台实现影响，这张表是在说明有效载荷的去向。</p>
+<p>如果持续以算例中的 40 GB/s 接收 KV，中转路径就需要同时承接约 40 GB/s 的 Host 写入和 40 GB/s 的 Host 读取，合计约 80 GB/s 的读写需求。多张网卡、多张 GPU 同时恢复 KV 时，这些需求会继续叠加，还可能与 CPU 业务共用内存控制器或跨 NUMA 连接。一旦并发使任一段变慢，原来“可以完全重叠”的前提就不成立，缓冲区会积压，请求也会排队。这就是即使单请求耗时相近，直达路径仍可能具有更好并发能力、让最慢那部分请求等待更少的原因。</p>
+<p>中转还增加了一次传输交接。软件需要知道某块数据已经接收完成，再提交或触发 DRAM→HBM 复制，并等复制完成后才能复用缓冲区。这里的复制通常可以由 <strong>DMA（Direct Memory Access，直接内存访问）</strong> 硬件完成，不必让 CPU 逐字节搬运，但任务提交、完成通知和缓冲区管理仍然存在。流水线稳定运行后可以隐藏一部分等待，第一块的交接和最后一块的收尾却仍要完成。直达路径也需要内存注册和正确的完成、可见性同步，只是省掉了这次 Host 中转交接。</p>
+<p>至于 PCIe 能省多少，要看设备怎样连接。例如网卡和 GPU 挂在同一块支持设备间直连的 PCIe 交换芯片下时，数据有机会在交换芯片内转发，减少经过 CPU 侧上行连接的流量。但这不是所有机器都具备的条件，也不能概括成“所有 PCIe 流量都减半”。最终进入 HBM 的那份数据仍然要经过 GPU 的接入路径，选择方案时需要核对拓扑并测量。<a href="https://docs.nvidia.com/cuda/gpudirect-rdma/" target="_blank" rel="noopener">NVIDIA GPUDirect RDMA 的路径与拓扑约束</a></p>
+<p>最后再看什么时候值得保留本机 DRAM 中转。以下几种情况中，它承担了额外职责：</p>
+<ul>
+<li><strong>本机还需要缓存这份 KV。</strong> 如果后续请求可能再次复用，写入 DRAM 就同时完成了缓存填充。</li>
+<li><strong>需要提前预取。</strong> 如果 HBM 暂时没有空位，本机 DRAM 可以先接住数据，让网络搬运提前开始。</li>
+<li><strong>需要 CPU 处理数据。</strong> 数据先进入 Host 内存，可以配合 CPU 完成处理，再送入 HBM。</li>
+<li><strong>直达路径不适用。</strong> 如果硬件、驱动或设备连接不适合 GPUDirect RDMA，中转可能更合适。</li>
+</ul>
+<p>所以，当数据已经可以直接写入 HBM，而 Host 副本又没有后续用途时，通常优先考虑直达路径。若本机 DRAM 承担了缓存、预取或处理职责，就应把这些收益一起纳入比较。</p>
+<h3 id="为什么缓存装得下，还可能来不及服务请求"><a href="#为什么缓存装得下，还可能来不及服务请求" class="headerlink" title="为什么缓存装得下，还可能来不及服务请求"></a>为什么缓存装得下，还可能来不及服务请求</h3><p>前面的计算讨论一批数据搬多久。持续接收请求时，还要看单位时间内有多少份数据需要搬。如果一张网卡的有效带宽是 40 GB/s，每次要搬 4 GiB，那么即使完全没有额外开销，它每秒最多也只能完成：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">(40 × 10^9) ÷ (4 × 2^30) ≈ 9.31 次这样的加载</span><br></pre></td></tr></table></figure>
+
+<p>9.31 来自同一组算例参数，不是系统实测的每秒请求数。真实请求大小不同，还可能同时发生写回和其他通信，而且满负载运行会形成排队。因此，DRAM 即使能存下很多份 KV，也不意味着新请求到达时都能及时取出。</p>
+<p>这里直接影响的是 <strong>TTFT（Time To First Token，首 token 延迟）</strong>，也就是从请求发出到收到第一个输出 token 的时间。缓存可以省掉一部分 prefill，但若加载 KV 的队列很长，省下的计算时间可能又被等待搬运消耗掉。</p>
+<p>做带宽预算时，应分别统计发送和接收方向，再检查它们共享的内部资源。全双工链路允许同时收发，并不意味着两类任务在 CPU 内存、PCIe 上行连接或网卡内部完全互不影响。这也是为什么仅看平均网络利用率，不能判断某个请求是否会被拖慢。</p>
+<h2 id="为什么“用之前搬一次”和“每生成一个-token-都搬”差别很大"><a href="#为什么“用之前搬一次”和“每生成一个-token-都搬”差别很大" class="headerlink" title="为什么“用之前搬一次”和“每生成一个 token 都搬”差别很大"></a>为什么“用之前搬一次”和“每生成一个 token 都搬”差别很大</h2><p>把历史 KV 放在 DRAM 中是否划算，取决于搬回来之后能用多久。如果一个请求只在开始时加载一次，后面连续生成很多 token，那么这次搬运的成本可以分摊到整个回答。如果每个生成步骤都要从 DRAM 重读同一份历史 KV，成本就会不断重复。</p>
+<p>沿用前面搬运算例中的 4 GiB 数据量和 40 GB/s 有效带宽。一次性加载需要约 107.4 ms，此后的历史 KV 读取主要发生在 HBM 内。若改成每步都从外部读取这 4 GiB，那么单步传输就需要约 107.4 ms。假设生成 100 个 token，累计搬运量会达到 <code>4 × 100 = 400 GiB</code>，仅传输就需要占用约 <code>107.374 ms × 100 = 10.74 秒</code>的链路时间。</p>
+<p>100 步是为了展示重复访问代价而选的假设。这个比较还固定了历史 KV 的大小，没有计算后续 token 带来的增长，也没有把计算与传输重叠的情况计入总响应时间。但它已经说明，外部缓存能否支持低延迟 decode，首先要看每步到底需要搬多少字节。</p>
+<p>如果注意力只访问历史 KV 的一部分，或者有一部分始终留在 HBM，就可以用 <code>f</code> 表示每步需要从外部读取的比例。设全部 KV 大小为 <code>S</code>，外部有效带宽为 <code>B</code>，则这一部分的传输时间约为 <code>f × S / B</code>。如果计算必须等待搬运完成，时间需要相加。如果传输可以和计算充分并行，理想情况下总时间由两者中较慢的一项决定。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">不能重叠：     每步时间 ≳ 计算时间 + f × S / B</span><br><span class="line">能够充分重叠： 每步时间 ≳ max(计算时间, f × S / B)</span><br></pre></td></tr></table></figure>
+
+<p>为了说明这个约束有多严格，再假设业务希望每 20 ms 生成一个 token，而现有计算已经需要 18 ms。这两个时间是示例中的延迟目标和计算预算，并非某个模型的实测结果。20 ms 对应每个请求约每秒输出 50 个 token，因为 <code>1 秒 ÷ 0.020 秒 = 50</code>。如果传输不能重叠，就只剩 <code>20 - 18 = 2 ms</code> 的额外等待空间。</p>
+<p>在 40 GB/s 下，可搬的数据量等于带宽乘以时间，因此得到：</p>
+<table>
+<thead>
+<tr>
+<th>可用于传输的时间</th>
+<th>计算过程</th>
+<th align="right">能搬的数据量</th>
+<th align="right">占 4 GiB 历史 KV 的比例</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>20 ms</td>
+<td><code>40 × 10^9 × 0.020</code> byte</td>
+<td align="right">800 MB，约 0.745 GiB</td>
+<td align="right"><code>0.745 ÷ 4</code>，约 18.6%</td>
+</tr>
+<tr>
+<td>2 ms</td>
+<td><code>40 × 10^9 × 0.002</code> byte</td>
+<td align="right">80 MB，约 76.3 MiB</td>
+<td align="right"><code>80 × 10^6 ÷ (4 × 2^30)</code>，约 1.86%</td>
+</tr>
+</tbody></table>
+<p>第一行表示“如果可以利用整个 20 ms 传输窗口”的理论预算，第二行对应不能与计算重叠时仅剩的 2 ms。真正能利用多少窗口，要看数据依赖。比如，计算第 1 层时，可能同时预取第 2 层的 KV，但第 2 层必须等自己的数据可用才能开始。这样的<strong>按层预取</strong>可以隐藏部分等待，不能减少必须经过链路的总字节数。</p>
+<p>所以，每步从 DRAM 读取 KV 并非一概不可行。若访问足够稀疏、计算本身足够长，或者业务接受更高延迟，它可能是合理的容量换性能方案。判断时应先明确 <strong>SLO（Service Level Objective，服务水平目标）</strong>，例如首 token 要多快、连续输出允许多大间隔，再检查每步搬运量是否落在预算内。异步复制还需要推理引擎正确安排任务依赖和内存生命周期。<a href="https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/#asynchronous-and-overlapping-transfers-with-computation" target="_blank" rel="noopener">CUDA 对传输与计算重叠的说明</a></p>
+<h1 id="设计"><a href="#设计" class="headerlink" title="设计"></a>设计</h1><h2 id="怎样设计-KV-的保存、换出与恢复"><a href="#怎样设计-KV-的保存、换出与恢复" class="headerlink" title="怎样设计 KV 的保存、换出与恢复"></a>怎样设计 KV 的保存、换出与恢复</h2><p>前面讨论了数据放在哪里、搬运需要多久。接下来还要回答一个同样重要的问题：谁决定保存这份数据，什么时候可以复用，又由谁决定释放？这些规则如果没有理清，即使传输带宽足够，也可能出现重复搬运、提前释放或读到尚未准备好的数据。下面从这些约束出发，推导一套分层缓存的设计。</p>
+<h3 id="为什么-HBM-和-DRAM-应该分别做容量预算"><a href="#为什么-HBM-和-DRAM-应该分别做容量预算" class="headerlink" title="为什么 HBM 和 DRAM 应该分别做容量预算"></a>为什么 HBM 和 DRAM 应该分别做容量预算</h3><p>HBM 要支撑正在运行的计算，DRAM 则要容纳希望保留的历史 KV 和暂时换出的请求。这两类需求由不同因素决定：前者主要取决于模型、上下文长度和活跃并发，后者还取决于历史数据多久会被复用。因此，我们把两层的容量分别配置，再用工作负载推导它们的比例。</p>
+<p>具体来说，推理侧先扣除模型权重、激活和临时工作区，确定 HBM 中能够分给 KV 的空间。缓存侧则根据历史数据保留范围、临时换出的峰值和搬运缓冲，确定需要多少 Host DRAM。这样做可以让缓存容量随着复用需求调整，而不必跟着 GPU 总显存机械地翻倍。</p>
+<p>比较两层容量时，还需要明确统计范围。应选定同一组推理实例及其可使用的缓存资源，计算真正分给 KV 的容量：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">H_KV = 这组 GPU 实际分配给 KV 的 HBM 容量之和</span><br><span class="line">D_KV = 为这组推理实例预算的 Host KV 容量之和</span><br><span class="line">HBM:DRAM = H_KV:D_KV</span><br></pre></td></tr></table></figure>
+
+<p>如果一组共享缓存同时服务多组推理实例，应按资源配额或统一的集群范围统计，避免把同一份 DRAM 容量重复算给每一组实例。比例只是描述资源配置的结果，不能代替逐张 GPU 的容量检查。</p>
+<p>这是因为并行方式会改变每张 GPU 负责的数据。<strong>TP（张量并行）</strong>把同一层中的张量计算拆到多张 GPU，<strong>PP（流水线并行）</strong>则把不同层分给不同 GPU。KV 具体如何分片、是否存在复制，都要按模型布局确定，不能仅凭 GPU 数量就假定每张卡恰好持有相同比例的 KV。</p>
+<h3 id="为什么要区分保存历史前缀和临时换出"><a href="#为什么要区分保存历史前缀和临时换出" class="headerlink" title="为什么要区分保存历史前缀和临时换出"></a>为什么要区分保存历史前缀和临时换出</h3><p>这两种操作都会把 KV 从 HBM 搬到 Host DRAM，但数据的用途不同：</p>
+<ul>
+<li><strong>保存历史前缀，是为未来请求保留复用机会。</strong> 当前请求结束后，缓存仍可能有价值，是否保留取决于后续复用需求。</li>
+<li><strong>临时换出，是为当前请求暂时腾出显存。</strong> 请求还没结束，之后继续执行时仍然需要这些数据。</li>
+</ul>
+<p>因此，我们为两类数据分别管理保留期限、查找方式和释放条件。</p>
+<p>对于历史前缀，重复写入已经存在的数据只会消耗带宽和容量，所以保存前先检查目标缓存中有没有可复用的部分，只补齐缺失的块。为了让后续请求找到这些数据，需要维护<strong>前缀索引</strong>，也就是从提示词前缀及模型、位置等兼容条件，映射到对应缓存块的记录。只有数据已经准备好、能够被正确读取后，才把对应条目标记为可用，避免后续请求命中一份尚未写完的 KV。</p>
+<p>临时换出的第一目标则是保证当前请求能继续执行。因此，换出过程需要保留请求与数据块的对应关系，并在目标副本准备好之前保留源数据。之后恢复时，再分配 HBM、加载所需 KV，确认数据可供计算使用后，才释放不再需要的临时 Host 副本。临时副本默认服务于原请求，如果还希望让其他请求复用，就需要另外满足前缀匹配和兼容性条件，并纳入共享缓存的管理。</p>
+<p>这也解释了为什么我们把“保存完成”和“释放源块”设计成两个独立事件。保存后的 HBM 副本可能仍被当前计算或其他请求使用，而从历史缓存加载到 HBM 后，Host 副本也可能继续服务其他请求。只有所有使用者都不再依赖某个物理块时，才能回收它。</p>
+<p>失败时的处理也要服从数据用途：</p>
+<ul>
+<li><strong>历史前缀保存失败：</strong> 可以选择放弃这次缓存机会，让未来请求重新计算。</li>
+<li><strong>临时换出失败：</strong> 如果之后还要恢复这个请求，就必须保留可用副本，或者明确安排重算。提前回收唯一可用的副本，会让请求失去继续执行所需的数据。</li>
+</ul>
+<h3 id="为什么-DRAM-不需要成为-HBM-的完整镜像"><a href="#为什么-DRAM-不需要成为-HBM-的完整镜像" class="headerlink" title="为什么 DRAM 不需要成为 HBM 的完整镜像"></a>为什么 DRAM 不需要成为 HBM 的完整镜像</h3><p>分层 KV 缓存要保存的是值得保留的 KV。HBM 中的模型权重、普通激活和临时工作区属于其他内存用途，不会因为引入 KV 缓存就自动复制到 DRAM。即使只看 KV，需要保存的范围也取决于后续用途，因此没有一个固定的“HBM 内容有多少百分比必须同步到 DRAM”。</p>
+<p>因为数据可以被多个请求共享，又可以只补齐缺失部分，统计时需要区分三个量：</p>
+<ul>
+<li><strong>新增搬运量：</strong> 本次真正经过链路传输了多少数据，用来判断带宽需求。</li>
+<li><strong>缓存覆盖量：</strong> Host 缓存已经能够提供多大范围的 KV，包括之前就已存在的部分。</li>
+<li><strong>两层重复驻留量：</strong> 当前有多少 KV 同时在 HBM 和 DRAM 中保存了副本，用来判断容量利用率。</li>
+</ul>
+<p>把它们混在一起，会同时误判带宽需求和容量利用率。</p>
+<p>可以用一个假设例子说明。假设准备保存的 token 范围对应 10 GiB KV，目标缓存已经有其中连续匹配的前 6 GiB。那么新增搬运量约为 <code>10 - 6 = 4 GiB</code>，保存完成后，Host 缓存可覆盖的范围是全部 10 GiB。这三个数字只是为了说明增量保存，忽略了块对齐和元数据开销。如果同一范围的 HBM 副本仍然驻留，两层就暂时重复保存这 10 GiB。之后 HBM 块被回收，Host 副本仍可以继续保留。</p>
+<p>为了便于分配、复用和回收，我们可以把一组 token 的 KV 组织成一个<strong>缓存块</strong>。这会让实际占用受到块边界影响，例如最后一块可能没有填满。因此，容量预算应统计实际分配的块，搬运预算应统计真正传输的字节，两者不必完全相等。</p>
+<p>数据表示也会影响这些数字。如果两层保存相同布局、相同精度的 KV，同一范围的有效数据量通常相近。如果为了节省 Host 空间而改用压缩表示，就要同时考虑压缩和恢复的成本。低精度表示还可能需要保存解释数值的缩放系数等辅助数据，不能只统计 K/V 数组本身。这里的设计原则是按实际表示计费，并确认恢复后的数据满足计算要求。</p>
+<h3 id="为什么拆成多个传输块，还不等于计算已经能流水化"><a href="#为什么拆成多个传输块，还不等于计算已经能流水化" class="headerlink" title="为什么拆成多个传输块，还不等于计算已经能流水化"></a>为什么拆成多个传输块，还不等于计算已经能流水化</h3><p>要让 GPU 计算第 1 层的同时接收第 2 层，推理引擎必须知道第 1 层的数据何时已经可以安全读取。仅仅把传输拆小，或者并发提交多个复制任务，并不会自动建立计算与数据之间的依赖关系。</p>
+<p>因此，我们需要把“数据可以使用”作为明确的接口语义。这里的<strong>可见性</strong>是指后续 GPU 计算能够正确读取新写入的数据，不能仅凭发送端报告传输完成就作出判断。具体需要哪些同步操作，应遵循所用传输方式、驱动和运行时的要求。<a href="https://docs.nvidia.com/cuda/gpudirect-rdma/" target="_blank" rel="noopener">NVIDIA GPUDirect RDMA 同步说明</a></p>
+<p>一种便于实现的方案是整批加载完成、满足同步要求后再开始计算。要进一步重叠，就让搬运层按可消费的粒度报告就绪状态，例如通知某一层的 KV 已可读取，再由推理调度启动依赖它的计算。设计这个过程时，需要明确几项条件：</p>
+<ul>
+<li><strong>源数据的生命周期：</strong> 在复制结束前，源数据不能被释放或改写。</li>
+<li><strong>目标数据的生命周期：</strong> 在依赖它的计算结束前，目标块不能被复用。</li>
+<li><strong>就绪通知的含义：</strong> 通知应保证计算可以安全读取数据。如果设计包含完整性校验，还要明确校验通过是否也是就绪条件。</li>
+</ul>
+<p>这种优化改变的是任务依赖和等待的位置。我们可以让不依赖同一份数据的工作先运行，但仍需保留真正的数据依赖。只有这样，较短的接口返回时间才有机会转化为完整请求的加速。</p>
+<h2 id="HBM-和-DRAM-配比，为什么应该从工作负载推导"><a href="#HBM-和-DRAM-配比，为什么应该从工作负载推导" class="headerlink" title="HBM 和 DRAM 配比，为什么应该从工作负载推导"></a>HBM 和 DRAM 配比，为什么应该从工作负载推导</h2><h3 id="先算正在运行的请求需要多少-HBM"><a href="#先算正在运行的请求需要多少-HBM" class="headerlink" title="先算正在运行的请求需要多少 HBM"></a>先算正在运行的请求需要多少 HBM</h3><p>HBM 首先要满足正在运行的计算。因此，规划 KV 容量的起点应该是扣掉模型权重和运行开销后还剩多少，而不是先套用一个 HBM:DRAM 比例。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">单张 GPU 可用于 KV 的容量</span><br><span class="line">= HBM 总容量</span><br><span class="line">  - 模型权重</span><br><span class="line">  - 激活、通信和算子的临时工作区</span><br><span class="line">  - 为运行波动保留的余量</span><br></pre></td></tr></table></figure>
+
+<p>接下来估算请求需要多少 KV。对于常规 <strong>GQA（Grouped-Query Attention，分组查询注意力）</strong>，多个查询头会共享一组 K/V，因此应使用实际的 KV head 数计算，而不是查询头数。一个 KV head 可以理解为每层为每个 token 保留的一组 K/V 向量，<code>head_dim</code> 就是每个向量有多少个元素。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">每 token KV 字节数</span><br><span class="line">= 2（K 和 V）× 层数 × KV head 数 × head_dim × 每元素字节数</span><br></pre></td></tr></table></figure>
+
+<p>这里换用一个更大的假设配置，说明容量怎样随模型变化：80 层、8 个 KV head、每个向量 128 个元素，BF16 每元素占 2 byte。它与前面“每张 GPU 加载 4 GiB”算例中的假设相比，只把层数从 32 改成了 80，所以每 token KV 也变成原来的 <code>80/32 = 2.5</code> 倍。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">2 × 80 × 8 × 128 × 2 = 327,680 byte = 320 KiB/token</span><br></pre></td></tr></table></figure>
+
+<p>选择两个上下文长度，再加一个并发数，就能得到以下容量。8,192 和 32,768 是本文使用的两个示例长度，64 是假设的并发请求数，都不是部署默认值。</p>
+<table>
+<thead>
+<tr>
+<th>假设工作负载</th>
+<th>计算方式</th>
+<th align="right">全模型 KV 数据量</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>一个请求，8,192 个 token</td>
+<td><code>320 KiB × 8,192</code></td>
+<td align="right">2.5 GiB</td>
+</tr>
+<tr>
+<td>一个请求，32,768 个 token</td>
+<td><code>320 KiB × 32,768</code></td>
+<td align="right">10 GiB</td>
+</tr>
+<tr>
+<td>64 个请求，各有 32,768 个 token</td>
+<td><code>10 GiB × 64</code></td>
+<td align="right">640 GiB</td>
+</tr>
+</tbody></table>
+<p>这张表算的是整个模型需要保留的 KV。真正分配到多张 GPU 时，还要看每张卡负责哪些层、哪些 head，以及有没有数据复制。不能只把总量除以 GPU 数就认为每张卡都能装下，应该逐张检查。工程上常把这些参与并行计算的进程称为 <strong>rank</strong>，容量规划也需要按各个 rank 的实际布局核对。</p>
+<p>上述公式的适用条件是使用常规 K/V 表示。比如 <strong>MLA（Multi-head Latent Attention，多头潜在注意力）</strong> 会采用压缩的潜在表示，稀疏注意力也可能改变实际保留和读取的数据量。模型量化、附加索引、缓存块未填满和请求间共享前缀，都可能让物理占用偏离这个简单公式。因此，实际分配容量时，应使用模型真实的块大小与块数量计算。</p>
+<h3 id="DRAM-主要为哪些数据留空间"><a href="#DRAM-主要为哪些数据留空间" class="headerlink" title="DRAM 主要为哪些数据留空间"></a>DRAM 主要为哪些数据留空间</h3><p>DRAM 承担的任务与 HBM 不完全一样。除了容纳临时换出的活跃请求，它更重要的用途是保存未来可能复用的历史 KV。因此，应该先观察这些历史数据多久会再被访问，以及在希望保留的时间窗口内总共有多少不重复的数据。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">Host KV 容量预算</span><br><span class="line">≈ 希望保留的唯一历史 KV</span><br><span class="line">  + 活跃请求临时换出的峰值容量</span><br><span class="line">  + 必要的搬运缓冲与余量</span><br></pre></td></tr></table></figure>
+
+<p>“唯一”指去掉共享前缀等重复内容后的数据。同一前缀被很多请求复用时，不应把它按请求数重复算一遍。反过来，如果为了跨节点可用性保留多个物理副本，就需要把每个副本占用的空间算进去。若某一份 KV 在 HBM 和 DRAM 中都有副本，两边容量相加也不等于可保存的不同数据总量。</p>
+<h3 id="为什么不能直接给出一个最佳比例"><a href="#为什么不能直接给出一个最佳比例" class="headerlink" title="为什么不能直接给出一个最佳比例"></a>为什么不能直接给出一个最佳比例</h3><p>两个系统即使使用同样的 GPU，合适的 DRAM 大小也可能完全不同。一个系统的用户反复访问相同长前缀，多保留历史 KV 可能节省大量计算。另一个系统的请求几乎不重复，增加 DRAM 可能只会存下更多再也用不到的数据。</p>
+<p>在没有访问统计时，可以先用 <code>D_KV/H_KV = 2</code> 做一次容量实验，再测试 1 和 4，观察 DRAM 每翻倍一次还能带来多少收益。这里的 1、2、4 是为了观察容量翻倍效果而选的实验点，<strong>不代表推荐配置或通用最佳比例</strong>。如果已有请求记录，优先根据实际复用间隔估算需要保留的数据量。</p>
+<p>例如，假设八张 GPU 每张实际能给 KV 分配 80 GiB，那么 <code>H_KV = 8 × 80 = 640 GiB</code>。若先测试 DRAM 是它的两倍，就需要 <code>D_KV = 640 × 2 = 1,280 GiB = 1.25 TiB</code>。这里的 80 GiB 是另一个假设的单卡 KV 预算，不是某款 GPU 的总显存。机器总内存还要额外容纳系统、进程和索引等开销。</p>
+<p>容量实验的结果应结合瓶颈判断，不同现象对应不同的改进方向：</p>
+<ul>
+<li><strong>活跃请求不断换出又换回。</strong> 这说明 HBM 中需要同时保留的数据过多。增加 DRAM 虽然能存下更多数据，却未必降低等待时间。</li>
+<li><strong>Host 缓存常在复用前被淘汰。</strong> 这时增加 DRAM 才可能直接改善命中，让值得复用的数据保留得更久。</li>
+<li><strong>命中已经很高，但加载队列越来越长。</strong> 应优先处理搬运带宽和调度，继续增加缓存容量未必能让请求更快。</li>
+</ul>
+<p>判断某次缓存命中是否划算，可以先比较“省掉的 prefill 时间”和“查找、排队、加载、校验及通信干扰带来的时间”。保存策略还要考虑后续复用概率，因为写出去却再也不用的 KV 只产生了成本。只统计命中了多少个请求会掩盖这些差别，命中一个很短的前缀与省掉整段长提示词的计算，价值可能相差很大。</p>
+<h2 id="从资源约束推导保存、路由与调度策略"><a href="#从资源约束推导保存、路由与调度策略" class="headerlink" title="从资源约束推导保存、路由与调度策略"></a>从资源约束推导保存、路由与调度策略</h2><h3 id="先让数据放在最符合其使用方式的位置"><a href="#先让数据放在最符合其使用方式的位置" class="headerlink" title="先让数据放在最符合其使用方式的位置"></a>先让数据放在最符合其使用方式的位置</h3><p>越频繁访问的数据，越值得放在靠近计算的位置。对于希望保持较低生成延迟的服务，可以从以下分工开始：</p>
+<ul>
+<li><strong>HBM 保留活跃 KV。</strong> 后续生成步骤会反复读取这些数据，留在本地显存可以减少重复搬运。</li>
+<li><strong>本机 DRAM 接住临时换出和本机可复用的数据。</strong> 它提供额外容量，也便于之后沿本地路径恢复。</li>
+<li><strong>远端 DRAM 支持跨实例复用。</strong> 多个推理实例可以访问共享历史 KV，代价是使用时要考虑网络搬运。</li>
+</ul>
+<p>这不意味着每一份 KV 都必须在所有层保存副本。本地中转副本是否值得留下，要看它会不会再次命中，以及留下它能否减少后续网络搬运。如果只是远端读取一次就不再复用，直接写入 HBM 可能更合适。</p>
+<p>路由请求时，也应该把命中位置与实例负载一起看。某个节点已有更多 KV，通常能减少重算，但如果它的网卡已经排了长队，另一处副本或者部分重算可能更快。缓存命中数量需要转化为预计完成时间，才能支持这个选择。</p>
+<h3 id="再决定哪些-KV-值得保存"><a href="#再决定哪些-KV-值得保存" class="headerlink" title="再决定哪些 KV 值得保存"></a>再决定哪些 KV 值得保存</h3><p>保存时机决定了缓存何时能被复用，也决定了搬运压力集中在哪里。可以先比较两种安排：</p>
+<ul>
+<li><strong>及时保存新生成的 KV。</strong> 后续请求可以更早复用，GPU 回收时尚未写出的数据也会减少。但如果大量数据以后不会被访问，及时写入就会持续占用 PCIe、网卡和 Host 空间。</li>
+<li><strong>等请求结束或需要回收时再保存。</strong> 这样可以减少持续同步，但搬运会集中到这些时刻，可能增加回收时的等待。</li>
+</ul>
+<p>无论选择哪种时机，如果要异步保存，都需要确保源 HBM 数据在复制完成前保持有效，否则只是把等待隐藏到了接口之后，并没有解决正确性问题。</p>
+<p>因为增量保存只能避免重复写入，无法避免“写出去却再也不用”，我们还需要决定哪些前缀值得进入缓存。选择性保存可以综合考虑复用频率、重算成本和副本位置，决定是否保存、保存多长以及保存到哪里。这个策略需要用请求记录验证，以免过早丢掉之后频繁使用的数据。</p>
+<h3 id="为什么控制排队可能比提高峰值吞吐更重要"><a href="#为什么控制排队可能比提高峰值吞吐更重要" class="headerlink" title="为什么控制排队可能比提高峰值吞吐更重要"></a>为什么控制排队可能比提高峰值吞吐更重要</h3><p>后台写回和前台生成如果共享网卡，持续提交大量后台工作可能让前台通信等得更久。此时，一味提高搬运并发，可能让独立测试里的 GB/s 更好看，却拖慢用户看到的输出速度。</p>
+<p>值得优先控制的是每张网卡的<strong>在途字节量</strong>，也就是已经提交但尚未完成的数据总量。它比单纯的请求数更容易反映压力，因为一个 4 KiB 传输和一个 4 MiB 传输占用的工作量不同。可以根据前台延迟调整这个上限，并让阻塞新请求的加载优先于低价值的后台写回。</p>
+<p>在这之前，还应该确认内存与设备的连接是否合理。例如，把源 Host 内存分配在靠近网卡的 NUMA 节点，可以避免不必要的跨 CPU 访问。对本地 KV 加载，应优先评估可行的 CUDA 本地复制，并在完整推理负载下确认它是否减少了共享资源争用。</p>
+<p>按层预取和计算重叠可以作为后续优化，但它需要推理引擎参与，实施成本更高。优先记录真实搬运字节、排队和复用情况，先消除冗余与明显争用，再判断这类改动能为完整请求节省多少时间。</p>
+<h2 id="怎样验证这些设计在完整推理服务中的效果"><a href="#怎样验证这些设计在完整推理服务中的效果" class="headerlink" title="怎样验证这些设计在完整推理服务中的效果"></a>怎样验证这些设计在完整推理服务中的效果</h2><h3 id="为什么需要同时测搬运吞吐与前台延迟"><a href="#为什么需要同时测搬运吞吐与前台延迟" class="headerlink" title="为什么需要同时测搬运吞吐与前台延迟"></a>为什么需要同时测搬运吞吐与前台延迟</h3><p>搬运 KV 和生成 token 可能共用网卡、PCIe 连接或内存带宽。单独测试搬运时，提交更多任务往往有助于保持设备忙碌。但在完整服务中，同一批后台任务也可能让等待通信的前台计算更晚获得资源。因此，我们需要同时观察 KV 搬运量和用户可感知的延迟，才能判断优化是否有效。</p>
+<p>这种依赖在多 GPU 推理中尤其明显。例如，<strong>MoE（Mixture of Experts，混合专家）</strong>模型会把不同输入分配给不同的专家子网络。专家分布在多张 GPU 上时，一步计算可能需要先分发数据，再收集结果。如果这些通信与 KV 搬运共享资源，额外等待就可能延长 token 的生成间隔。即使外部网口没有跑满，也应继续检查设备队列、PCIe 和 Host 内存等共享环节，不能只凭网口利用率排除争用。</p>
+<p>验证时先建立没有后台 KV 搬运的推理基线，再在相同前台负载下加入搬运，同时观察几类指标：</p>
+<ul>
+<li><strong>KV 搬运吞吐：</strong> 每秒实际完成多少数据传输，判断搬运能力是否满足需求。</li>
+<li><strong>首 token 延迟（TTFT）：</strong> 新请求要等多久才能开始输出，判断缓存加载是否拖慢了请求启动。</li>
+<li><strong>连续 token 的输出间隔：</strong> 判断后台搬运是否干扰了正在生成的请求。</li>
+<li><strong>满足服务目标的请求数：</strong> 判断吞吐增长是否真正转化成了可用的服务能力。</li>
+</ul>
+<p>平均值容易掩盖少量很慢的请求，因此延迟指标还应观察 <strong>P99</strong>，即第 99 百分位，表示 99% 的观测值不超过它。具体采用哪个百分位，应与服务目标一致。</p>
+<h3 id="为什么用在途字节量控制积压，以及怎样选上限"><a href="#为什么用在途字节量控制积压，以及怎样选上限" class="headerlink" title="为什么用在途字节量控制积压，以及怎样选上限"></a>为什么用在途字节量控制积压，以及怎样选上限</h3><p>只限制搬运任务数，无法准确表达设备面临的工作量，因为不同任务的数据大小可能不同。因此，我们用已经提交但尚未完成的总字节数，也就是在途字节量，限制后台同时占用的传输窗口。把窗口设得太小，可能因为任务补充不及时而浪费带宽。设得太大，则可能让更多后台工作积压，增加其他流量的等待。</p>
+<p>为了找到合适的范围，可以先固定单次传输块大小和前台负载，从较小的窗口开始逐步增加，同时记录实际搬运吞吐、排队时间和前台延迟。这样先观察并发窗口的影响，再单独调整块大小，避免多个变量同时变化后无法解释结果。短时突发与持续搬运也应分别覆盖，因为相同的平均流量可能形成不同的排队压力。</p>
+<p>如果某一段窗口范围内，继续增加在途字节量已经不能明显提高有效吞吐，却持续恶化前台延迟，就没有必要为了让设备队列更满而继续增加窗口。我们可以选择能够满足搬运需求且留有余量的较小窗口，并在前台延迟接近目标上限时减少后台提交。若必须立即加载 KV 才能推进请求，则应结合该请求的等待期限分配优先级，同时避免后台保存长期得不到服务。</p>
+<p>这个方法给出的是选择参数的过程，不是某个固定的最佳字节数。网络往返时间、任务提交开销、数据方向和设备连接变化后，能够保持吞吐的窗口也会变化。使用设备提供的流量分类或优先级功能时，同样要验证实际效果，因为分类本身并不会增加共享资源的总容量。</p>
+<h3 id="怎样把测量结果归因到具体设计"><a href="#怎样把测量结果归因到具体设计" class="headerlink" title="怎样把测量结果归因到具体设计"></a>怎样把测量结果归因到具体设计</h3><p>完成基线和窗口实验后，再逐项改变影响路径、容量和排队的条件。下面的表格用于帮助定位瓶颈，不要求一次运行所有组合。</p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>需要回答的问题</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>搬运方向</td>
+<td>Host DRAM→HBM 和 HBM→Host DRAM 是否有明显不对称？必要时再测 Host DRAM→Host DRAM 和 HBM→HBM。</td>
+</tr>
+<tr>
+<td>数据位置</td>
+<td>同机与跨机差多少？把 Host 内存放到网卡所在的 NUMA 节点后是否改善？</td>
+</tr>
+<tr>
+<td>设备连接</td>
+<td>每张 GPU 对应哪张网卡？多设备是否共用 PCIe 上行连接？CX-8 的两个 Ethernet 端口是否都被利用？</td>
+</tr>
+<tr>
+<td>并发业务</td>
+<td>单独搬运时很快，加入真实 decode 和多 GPU 通信后，最慢那部分请求是否明显变慢？</td>
+</tr>
+<tr>
+<td>提交方式</td>
+<td>改变块大小、提交批量和每网卡在途字节量，是否能保持吞吐并降低等待？</td>
+</tr>
+<tr>
+<td>数据路径</td>
+<td>远端 DRAM 直达 HBM、本机 DRAM 中转和可行的本地 DRAM→HBM CUDA 复制，各自在哪类请求上更合适？</td>
+</tr>
+<tr>
+<td>缓存收益</td>
+<td>实际命中了多少 KV 字节，省掉了多少 prefill，保存的数据后来有没有再次使用？</td>
+</tr>
+<tr>
+<td>耗时构成</td>
+<td>排队、实际传输、校验、同步分别花多久？数据真正可供 GPU 计算的时刻是什么？</td>
+</tr>
+</tbody></table>
+<p>测量时固定模型、上下文分布和前台并发，记录 GPU、网卡、驱动与固件版本，并通过重复运行观察结果是否稳定。除了 P99，也可以记录 P50 和 P99.9，它们分别表示中位数与第 99.9 百分位，帮助判断改善发生在普通请求还是极端慢请求上。还应分别记录传输完成、数据对 GPU 可见和计算消费数据的时刻，才能知道等待究竟发生在哪里。</p>
 
       
     </div>
@@ -672,7 +1003,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">279</span>
+                <span class="site-state-item-count">280</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -778,7 +1109,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#基础知识"><span class="nav-number">1.</span> <span class="nav-text">基础知识</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#一张大表看架构"><span class="nav-number">2.</span> <span class="nav-text">一张大表看架构</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#速度差距"><span class="nav-number">2.1.</span> <span class="nav-text">速度差距</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#详细说明"><span class="nav-number">2.2.</span> <span class="nav-text">详细说明</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#关于-GDR"><span class="nav-number">2.3.</span> <span class="nav-text">关于 GDR</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#关于网卡"><span class="nav-number">2.4.</span> <span class="nav-text">关于网卡</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#KVCache-的架构比较"><span class="nav-number">2.5.</span> <span class="nav-text">KVCache 的架构比较</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Reference"><span class="nav-number">2.6.</span> <span class="nav-text">Reference</span></a></li></ol></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#基础知识"><span class="nav-number">1.</span> <span class="nav-text">基础知识</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#一张大表看架构"><span class="nav-number">2.</span> <span class="nav-text">一张大表看架构</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#速度差距"><span class="nav-number">2.1.</span> <span class="nav-text">速度差距</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#详细说明"><span class="nav-number">2.2.</span> <span class="nav-text">详细说明</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#关于-GDR"><span class="nav-number">2.3.</span> <span class="nav-text">关于 GDR</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#关于网卡"><span class="nav-number">2.4.</span> <span class="nav-text">关于网卡</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#KVCache-的架构比较"><span class="nav-number">2.5.</span> <span class="nav-text">KVCache 的架构比较</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Reference"><span class="nav-number">2.6.</span> <span class="nav-text">Reference</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#搬一份-KV-要多久：从输入假设算到结果"><span class="nav-number">2.7.</span> <span class="nav-text">搬一份 KV 要多久：从输入假设算到结果</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#为什么先用“字节数除以带宽”估算"><span class="nav-number">2.7.1.</span> <span class="nav-text">为什么先用“字节数除以带宽”估算</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#以每张-GPU-加载-4-GiB-为例，数字怎样算出来"><span class="nav-number">2.7.2.</span> <span class="nav-text">以每张 GPU 加载 4 GiB 为例，数字怎样算出来</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#为什么已经能流水化，仍然希望绕过本机-DRAM"><span class="nav-number">2.7.3.</span> <span class="nav-text">为什么已经能流水化，仍然希望绕过本机 DRAM</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#为什么缓存装得下，还可能来不及服务请求"><span class="nav-number">2.7.4.</span> <span class="nav-text">为什么缓存装得下，还可能来不及服务请求</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#为什么“用之前搬一次”和“每生成一个-token-都搬”差别很大"><span class="nav-number">2.8.</span> <span class="nav-text">为什么“用之前搬一次”和“每生成一个 token 都搬”差别很大</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#设计"><span class="nav-number">3.</span> <span class="nav-text">设计</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#怎样设计-KV-的保存、换出与恢复"><span class="nav-number">3.1.</span> <span class="nav-text">怎样设计 KV 的保存、换出与恢复</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#为什么-HBM-和-DRAM-应该分别做容量预算"><span class="nav-number">3.1.1.</span> <span class="nav-text">为什么 HBM 和 DRAM 应该分别做容量预算</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#为什么要区分保存历史前缀和临时换出"><span class="nav-number">3.1.2.</span> <span class="nav-text">为什么要区分保存历史前缀和临时换出</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#为什么-DRAM-不需要成为-HBM-的完整镜像"><span class="nav-number">3.1.3.</span> <span class="nav-text">为什么 DRAM 不需要成为 HBM 的完整镜像</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#为什么拆成多个传输块，还不等于计算已经能流水化"><span class="nav-number">3.1.4.</span> <span class="nav-text">为什么拆成多个传输块，还不等于计算已经能流水化</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#HBM-和-DRAM-配比，为什么应该从工作负载推导"><span class="nav-number">3.2.</span> <span class="nav-text">HBM 和 DRAM 配比，为什么应该从工作负载推导</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#先算正在运行的请求需要多少-HBM"><span class="nav-number">3.2.1.</span> <span class="nav-text">先算正在运行的请求需要多少 HBM</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#DRAM-主要为哪些数据留空间"><span class="nav-number">3.2.2.</span> <span class="nav-text">DRAM 主要为哪些数据留空间</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#为什么不能直接给出一个最佳比例"><span class="nav-number">3.2.3.</span> <span class="nav-text">为什么不能直接给出一个最佳比例</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#从资源约束推导保存、路由与调度策略"><span class="nav-number">3.3.</span> <span class="nav-text">从资源约束推导保存、路由与调度策略</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#先让数据放在最符合其使用方式的位置"><span class="nav-number">3.3.1.</span> <span class="nav-text">先让数据放在最符合其使用方式的位置</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#再决定哪些-KV-值得保存"><span class="nav-number">3.3.2.</span> <span class="nav-text">再决定哪些 KV 值得保存</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#为什么控制排队可能比提高峰值吞吐更重要"><span class="nav-number">3.3.3.</span> <span class="nav-text">为什么控制排队可能比提高峰值吞吐更重要</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#怎样验证这些设计在完整推理服务中的效果"><span class="nav-number">3.4.</span> <span class="nav-text">怎样验证这些设计在完整推理服务中的效果</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#为什么需要同时测搬运吞吐与前台延迟"><span class="nav-number">3.4.1.</span> <span class="nav-text">为什么需要同时测搬运吞吐与前台延迟</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#为什么用在途字节量控制积压，以及怎样选上限"><span class="nav-number">3.4.2.</span> <span class="nav-text">为什么用在途字节量控制积压，以及怎样选上限</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#怎样把测量结果归因到具体设计"><span class="nav-number">3.4.3.</span> <span class="nav-text">怎样把测量结果归因到具体设计</span></a></li></ol></li></ol></li></ol></div>
             
 
           </div>

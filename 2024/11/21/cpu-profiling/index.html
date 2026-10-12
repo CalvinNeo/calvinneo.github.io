@@ -100,7 +100,7 @@
 <meta property="og:description" content="记录了自己在执行 CPU Profiling 的时候遇到的一些经验。 相关文章：  heap profiling">
 <meta property="og:locale" content="zh-Hans">
 <meta property="og:image" content="https://www.brendangregg.com/blog/images/2017/cpubusystalledidle.png">
-<meta property="og:updated_time" content="2026-09-28T15:28:24.720Z">
+<meta property="og:updated_time" content="2026-10-12T14:11:59.131Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="CPU Profiling 经验之谈">
 <meta name="twitter:description" content="记录了自己在执行 CPU Profiling 的时候遇到的一些经验。 相关文章：  heap profiling">
@@ -529,23 +529,24 @@
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line">                   user space</span><br><span class="line"></span><br><span class="line">              ┌──────────────┐</span><br><span class="line">              │     perf     │</span><br><span class="line">              └──────┬───────┘</span><br><span class="line">                     │</span><br><span class="line">                     │ perf_event_open()</span><br><span class="line">                     ↓</span><br><span class="line"></span><br><span class="line">                   kernel</span><br><span class="line"></span><br><span class="line">           ┌─────────────────────┐</span><br><span class="line">           │     perf_event      │</span><br><span class="line">           │      framework      │</span><br><span class="line">           └─────────┬───────────┘</span><br><span class="line">                     │</span><br><span class="line">      ┌──────────────┼──────────────┐</span><br><span class="line">      ↓              ↓              ↓</span><br><span class="line"></span><br><span class="line">    PMU          tracepoint       kprobe</span><br><span class="line">cycles             sched          uprobe</span><br><span class="line">cache miss</span><br><span class="line">branch miss</span><br></pre></td></tr></table></figure>
 
 <h1 id="调用栈回溯与-profiling-开销"><a href="#调用栈回溯与-profiling-开销" class="headerlink" title="调用栈回溯与 profiling 开销"></a>调用栈回溯与 profiling 开销</h1><p>这里比较 pprof-rs 和 perf 对 Linux 用户栈的采集，以 x86-64 为例。pprof-rs 的 FP 指 <code>frame-pointer</code> feature，DWARF 指默认的 <code>backtrace-rs → _Unwind_Backtrace</code> 路径，其他 unwinder 需要另看。下面是按所链接源码做的机制分析，没有跑 benchmark，具体实现还要看版本。</p>
-<h2 id="FP-和-DWARF"><a href="#FP-和-DWARF" class="headerlink" title="FP 和 DWARF"></a>FP 和 DWARF</h2><p>首先，需要把几个步骤分开：</p>
-<ol>
+<h2 id="FP-和-DWARF"><a href="#FP-和-DWARF" class="headerlink" title="FP 和 DWARF"></a>FP 和 DWARF</h2><ol>
 <li>unwind：从当前执行位置逐层找调用者，得到一串代码地址，也就是调用栈回溯。</li>
 <li>聚合：把相同的调用栈合并计数，例如某条栈被采到 80 次，就记为 80。</li>
 <li>符号化：把地址转换成函数名、文件和行号，addr2line 还可以解析 inline 调用链。</li>
 </ol>
 <p>FP(Frame Pointer) 的方法比较直接。以常规 x86-64 帧布局为例，RSP 是栈指针(SP)，RBP 用作帧指针。函数通过 <code>push rbp; mov rbp, rsp</code> 建好帧之后，<code>[RBP]</code> 保存上一帧的 RBP，<code>[RBP + 8]</code> 保存返回地址。这样沿着 RBP 链往上走，就能得到调用栈，前提是相关代码保留了可用的 FP。</p>
 <p>编译器可以省略 FP，少做保存、建立和恢复帧指针的操作，并把 RBP 用于其他计算。但这不代表没有栈了，RSP 仍然在，局部变量也可以相对 RSP 寻址。问题是各个函数分配的栈空间不同，仅凭 RSP，无法按统一的固定偏移找到返回地址。</p>
-<p>DWARF 的办法是由编译器生成 CFI(Call Frame Information)，描述在某个指令位置如何恢复调用者状态。例如，假设某函数分配了 24 字节局部空间，加上 call 压入的 8 字节返回地址，函数主体处的规则可以写成：</p>
+<p>DWARF 的办法是由编译器生成 CFI(Call Frame Information)，描述在某个指令位置如何恢复调用者状态。CFA(Canonical Frame Address) 是按规则算出的基准地址，在这个例子里就是调用该函数之前的栈指针；<code>memory64</code> 表示读取 8 字节。恢复出调用者的 PC 和 RSP 后，就可以继续找上一层的 CFI。</p>
+<p>例如，假设某函数分配了 24 字节局部空间，加上 call 压入的 8 字节返回地址，函数主体处的规则可以写成：</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">CFA = RSP + 32</span><br><span class="line">调用者 PC = memory64[CFA - 8]</span><br><span class="line">调用者 RSP = CFA</span><br></pre></td></tr></table></figure>
 
-<p>CFA(Canonical Frame Address) 是按规则算出的基准地址，在这个例子里就是调用该函数之前的栈指针；<code>memory64</code> 表示读取 8 字节。恢复出调用者的 PC 和 RSP 后，就可以继续找上一层的 CFI。</p>
 <p>考虑 <code>main → A → f</code> 和 <code>main → B → f</code>，两次都采在 f 的同一条指令。此时 PC 选出的规则相同，但栈里保存的返回地址不同，因此能够区分 A 和 B。<strong>CFI 给出规则，寄存器和栈内存给出这一次调用的实际状态。</strong> unwind 只是读取这些信息，不会真的让函数返回。</p>
-<p>这里还有两个容易混淆的地方：</p>
+<p>容易混淆的地方：</p>
 <ul>
 <li>CFI 可以放在 <code>.eh_frame</code> 中，保留可用的回溯信息就可能恢复地址调用链，不要求同时带上完整的 <code>-g</code> 调试信息。文件、行号等信息则需要另看。</li>
 <li>使用 FP 回溯后，仍然可以用 DWARF 调试信息做符号化，包括解析 inline。<strong>选择 FP，并不等于省掉 addr2line。</strong></li>
+<li>DWARF 是描述调试信息和栈展开规则的一套格式，.eh_frame 则是 Linux 可执行文件和动态库中存放栈展开规则的一个数据区。名字里的 eh 是 Exception Handling，也就是异常处理，因为抛出异常时也需要沿调用栈找到上层函数。编译器会把“执行到这里时，返回地址存在哪里、如何恢复调用者的寄存器”等规则写进去，采样器再结合当时的寄存器和栈内存，一层层找回调用者。pprof-rs 默认的 Linux 回溯路径通常就依赖这些规则。因此，没有开启 -g 生成完整调试信息，程序也可能保留 .eh_frame，照样能回溯出一串调用地址。至于这些地址对应哪个源码文件、哪一行，则需要 addr2line 等符号化工具读取另外的调试信息来解析。</li>
+<li>debug = 1 提供的调试信息，和回溯调用栈需要的规则，回答的是不同的问题。只有 debug = 1、缺少可用的展开信息，并不是 DWARF 展栈成功的原因。当然，常见 Linux Rust 构建通常本来就会生成 .eh_frame，所以只加 debug = 1，实际往往也能正常回溯。 只是展开表并不是 debug = 1 保证提供的。</li>
 </ul>
 <p>CFI 的规则和输出位置可以参考 <a href="https://sourceware.org/binutils/docs/as/CFI-directives.html" target="_blank" rel="noopener">GNU as 文档</a>。</p>
 <h2 id="pprof-rs-和-perf-的区别"><a href="#pprof-rs-和-perf-的区别" class="headerlink" title="pprof-rs 和 perf 的区别"></a>pprof-rs 和 perf 的区别</h2><p>两者都支持 FP 和 DWARF，需要分别比较。按 perf 的 <code>record → report/script</code> 流程看：</p>
@@ -822,7 +823,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">279</span>
+                <span class="site-state-item-count">280</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
