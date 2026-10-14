@@ -99,7 +99,7 @@
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
 <meta property="og:description" content="学习 RDMA 的基本知识。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2026-10-12T13:42:48.785Z">
+<meta property="og:updated_time" content="2026-10-13T15:48:20.304Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="RDMA 学习">
 <meta name="twitter:description" content="学习 RDMA 的基本知识。">
@@ -486,89 +486,31 @@
 <li>SL<br>  流量属于哪一类，类似包裹上的分类标签。</li>
 <li>VL(VirtualLane，虚拟通道)<br>  流量具体走哪个逻辑通道。网络设备通过 SL -&gt; VL 映射表分配通道，再按配置的优先级和权重调度发送。<br>  即使映射到了不同 VL，它们仍然共享同一条物理链路，可以理解成“分了排队通道，但共用出口”。</li>
 </ul>
-<h1 id="RDMA-的-NUMA-亲和性：网卡、内存与-UPI"><a href="#RDMA-的-NUMA-亲和性：网卡、内存与-UPI" class="headerlink" title="RDMA 的 NUMA 亲和性：网卡、内存与 UPI"></a>RDMA 的 NUMA 亲和性：网卡、内存与 UPI</h1><p><a href="https://www.calvinneo.com/2025/01/03/memory-context-knowledge/">内存领域知识</a>已经讨论过 CPU 访问远端 NUMA 内存的代价。换成 RDMA 后，访问内存的发起方变成了 NIC，但这份代价并没有消失。前面的 RDMA Write 示例只指定了 buffer 和 MR，没有约束 buffer 的物理页面位于哪个节点，也没有说明所选网卡从哪条 PCIe 路径访问它。两段代码即使使用相同的 verbs 调用，也可能因此走出不同的数据路径。</p>
-<h2 id="NIC-访问远端内存时经过哪里"><a href="#NIC-访问远端内存时经过哪里" class="headerlink" title="NIC 访问远端内存时经过哪里"></a>NIC 访问远端内存时经过哪里</h2><p>先看物理连接。在常见的 Intel 双路服务器中，两颗 CPU 各自连接一组 DRAM，也各自提供一组 PCIe 接口。GPU、NIC、SSD 可以直接接在这些接口上，也可以通过 PCIe 交换芯片连接。两颗 CPU 之间则通过 UPI 互联，所以整台机器可以看成两边各有本地资源，再通过跨插槽通道互相访问。</p>
-<p>UPI（Ultra Path Interconnect）是 Intel Xeon 的跨插槽互联，在这里承担此前 QPI 的角色，负责跨 Socket 的数据传输和缓存一致性通信。下面按一个 Socket 对应一个 NUMA 节点画示意图，0 和 1 只是区分两边的编号：</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">DRAM / NUMA 0                   DRAM / NUMA 1</span><br><span class="line">      |                               |</span><br><span class="line">   Socket 0 ========= UPI ========= Socket 1</span><br><span class="line">      |                               |</span><br><span class="line"> PCIe interfaces                 PCIe interfaces</span><br><span class="line">   /  |  \                         /  |  \</span><br><span class="line"> GPU NIC SSD                     GPU NIC SSD</span><br></pre></td></tr></table></figure>
+<h1 id="RDMA-的-NUMA-亲和性：网卡、内存与-UPI"><a href="#RDMA-的-NUMA-亲和性：网卡、内存与-UPI" class="headerlink" title="RDMA 的 NUMA 亲和性：网卡、内存与 UPI"></a>RDMA 的 NUMA 亲和性：网卡、内存与 UPI</h1><p><a href="https://www.calvinneo.com/2025/01/03/memory-context-knowledge/">内存领域知识</a>讨论过 CPU 访问远端 NUMA 内存的代价。换成 RDMA，发起内存访问的变成了网卡（NIC），但物理距离并没有消失。因此，除了线程在哪运行，还要看 <strong>NIC 接在哪个 Socket，以及 buffer 的物理页在哪个 NUMA 节点</strong>。</p>
+<h2 id="数据怎么走：PCIe-和-UPI-不是二选一"><a href="#数据怎么走：PCIe-和-UPI-不是二选一" class="headerlink" title="数据怎么走：PCIe 和 UPI 不是二选一"></a>数据怎么走：PCIe 和 UPI 不是二选一</h2><p>在常见的 Intel 双路服务器中，每颗 CPU 各自连接 DRAM 和 PCIe 设备，两个 Socket 通过 UPI（Ultra Path Interconnect，Intel Xeon 的跨插槽互联）传输数据并维护缓存一致性。下面假设一个 Socket 对应一个 NUMA 节点，0、1 只是示例编号：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">DRAM 0 -- Socket 0 ===== UPI ===== Socket 1 -- DRAM 1</span><br><span class="line">             |                       |</span><br><span class="line">            PCIe                    PCIe</span><br><span class="line">             |                       |</span><br><span class="line">            NIC 0                   NIC 1</span><br></pre></td></tr></table></figure>
 
-<p>现在假设右边的 NIC 要发送的数据位于 DRAM 0。NIC 发起 PCIe 内存读请求后，请求先进入 Socket 1 的 I/O 硬件。但 DRAM 0 接在 Socket 0 的内存控制器上，Socket 1 需要通过 UPI 去访问它。两边都有 PCIe 接口，并不意味着这两组接口之间还有另一条直连通道。</p>
-<p>按数据返回 NIC 的方向看，路径是：</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">DRAM 0 → Socket 0 → UPI → Socket 1 → PCIe → 右侧 NIC</span><br></pre></td></tr></table></figure>
+<p>如果 NIC 1 发送的数据需要从 DRAM 0 取回，数据路径就是 <code>DRAM 0 → Socket 0 → UPI → Socket 1 → PCIe → NIC 1</code>。这里经过的是处理器内部的内存控制器和 I/O 硬件，不是 CPU 核在执行 <code>memcpy</code>。DMA 省掉了 CPU 复制，却没有省掉跨插槽传输，所以 UPI 仍可能成为带宽竞争点。</p>
+<p>这也说明，PCIe 与 UPI 是这条路径上串联的两段路。要避开 UPI，应让 NIC 1 使用 DRAM 1 中的 buffer，或者改用 NIC 0 发送 DRAM 0 中的数据。先把数据从 DRAM 0 复制到 DRAM 1，只是把跨 UPI 的工作移到了复制阶段。</p>
+<p>线程位置则是另一件事。buffer 与 NIC 都在节点 1 时，即使提交线程在节点 0，数据的 DMA 也可以是本地的，只是提交请求、轮询 CQ 或处理数据仍可能跨节点。RDMA Write 的接收端同样要检查 NIC 与目标 buffer 的位置，不能因为目标 CPU 不参与复制，就认为没有跨插槽流量。</p>
+<p><a href="https://docs.kernel.org/driver-api/pci/p2pdma.html" target="_blank" rel="noopener">PCIe P2P</a> 指设备之间的直接访问，例如 NIC 读写 GPU 显存。拓扑允许时，事务可以在 PCIe 交换芯片内转发，但它并没有给普通 DRAM 增加一个绕过 UPI 的入口。真正改变上述连接方式的是 <a href="https://networking-docs.nvidia.com/connectx8hw/introduction#Socket-Direct-SuperNICs" target="_blank" rel="noopener">Socket Direct</a>：支持它的网卡通过两条独立的 PCIe 连接分别接入两个 Socket，在正确选择和配置接口后，两侧都能获得本地 DMA 路径。双网络端口不等于双主机侧 PCIe 连接。</p>
+<p>此外，跨 NUMA 不一定跨 Socket。Intel SNC（Sub-NUMA Clustering）能把一个 Socket 划成多个 NUMA 节点，同 Socket 内的跨节点访问不需要经过跨插槽 UPI，所以必须结合实际拓扑判断。</p>
+<h2 id="从-RDMA-设备查到物理拓扑"><a href="#从-RDMA-设备查到物理拓扑" class="headerlink" title="从 RDMA 设备查到物理拓扑"></a>从 RDMA 设备查到物理拓扑</h2><p>verbs 选择的是 <code>mlx5_0</code> 这样的 RDMA 设备，而不是 <code>eth0</code> 这样的 Linux 网口。<a href="https://www.calvinneo.com/2026/09/18/rdma-assessment/">RDMA 评估指标</a>里的 <code>mlx5_bond_0</code> 则是某些 RoCE LAG（链路聚合组）配置中的 RDMA 聚合设备。名称不能告诉我们 NUMA 归属，需要先查它对应的网口：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">ibdev2netdev</span><br><span class="line">rdma link show</span><br></pre></td></tr></table></figure>
 
-<p>这里“经过 Socket 0、Socket 1”指经过处理器内部的硬件通路，不需要 CPU 核执行 <code>memcpy</code>，也不需要两边运行软件来转发数据。DMA 可以省掉 CPU 核的复制工作，但仍然会使用内存控制器、I/O 硬件和 UPI，因此 UPI 依然可能成为带宽竞争点。图里省略了缓存命中和一致性处理的细节，表达的是从远端 DRAM 取数时的拓扑路径。</p>
-<p>如果只把发送线程绑到 Socket 1，buffer 仍然留在 Socket 0，这段 payload 的 DMA 路径不会改变。反过来，buffer 和 NIC 都在 Socket 1 时，即使提交线程在 Socket 0，payload 的 DMA 读取也可以是本地的，只是线程访问 buffer、提交请求和处理完成状态时还可能跨节点。所以需要分别看线程、buffer 和 NIC 的位置，不能用“发送线程绑在哪”代替整个传输路径。</p>
-<p>接收端也一样。RDMA Write 不要求目标 CPU 核参与复制，但如果目标 NIC 和被写入的 buffer 分属两个 Socket，写入仍然会产生跨插槽流量。</p>
-<p>这里还要保留一个拓扑上的区别：跨 NUMA 不一定跨 Socket。例如 Intel SNC（Sub-NUMA Clustering）会把同一颗处理器划分成多个 NUMA 节点，这些节点之间的访问不需要经过跨插槽 UPI。是否跨 UPI，要结合 NUMA 节点与 Socket 的映射判断。</p>
-<h2 id="PCIe-能否绕过-UPI"><a href="#PCIe-能否绕过-UPI" class="headerlink" title="PCIe 能否绕过 UPI"></a>PCIe 能否绕过 UPI</h2><p>上面这条路径已经走了 PCIe，只是 PCIe 负责右侧 NIC 到 Socket 1 的这一段，UPI 负责跨到 Socket 0。要让 NIC 直接通过 PCIe 访问 Socket 0 一侧的内存，需要它有一条接到 Socket 0 的 PCIe 路径，而图中的 NIC 并没有这条连接。软件可以选择使用哪张网卡、把 buffer 分配在哪个节点，却不能改变已经接好的硬件拓扑。</p>
-<p>所以，在这套连接方式下，要避免发送 payload 时经过 UPI，可以让右侧 NIC 读取 DRAM 1 中的 buffer，或者改用左侧 NIC 发送 DRAM 0 中的数据。如果数据已经在 DRAM 0，先复制到 DRAM 1 再交给右侧 NIC，复制本身仍然要经过 UPI，并没有省掉跨插槽传输。</p>
-<p>PCIe P2P 适用的是设备之间的访问，例如 NIC 直接读写 GPU 显存。前面的 <a href="https://www.calvinneo.com/2026/09/11/KVCache-learn-hw/">KVCache 硬件篇</a>已经介绍过 GPUDirect RDMA。这里要补充的是，在拓扑和配置允许时，P2P 事务可以在 PCIe 交换芯片内完成转发，不必经过主机内存。但这并不会给普通 DRAM 增加一个独立的 PCIe 入口，也不能保证任意两个 Socket 下的设备都支持这种路径。</p>
-<p><strong>Socket Direct 则确实增加了前面缺少的那条物理连接。</strong> 对于支持这种连接方式的网卡，可以分别从两个 Socket 接入独立的 PCIe 接口。同一张 NIC 访问 DRAM 0 时可以走 Socket 0 的接口，访问 DRAM 1 时可以走 Socket 1 的接口，从而让两边都获得本地 DMA 路径：</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">DRAM 0 — Socket 0 — PCIe — NIC — PCIe — Socket 1 — DRAM 1</span><br></pre></td></tr></table></figure>
+<p>输出中的 RDMA 端口号，也就是 <code>ib_write_bw -i</code> 的参数，与 NUMA 节点号无关。如果网口是 Linux 聚合接口 <code>bond0</code>，先用 <code>cat /proc/net/bonding/bond0</code> 找到 <code>Slave Interface</code> 成员，再逐个查询物理网口。下面的设备名均为示例，应替换成机器的实际输出：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">nic=eth0</span><br><span class="line">cat <span class="string">"/sys/class/net/<span class="variable">$nic</span>/device/numa_node"</span></span><br><span class="line">cat <span class="string">"/sys/class/net/<span class="variable">$nic</span>/device/local_cpulist"</span></span><br><span class="line">readlink -f <span class="string">"/sys/class/net/<span class="variable">$nic</span>/device"</span></span><br><span class="line">lscpu -e=CPU,NODE,SOCKET</span><br></pre></td></tr></table></figure>
 
-<p>因此，“网卡只有一条 PCIe 路径，而且接在另一颗 CPU 上”和“同一张网卡分别接入两个 Socket”需要分开讨论。后者可以避免原本为了访问另一侧网卡而产生的 UPI 绕行，但要求对应的网卡型号、物理连接和软件配置。不能仅凭一张卡有两个网络端口，就认为它具备两条主机侧 PCIe 接口。NVIDIA 的 <a href="https://networking-docs.nvidia.com/connectx8hw/introduction#Socket-Direct-SuperNICs" target="_blank" rel="noopener">Socket Direct 说明</a>明确描述了这两条独立的 PCIe 连接。</p>
-<h2 id="从-mlx5-bond-0-找到底层网卡"><a href="#从-mlx5-bond-0-找到底层网卡" class="headerlink" title="从 mlx5_bond_0 找到底层网卡"></a>从 mlx5_bond_0 找到底层网卡</h2><p><a href="https://www.calvinneo.com/2026/09/18/rdma-assessment/">RDMA 评估指标</a>里使用的是 <code>mlx5_bond_0</code> 这样的设备名。它属于 RDMA 子系统，和 <code>ip link</code> 中看到的网口名处于不同层次：</p>
-<table>
-<thead>
-<tr>
-<th>名称示例</th>
-<th>所属层次</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>eth0</code>、<code>ens5f0np0</code></td>
-<td>Linux 网络接口名。</td>
-</tr>
-<tr>
-<td><code>mlx5_0</code></td>
-<td>RDMA 设备名，verbs 程序在这一层选择设备。</td>
-</tr>
-<tr>
-<td><code>bond0</code></td>
-<td>Linux bonding 聚合接口，其下还有成员网口。</td>
-</tr>
-<tr>
-<td><code>mlx5_bond_0</code></td>
-<td>某些 Mellanox RoCE LAG 配置中的 RDMA 聚合设备名。LAG 即链路聚合组。</td>
-</tr>
-</tbody></table>
-<p>这些名称本身不能确定 NUMA 归属。尤其是 bond，必须继续追到成员网口及其 PCI 设备。如果成员分属不同节点，实际经过哪个节点，还取决于流量使用哪个成员。RoCE 的聚合和主机侧的 Socket Direct 也不是同一项配置，看到 <code>mlx5_bond_0</code> 并不能直接推断它接了几个 Socket。</p>
-<p>可以先列出设备和对应关系：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">ibv_devices</span><br><span class="line">ibdev2netdev</span><br><span class="line">rdma link show</span><br><span class="line">ip -br link</span><br></pre></td></tr></table></figure>
-
-<p><code>ibv_devices</code> 列出 verbs 可见的设备，<code>ibdev2netdev</code> 和 <code>rdma link show</code> 用来关联 RDMA 端口与 Linux 网口。例如下面这行只是输出格式示例：</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">mlx5_0 port 1 ==&gt; eth0 (Up)</span><br></pre></td></tr></table></figure>
-
-<p>这里的 <code>port 1</code> 是 <code>mlx5_0</code> 的 RDMA 端口编号，对应 <code>ib_write_bw -i 1</code> 中的 1。它与 NUMA 节点编号无关。实际名称应以机器输出为准。</p>
-<p>如果映射到的是 <code>bond0</code>，先检查它的工作模式和 <code>Slave Interface</code> 成员：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">cat /proc/net/bonding/bond0</span><br></pre></td></tr></table></figure>
-
-<p>随后对各个物理成员查询 NUMA、就近 CPU 列表和 PCI 地址。下面的 <code>eth0</code> 替换成查到的成员名：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">nic=eth0</span><br><span class="line">cat <span class="string">"/sys/class/net/<span class="variable">$nic</span>/device/numa_node"</span></span><br><span class="line">cat <span class="string">"/sys/class/net/<span class="variable">$nic</span>/device/local_cpulist"</span></span><br><span class="line">pci=$(basename <span class="string">"<span class="variable">$(readlink -f "/sys/class/net/$nic/device")</span>"</span>)</span><br><span class="line">lspci -s <span class="string">"<span class="variable">$pci</span>"</span></span><br></pre></td></tr></table></figure>
-
-<p><code>numa_node</code> 是内核报告的设备 NUMA 归属，<code>local_cpulist</code> 是系统报告的就近逻辑 CPU 集合，<code>lspci</code> 用来确认对应硬件型号。如果 <code>numa_node</code> 返回 -1，表示归属未知，不能据此判断访问各节点的成本相同。纯虚拟接口通常没有这样的 PCI 设备路径，所以要先找到底层成员。</p>
-<p>只有 RDMA 设备名时，也可以直接查询：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">rdma_dev=mlx5_0</span><br><span class="line">cat <span class="string">"/sys/class/infiniband/<span class="variable">$rdma_dev</span>/device/numa_node"</span></span><br><span class="line">readlink -f <span class="string">"/sys/class/infiniband/<span class="variable">$rdma_dev</span>/device"</span></span><br></pre></td></tr></table></figure>
-
-<p>RoCE 设备也在 <code>/sys/class/infiniband</code> 下。对于聚合设备，这个路径可能只体现驱动关联的某个底层 PCI 设备，不能替代对全部成员的检查。</p>
-<p>最后用 CPU 拓扑确认该 NUMA 节点位于哪个 Socket：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">lscpu -e=CPU,NODE,SOCKET,CORE,ONLINE</span><br><span class="line">numactl --hardware</span><br></pre></td></tr></table></figure>
-
-<p>这里主要对照 <code>NODE</code> 与 <code>SOCKET</code> 两列。<code>numactl</code> 的 distance 矩阵是平台提供的相对距离指标，不是实测延迟，不能把其中的数字直接当成纳秒或 RDMA 性能损失比例。</p>
-<h2 id="在-MR-注册之前安排内存位置"><a href="#在-MR-注册之前安排内存位置" class="headerlink" title="在 MR 注册之前安排内存位置"></a>在 MR 注册之前安排内存位置</h2><p>前面示例中的 <code>posix_memalign</code> 只保证对齐，<code>ibv_reg_mr</code> 也不会根据所选网卡的 NUMA 归属，自动迁移已有页面。对于常规的主机内存 MR，注册过程会固定页面并建立设备访问所需的映射，因此内存策略最好在分配、初始化和注册之前就确定下来。</p>
-<p>一个常见问题是主线程在节点 0 初始化了整个 buffer 池，随后才把发送线程绑到节点 1。默认的本地分配策略下，新匿名页往往已经在初始化写入时按 first-touch 分配到了节点 0，之后的绑核不会自动改变它们的位置。如果注册前页面还没有实际分配，常规 MR 注册本身也可能触发缺页并固定页面，所以只调整发送循环的亲和性仍然太晚。</p>
-<p>如果查询确认 NIC 位于节点 1，可以先用下面的方式建立本地访问基线，<code>./rdma_demo</code> 替换成实际程序：</p>
+<p><code>numa_node</code> 是内核报告的设备所属节点，<code>local_cpulist</code> 是就近逻辑 CPU 列表，<code>readlink</code> 显示 PCI 设备路径。将节点号与 <code>lscpu</code> 的 <code>NODE</code>、<code>SOCKET</code> 两列对照，就能确定对应的 Socket。若 <code>numa_node</code> 返回 <code>-1</code>，表示归属未知，不是访问各节点的成本相同。</p>
+<p>聚合设备自身的 sysfs 路径可能只反映一个底层 PCI 设备，不能代替逐成员检查。成员若分属不同 Socket，还要结合聚合实现确认实际使用的 PCIe 路径。RoCE LAG 与 Socket Direct 是不同机制，不能从一个 bond 名字推断出双 Socket 连接。</p>
+<h2 id="先放对内存，再注册-MR"><a href="#先放对内存，再注册-MR" class="headerlink" title="先放对内存，再注册 MR"></a>先放对内存，再注册 MR</h2><p>前面示例中的 <code>posix_memalign</code> 只保证对齐。对常规主机内存而言，<code>ibv_reg_mr</code> 注册 MR（Memory Region，供 RDMA 访问的注册内存区域）时会固定物理页并建立设备映射，但不会按 NIC 的位置自动迁移页面。</p>
+<p><a href="https://docs.kernel.org/admin-guide/mm/numa_memory_policy.html" target="_blank" rel="noopener">Linux 默认的本地分配策略</a>下，新匿名页通常在首次写入触发缺页时才分配物理内存，这就是 first-touch。主线程在节点 0 初始化 buffer 后，再把发送线程绑到节点 1，已有页面并不会跟着移动。注册 MR 也可能触发尚未分配页面的缺页，所以应当<strong>先设置线程与内存策略，再分配、初始化 buffer，最后注册 MR</strong>。</p>
+<p>假设查出的 NIC 属于节点 1，可以这样启动程序，两个 <code>1</code> 都来自刚才的节点查询结果，<code>./rdma_demo</code> 替换成实际程序：</p>
 <figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">numactl --cpunodebind=1 --membind=1 ./rdma_demo</span><br></pre></td></tr></table></figure>
 
-<p>两个 1 都取自查到的 NIC NUMA 节点。程序还需要选择对应的 RDMA 设备，<code>numactl</code> 不会替它选网卡。多网卡程序则可以按节点建立 buffer 池，在分配阶段通过 <code>mbind</code> 或 libnuma 设置策略，让各个工作线程使用与其 NIC 对应的内存。这样也能避免把所有数据先集中到一个节点，再在发送时跨 Socket 取回。</p>
-<p>验证时可以沿用<a href="https://www.calvinneo.com/2025/01/03/memory-context-knowledge/#move-page">内存领域知识中的 <code>move_pages</code></a>：传入 <code>nodes == NULL</code> 查询 MR 对应页面的实际节点。<code>numastat -p</code> 只能提供进程整体分布，不能单独证明某个 buffer 已经本地化。</p>
-<p>另外，之前用 <code>perf mem</code> 观察 CPU 的 Remote RAM 访问，不能直接据此判断 NIC DMA 有没有跨 NUMA。它采样的是 CPU 内存访问，RDMA 的 payload 搬运由 NIC 发起。要验证这部分开销，应结合平台支持的互联和 I/O 硬件计数器，并在固定 RDMA 设备、消息大小及 QP 配置后，对比本地与远端内存的传输表现。</p>
-<!-- These links can be merged into the article's existing Reference section. -->
-
-<ul>
-<li><a href="https://docs.kernel.org/admin-guide/mm/numa_memory_policy.html" target="_blank" rel="noopener">Linux NUMA Memory Policy</a></li>
-<li><a href="https://docs.kernel.org/driver-api/pci/p2pdma.html" target="_blank" rel="noopener">Linux PCI Peer-to-Peer DMA Support</a></li>
-<li><a href="https://networking-docs.nvidia.com/connectx8hw/introduction#Socket-Direct-SuperNICs" target="_blank" rel="noopener">NVIDIA ConnectX-8 Socket Direct</a></li>
-</ul>
+<p><code>numactl</code> 不会替程序选网卡，程序仍需选择对应的 RDMA 设备。多网卡程序可以按节点建立 buffer 池，用 <code>mbind</code> 为各池设置内存分配策略，让生产数据的线程直接写入对应 NIC 的本地内存。</p>
+<p>页面落点可以沿用前文的 <code>move_pages</code> 验证：传入 <code>nodes == NULL</code> 查询各页的实际节点。<code>numastat -p</code> 只有进程整体分布，不能证明某个 buffer 已经本地化。</p>
+<p>性能验证时，固定 RDMA 设备、线程亲和性、消息大小和 QP 配置，只切换 buffer 所在节点，再比较吞吐和延迟，必要时结合平台的互联与 I/O 硬件计数器。<code>perf mem</code> 采样的是 CPU 访存，不能据此判断 NIC 的 DMA 有没有跨 Socket。</p>
 <h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ul>
 <li><a href="https://zhuanlan.zhihu.com/p/652925814" target="_blank" rel="noopener">https://zhuanlan.zhihu.com/p/652925814</a></li>
 </ul>
@@ -726,7 +668,7 @@
           
             <div class="site-state-item site-state-posts">
               <a href="/archives">
-                <span class="site-state-item-count">280</span>
+                <span class="site-state-item-count">281</span>
                 <span class="site-state-item-name">日志</span>
               </a>
             </div>
@@ -832,7 +774,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#基本概念"><span class="nav-number">1.</span> <span class="nav-text">基本概念</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#RDMA-Write-的基本链路"><span class="nav-number">1.1.</span> <span class="nav-text">RDMA Write 的基本链路</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#SEND-RECV"><span class="nav-number">1.2.</span> <span class="nav-text">SEND/RECV</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#同步原语"><span class="nav-number">2.</span> <span class="nav-text">同步原语</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#InfiniBand"><span class="nav-number">3.</span> <span class="nav-text">InfiniBand</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#RDMA-的-NUMA-亲和性：网卡、内存与-UPI"><span class="nav-number">4.</span> <span class="nav-text">RDMA 的 NUMA 亲和性：网卡、内存与 UPI</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#NIC-访问远端内存时经过哪里"><span class="nav-number">4.1.</span> <span class="nav-text">NIC 访问远端内存时经过哪里</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#PCIe-能否绕过-UPI"><span class="nav-number">4.2.</span> <span class="nav-text">PCIe 能否绕过 UPI</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#从-mlx5-bond-0-找到底层网卡"><span class="nav-number">4.3.</span> <span class="nav-text">从 mlx5_bond_0 找到底层网卡</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#在-MR-注册之前安排内存位置"><span class="nav-number">4.4.</span> <span class="nav-text">在 MR 注册之前安排内存位置</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">5.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#基本概念"><span class="nav-number">1.</span> <span class="nav-text">基本概念</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#RDMA-Write-的基本链路"><span class="nav-number">1.1.</span> <span class="nav-text">RDMA Write 的基本链路</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#SEND-RECV"><span class="nav-number">1.2.</span> <span class="nav-text">SEND/RECV</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#同步原语"><span class="nav-number">2.</span> <span class="nav-text">同步原语</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#InfiniBand"><span class="nav-number">3.</span> <span class="nav-text">InfiniBand</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#RDMA-的-NUMA-亲和性：网卡、内存与-UPI"><span class="nav-number">4.</span> <span class="nav-text">RDMA 的 NUMA 亲和性：网卡、内存与 UPI</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#数据怎么走：PCIe-和-UPI-不是二选一"><span class="nav-number">4.1.</span> <span class="nav-text">数据怎么走：PCIe 和 UPI 不是二选一</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#从-RDMA-设备查到物理拓扑"><span class="nav-number">4.2.</span> <span class="nav-text">从 RDMA 设备查到物理拓扑</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#先放对内存，再注册-MR"><span class="nav-number">4.3.</span> <span class="nav-text">先放对内存，再注册 MR</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">5.</span> <span class="nav-text">Reference</span></a></li></ol></div>
             
 
           </div>
