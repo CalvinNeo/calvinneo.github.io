@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1040" viewBox="0 0 1000 1040" role="img" aria-labelledby="stack-title stack-desc" font-family="system-ui, -apple-system, 'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', sans-serif">
+  <title id="stack-title">Linux socket TCP 与硬件 RDMA 的分层提交路径</title>
+  <desc id="stack-desc">TCP 应用经 libc 和系统调用进入内核 TCP/IP，再由内核网络驱动发布设备队列。RDMA 应用经 libibverbs 和 libmlx5 在用户态构造 WQE 并直接通知网卡，资源创建、内存注册与映射仍经过内核驱动。两种路径的设备固件均参与管理，固件并非每份载荷必经的软件转发层。此图仅画发送提交与资源配置，返回和接收过程见正文。</desc>
+  <defs>
+    <marker id="tcp-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="#2563eb"/></marker>
+    <marker id="rdma-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="#0f766e"/></marker>
+    <marker id="control-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="#64748b"/></marker>
+  </defs>
+  <rect width="1000" height="1040" fill="#fff"/>
+  <text x="28" y="40" font-size="27" font-weight="600" fill="#0f172a">TCP 与 RDMA：请求如何到达网卡</text>
+  <text x="28" y="72" font-size="18" fill="#475569">已建连 · 硬件 mlx5 · 发送提交与资源配置</text>
+  <path d="M30 103 H80" stroke="#2563eb" stroke-width="3" marker-end="url(#tcp-arrow)"/>
+  <text x="95" y="109" font-size="18" fill="#475569">实线：提交路径</text>
+  <path d="M325 103 H375" stroke="#64748b" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#control-arrow)"/>
+  <text x="390" y="109" font-size="18" fill="#475569">虚线：资源配置 / 设备管理</text>
+  <text x="305" y="149" text-anchor="middle" font-size="23" font-weight="600" fill="#1d4ed8">Linux socket TCP</text>
+  <text x="755" y="149" text-anchor="middle" font-size="23" font-weight="600" fill="#0f766e">RC / RoCEv2</text>
+
+  <rect x="15" y="165" width="970" height="215" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="35" y="204" font-size="21" font-weight="600" fill="#475569">用户态</text>
+  <text x="35" y="232" font-size="17" fill="#64748b">主机 CPU</text>
+  <rect x="145" y="181" width="320" height="64" rx="7" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="305" y="208" text-anchor="middle" font-size="21" fill="#0f172a">应用</text>
+  <text x="305" y="233" text-anchor="middle" font-size="18" fill="#1d4ed8">send() / sendmsg()</text>
+  <rect x="595" y="181" width="320" height="64" rx="7" fill="#ecfdf5" stroke="#99d6c6"/>
+  <text x="755" y="208" text-anchor="middle" font-size="21" fill="#0f172a">应用</text>
+  <text x="755" y="233" text-anchor="middle" font-size="18" fill="#0f766e">ibv_post_send()</text>
+  <path d="M305 246 V286" stroke="#2563eb" stroke-width="3" marker-end="url(#tcp-arrow)"/>
+  <path d="M755 246 V286" stroke="#0f766e" stroke-width="3" marker-end="url(#rdma-arrow)"/>
+  <rect x="145" y="290" width="320" height="66" rx="7" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="305" y="317" text-anchor="middle" font-size="21" fill="#0f172a">libc：系统调用封装</text>
+  <text x="305" y="343" text-anchor="middle" font-size="18" fill="#475569">不在此执行 TCP 状态机</text>
+  <rect x="595" y="290" width="320" height="66" rx="7" fill="#ecfdf5" stroke="#99d6c6"/>
+  <text x="755" y="317" text-anchor="middle" font-size="21" fill="#0f172a">libibverbs → libmlx5</text>
+  <text x="755" y="343" text-anchor="middle" font-size="18" fill="#475569">用户态驱动构造 WQE</text>
+
+  <rect x="15" y="416" width="970" height="234" rx="10" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <text x="35" y="454" font-size="21" font-weight="600" fill="#475569">内核态</text>
+  <text x="35" y="482" font-size="17" fill="#64748b">主机 CPU</text>
+  <path d="M305 357 V433" stroke="#2563eb" stroke-width="3" marker-end="url(#tcp-arrow)"/>
+  <text x="323" y="399" font-size="18" fill="#1d4ed8">系统调用</text>
+  <rect x="145" y="437" width="320" height="76" rx="7" fill="#fff" stroke="#93c5fd"/>
+  <text x="305" y="467" text-anchor="middle" font-size="21" fill="#0f172a">TCP/IP + 网络发送层</text>
+  <text x="305" y="495" text-anchor="middle" font-size="18" fill="#475569">连接 · 重传 · 拥塞控制</text>
+  <path d="M305 514 V555" stroke="#2563eb" stroke-width="3" marker-end="url(#tcp-arrow)"/>
+  <rect x="145" y="559" width="320" height="69" rx="7" fill="#fff" stroke="#93c5fd"/>
+  <text x="305" y="587" text-anchor="middle" font-size="21" fill="#0f172a">内核网络驱动：mlx5e</text>
+  <text x="305" y="613" text-anchor="middle" font-size="18" fill="#475569">DMA 映射 · 队列 · doorbell</text>
+  <path d="M755 357 V433" stroke="#64748b" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#control-arrow)"/>
+  <rect x="595" y="437" width="285" height="148" rx="7" fill="#fff" stroke="#94a3b8" stroke-dasharray="6 4"/>
+  <text x="737" y="469" text-anchor="middle" font-size="21" fill="#0f172a">ib_uverbs · mlx5_ib</text>
+  <text x="737" y="499" text-anchor="middle" font-size="21" fill="#0f172a">mlx5_core</text>
+  <text x="737" y="532" text-anchor="middle" font-size="18" fill="#475569">创建 QP/CQ · 注册 MR</text>
+  <text x="737" y="560" text-anchor="middle" font-size="18" fill="#475569">授权与设备映射</text>
+  <text x="737" y="619" text-anchor="middle" font-size="18" fill="#64748b">资源准备仍需要内核</text>
+
+  <rect x="15" y="690" width="970" height="272" rx="10" fill="#fafafa" stroke="#cbd5e1"/>
+  <text x="35" y="729" font-size="21" font-weight="600" fill="#475569">网卡</text>
+  <text x="35" y="757" font-size="17" fill="#64748b">设备内部</text>
+  <path d="M305 629 V709" stroke="#64748b" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#control-arrow)"/>
+  <path d="M737 586 V709" stroke="#64748b" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#control-arrow)"/>
+  <rect x="145" y="713" width="320" height="62" rx="7" fill="#f8fafc" stroke="#94a3b8"/>
+  <text x="305" y="739" text-anchor="middle" font-size="21" fill="#334155">固件：设备管理</text>
+  <text x="305" y="763" text-anchor="middle" font-size="17" fill="#64748b">队列、端口等资源的配置</text>
+  <rect x="595" y="713" width="320" height="62" rx="7" fill="#f8fafc" stroke="#94a3b8"/>
+  <text x="755" y="739" text-anchor="middle" font-size="21" fill="#334155">固件：设备管理</text>
+  <text x="755" y="763" text-anchor="middle" font-size="17" fill="#64748b">队列、端口等资源的配置</text>
+  <path d="M305 776 V820" stroke="#64748b" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#control-arrow)"/>
+  <path d="M755 776 V820" stroke="#64748b" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#control-arrow)"/>
+  <rect x="145" y="824" width="320" height="112" rx="7" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="305" y="854" text-anchor="middle" font-size="22" font-weight="600" fill="#0f172a">网卡硬件</text>
+  <text x="305" y="884" text-anchor="middle" font-size="19" fill="#1d4ed8">DMA · 以太网收发</text>
+  <text x="305" y="914" text-anchor="middle" font-size="18" fill="#475569">按配置执行分段 / 校验和卸载</text>
+  <rect x="595" y="824" width="320" height="112" rx="7" fill="#ecfdf5" stroke="#99d6c6"/>
+  <text x="755" y="854" text-anchor="middle" font-size="22" font-weight="600" fill="#0f172a">网卡硬件</text>
+  <text x="755" y="884" text-anchor="middle" font-size="19" fill="#0f766e">RC 协议 · MR 访问检查</text>
+  <text x="755" y="914" text-anchor="middle" font-size="18" fill="#475569">DMA · RoCEv2 包收发</text>
+  <path d="M465 593 H507 V880 H469" fill="none" stroke="#2563eb" stroke-width="3" marker-end="url(#tcp-arrow)"/>
+  <path d="M915 323 H951 V880 H919" fill="none" stroke="#0f766e" stroke-width="3" marker-end="url(#rdma-arrow)"/>
+  <text x="929" y="657" text-anchor="middle" font-size="18" fill="#0f766e" transform="rotate(-90 929 657)">WQE + doorbell：快路径不进入内核</text>
+  <path d="M305 937 V988" stroke="#2563eb" stroke-width="3" marker-end="url(#tcp-arrow)"/>
+  <path d="M755 937 V988" stroke="#0f766e" stroke-width="3" marker-end="url(#rdma-arrow)"/>
+  <text x="305" y="1020" text-anchor="middle" font-size="20" fill="#1d4ed8">网络上的 TCP/IP 报文</text>
+  <text x="755" y="1020" text-anchor="middle" font-size="20" fill="#0f766e">网络上的 RC / UDP / IP 报文</text>
+</svg>

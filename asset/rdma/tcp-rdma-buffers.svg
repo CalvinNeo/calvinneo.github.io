@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="790" viewBox="0 0 1000 790" role="img" aria-labelledby="buffers-title buffers-desc" font-family="system-ui, -apple-system, 'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', sans-serif">
+  <title id="buffers-title">TCP 与 RDMA Write 的载荷缓冲路径</title>
+  <desc id="buffers-desc">普通复制型 TCP 发送把 A 的用户缓冲复制到内核持有的载荷内存，再经 DMA 和网络到 B 的内核接收缓冲，recv 将数据复制到 B 用户缓冲。非 inline 的硬件 RDMA Write 从 A 注册缓冲经 DMA 和网络，直接写入 B 授权的注册缓冲。两种路径均使用 DMA。本图省略协议头、设备内部暂存、控制消息和完成记录。</desc>
+  <defs>
+    <marker id="copy-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="#b45309"/></marker>
+    <marker id="dma-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="#2563eb"/></marker>
+    <marker id="direct-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="#0f766e"/></marker>
+  </defs>
+  <rect width="1000" height="790" fill="#fff"/>
+  <text x="28" y="40" font-size="27" font-weight="600" fill="#0f172a">同一段载荷，经过哪些 buffer</text>
+  <text x="28" y="72" font-size="18" fill="#475569">普通主机内存 · 省略协议头、设备暂存、控制消息和完成记录</text>
+  <rect x="18" y="102" width="964" height="355" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="38" y="137" font-size="23" font-weight="600" fill="#1d4ed8">Linux TCP：普通 send() / recv()</text>
+  <text x="240" y="176" text-anchor="middle" font-size="20" fill="#334155">主机 A</text>
+  <text x="760" y="176" text-anchor="middle" font-size="20" fill="#334155">主机 B</text>
+  <rect x="80" y="191" width="320" height="48" rx="6" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="240" y="221" text-anchor="middle" font-size="21" fill="#0f172a">用户缓冲 a_buffer</text>
+  <rect x="600" y="191" width="320" height="48" rx="6" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="760" y="221" text-anchor="middle" font-size="21" fill="#0f172a">用户缓冲 b_buffer</text>
+  <path d="M240 240 V290" stroke="#b45309" stroke-width="3" marker-end="url(#copy-arrow)"/>
+  <text x="260" y="274" font-size="18" fill="#92400e">CPU 复制</text>
+  <path d="M760 293 V243" stroke="#b45309" stroke-width="3" marker-end="url(#copy-arrow)"/>
+  <text x="780" y="274" font-size="18" fill="#92400e">recv() 复制</text>
+  <rect x="80" y="295" width="320" height="48" rx="6" fill="#fff" stroke="#94a3b8"/>
+  <text x="240" y="326" text-anchor="middle" font-size="20" fill="#334155">内核持有的载荷内存</text>
+  <rect x="600" y="295" width="320" height="48" rx="6" fill="#fff" stroke="#94a3b8"/>
+  <text x="760" y="326" text-anchor="middle" font-size="20" fill="#334155">内核接收缓冲 / TCP 队列</text>
+  <path d="M240 344 V391" stroke="#2563eb" stroke-width="3" marker-end="url(#dma-arrow)"/>
+  <text x="260" y="376" font-size="18" fill="#1d4ed8">DMA 读</text>
+  <path d="M760 394 V347" stroke="#2563eb" stroke-width="3" marker-end="url(#dma-arrow)"/>
+  <text x="780" y="376" font-size="18" fill="#1d4ed8">DMA 写</text>
+  <rect x="130" y="396" width="220" height="43" rx="6" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="240" y="424" text-anchor="middle" font-size="20" fill="#0f172a">网卡 A</text>
+  <rect x="650" y="396" width="220" height="43" rx="6" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="760" y="424" text-anchor="middle" font-size="20" fill="#0f172a">网卡 B</text>
+  <path d="M352 418 H646" stroke="#2563eb" stroke-width="3" marker-end="url(#dma-arrow)"/>
+  <rect x="456" y="401" width="88" height="32" fill="#f8fafc"/>
+  <text x="500" y="424" text-anchor="middle" font-size="19" fill="#1d4ed8">网络</text>
+
+  <rect x="18" y="481" width="964" height="279" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="38" y="516" font-size="23" font-weight="600" fill="#0f766e">硬件 RDMA Write：未启用 inline</text>
+  <text x="240" y="555" text-anchor="middle" font-size="20" fill="#334155">主机 A</text>
+  <text x="760" y="555" text-anchor="middle" font-size="20" fill="#334155">主机 B</text>
+  <rect x="80" y="570" width="320" height="66" rx="6" fill="#ecfdf5" stroke="#99d6c6"/>
+  <text x="240" y="597" text-anchor="middle" font-size="21" fill="#0f172a">已注册 a_buffer</text>
+  <text x="240" y="623" text-anchor="middle" font-size="18" fill="#475569">本地地址 + lkey</text>
+  <rect x="600" y="570" width="320" height="66" rx="6" fill="#ecfdf5" stroke="#99d6c6"/>
+  <text x="760" y="597" text-anchor="middle" font-size="21" fill="#0f172a">已注册 b_buffer</text>
+  <text x="760" y="623" text-anchor="middle" font-size="18" fill="#475569">远端地址 + rkey</text>
+  <path d="M240 637 V696" stroke="#0f766e" stroke-width="3" marker-end="url(#direct-arrow)"/>
+  <text x="260" y="674" font-size="18" fill="#0f766e">DMA 读</text>
+  <path d="M760 699 V640" stroke="#0f766e" stroke-width="3" marker-end="url(#direct-arrow)"/>
+  <text x="780" y="674" font-size="18" fill="#0f766e">DMA 写</text>
+  <rect x="130" y="701" width="220" height="43" rx="6" fill="#ecfdf5" stroke="#99d6c6"/>
+  <text x="240" y="729" text-anchor="middle" font-size="20" fill="#0f172a">网卡 A</text>
+  <rect x="650" y="701" width="220" height="43" rx="6" fill="#ecfdf5" stroke="#99d6c6"/>
+  <text x="760" y="729" text-anchor="middle" font-size="20" fill="#0f172a">网卡 B</text>
+  <path d="M352 723 H646" stroke="#0f766e" stroke-width="3" marker-end="url(#direct-arrow)"/>
+  <rect x="456" y="706" width="88" height="32" fill="#f8fafc"/>
+  <text x="500" y="729" text-anchor="middle" font-size="19" fill="#0f766e">网络</text>
+</svg>

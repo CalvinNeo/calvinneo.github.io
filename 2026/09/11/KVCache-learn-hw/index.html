@@ -73,7 +73,7 @@
 <link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
 
 
-  <meta name="keywords" content="机器学习,AIGen,LLM," />
+  <meta name="keywords" content="AIGen,LLM,机器学习," />
 
 
 
@@ -92,7 +92,7 @@
 
 
 <meta name="description" content="这篇笔记想弄清楚两个问题：把历史 KV 放进更大的内存池，究竟是在节省计算，还是在扩展 GPU 的活跃工作集？一份 KV 即使命中了缓存，把它恢复到能继续计算的状态，又要付出多少代价？ 我更愿意从“复用一份计算状态”来理解 KVCache，而不是从“增加一层缓存”开始。它类似于数据库中的物化中间结果：保留下来能省掉一部分计算，但结果不在执行端时，还要把它取回来。大语言模型在生成过程中又会反复读取历">
-<meta name="keywords" content="机器学习,AIGen,LLM">
+<meta name="keywords" content="AIGen,LLM,机器学习">
 <meta property="og:type" content="article">
 <meta property="og:title" content="学习 KVCache：硬件和架构">
 <meta property="og:url" content="http://www.calvinneo.com/2026/09/11/KVCache-learn-hw/index.html">
@@ -104,7 +104,7 @@
 <meta property="og:image" content="http://www.calvinneo.com/asset/kvcache-hw/pcie-x16-link.svg">
 <meta property="og:image" content="http://www.calvinneo.com/asset/kvcache-hw/cx8-topology.svg">
 <meta property="og:image" content="http://www.calvinneo.com/asset/kvcache-hw/lane-rail.svg">
-<meta property="og:updated_time" content="2026-10-15T04:45:13.743Z">
+<meta property="og:updated_time" content="2026-10-16T04:43:59.529Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="学习 KVCache：硬件和架构">
 <meta name="twitter:description" content="这篇笔记想弄清楚两个问题：把历史 KV 放进更大的内存池，究竟是在节省计算，还是在扩展 GPU 的活跃工作集？一份 KV 即使命中了缓存，把它恢复到能继续计算的状态，又要付出多少代价？ 我更愿意从“复用一份计算状态”来理解 KVCache，而不是从“增加一层缓存”开始。它类似于数据库中的物化中间结果：保留下来能省掉一部分计算，但结果不在执行端时，还要把它取回来。大语言模型在生成过程中又会反复读取历">
@@ -538,9 +538,9 @@
 <p>现在把同一份 4 GiB 放在这两条路径上计算。如果数据完整经过本地 HBM 接口，按 7.7 TB/s，纯读的理想时间约为 <code>4 × 2^30 / (7.7 × 10^12) ≈ 0.558 ms</code>。从 Host 经过 Gen5 ×16 搬入，单是 PCIe 的理论时间就约为 <code>4 × 2^30 / (63 × 10^9) ≈ 68.2 ms</code>，按取整后的带宽相除约差 <code>7,700 / 63 ≈ 122</code> 倍。这个差值不是一次 attention 的加速比，它只说明跨过 PCIe 边界以后，同样的字节量进入了另一档时间预算。</p>
 <h2 id="GPUDirect-RDMA-省掉了哪一段"><a href="#GPUDirect-RDMA-省掉了哪一段" class="headerlink" title="GPUDirect RDMA 省掉了哪一段"></a>GPUDirect RDMA 省掉了哪一段</h2><p><strong>RDMA（Remote Direct Memory Access，远程直接内存访问）</strong>允许适配器访问注册并授权的内存区域。以单边 RDMA Write 为例，发起方提交远端地址与访问凭据，接收端不需要由 CPU 逐字节接收、再复制这份载荷。注册建立的是设备可使用的地址映射和权限，并不是制作数据副本。<strong>GPUDirect RDMA</strong>把这类设备访问扩展到 GPU 显存，让接收网卡直接写入 GPU，而不必先落到 Host DRAM。</p>
 <p>把三条常见路径画出来，比“是否 zero-copy”这个标签更有信息量：</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">本机已有 KV，使用 CUDA 本地复制：</span><br><span class="line">本机 DRAM ── PCIe ──&gt; GPU HBM</span><br><span class="line"></span><br><span class="line">远端 KV 经 GPUDirect RDMA 直达：</span><br><span class="line">远端 DRAM ── 源端 PCIe/网卡 ── 网络 ── 目标网卡/PCIe ──&gt; GPU HBM</span><br><span class="line"></span><br><span class="line">远端 KV 经接收端 Host 中转：</span><br><span class="line">远端 DRAM ── RDMA ──&gt; 本机 DRAM ── PCIe ──&gt; GPU HBM</span><br></pre></td></tr></table></figure>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">本机已有 KV，Host→GPU 本地复制：</span><br><span class="line">本机 DRAM ── PCIe ──&gt; GPU HBM</span><br><span class="line"></span><br><span class="line">远端 KV 经 GPUDirect RDMA 直达：</span><br><span class="line">远端 DRAM ── 源端 PCIe/网卡 ── 网络 ── 目标网卡/PCIe ──&gt; GPU HBM</span><br><span class="line"></span><br><span class="line">远端 KV 经接收端 Host 中转：</span><br><span class="line">远端 DRAM ── RDMA ──&gt; 本机 DRAM ── PCIe ──&gt; GPU HBM</span><br></pre></td></tr></table></figure>
 
-<p>本地 Host↔GPU 复制可以通过 <strong>CUDA</strong> 发起，它是 NVIDIA 的 GPU 编程与运行时平台。三条路径的终点相同，区别在于数据是否经过网络、是否在接收端 Host 留下一份中转数据。</p>
+<p>三条路径的终点相同，区别在于数据是否经过网络、是否在接收端 Host 留下一份中转数据。</p>
 <p>下文把 GPUDirect RDMA 简写为 <strong>GDR</strong>。它在这组比较中省掉的是接收端 Host 中转，源端取数、网络和 GPU 接入链路仍然存在。类似于存储系统里的零拷贝，关键是少做了哪一份工作，而不是给整条路径贴上“没有复制成本”的标签。</p>
 <p>这条路径也由设备的连接方式决定。<strong>PCIe 交换器（PCIe switch）</strong>是连接多个 PCIe 端口、按地址和路由转发事务包的硬件，类似网络交换机承担的转发角色，但这里处理的是 PCIe 事务。网卡与 GPU 接在同一个交换器下，而且平台允许设备间对等转发时，事务可以直接在交换器内到达 GPU，省去 Host 中转。跨 CPU socket 的设备访问则还要经过 CPU 间互连，并满足平台的对等访问支持。判断 GDR 路径时，需要沿设备之间经过的连接来分析。<a href="https://docs.nvidia.com/cuda/gpudirect-rdma/" target="_blank" rel="noopener">NVIDIA 对 GDR 路径和拓扑的说明</a></p>
 <h2 id="CX-8-的端口模式与-PCIe-接入带宽"><a href="#CX-8-的端口模式与-PCIe-接入带宽" class="headerlink" title="CX-8 的端口模式与 PCIe 接入带宽"></a>CX-8 的端口模式与 PCIe 接入带宽</h2><p>CX-8 的 800 Gb/s 描述网络侧的总速率。一次 KV 搬运能用到多少，还取决于这些速率分布在哪些端口，以及载荷经过怎样的 PCIe 连接。把网络入口和设备接入放到一起，才能解释整卡带宽如何变成一次加载的带宽。</p>
@@ -555,7 +555,8 @@
 <p><img src="/asset/kvcache-hw/cx8-topology.svg" alt="DGX B300 单个 GPU 分支中的 CPU、CX-8 交换器与网络收发功能"></p>
 <p><em>图 4：根据 DGX B300 官方拓扑及 CX-8 集成交换功能说明重绘。CX-8 内部连线只表示功能关系，双向箭头表示链路支持双向通信。</em></p>
 <p><strong>根端口</strong>是主机侧 PCIe 层次结构的起点。从 CPU 向下读图，先到交换器朝向主机的上游端口，再由朝向 GPU 的下游端口接出。CPU→CX-8 这一段是 Gen5，CX-8→GPU 这一段是 Gen6，两段分别建立链路、协商速率和宽度。</p>
-<p>Host 向本机 GPU 搬 KV 时，事务经过 CX-8 的交换部分，不必进入网络收发分支，更不需要封装成以太网流量绕一圈。网络数据直达 GPU 时，则从网络分支进入交换部分，再到 GPU，不必先进入 Host DRAM。于是，同一个器件可以出现在两条路径上，但两条路径经过的链路并不相同。</p>
+<p>Host 向本机 GPU 搬 KV 时，事务经过 CX-8 的 PCIe 交换部分，不必进入网络收发分支，更不需要封装成以太网流量绕一圈。这里的“经过交换部分”描述的是 PCIe 事务如何从 Host 侧端口路由到 GPU 侧端口，并不等于使用 GDR：源数据在 Host DRAM，目标是 GPU HBM，属于 Host→GPU 的本地复制。GDR 的边界是网卡等第三方 PCIe 设备直接访问 GPU 内存，所以远端网卡把 KV 直接写入目标 GPU HBM 时，才是本文所说的 GDR。若远端数据先经 RDMA 写入本机 Host DRAM，再由本机复制到 GPU，后半段仍是 Host→GPU 的本地复制。</p>
+<p>网络数据直达 GPU 时，则由 CX-8 的网络收发功能接收数据，再通过它的 PCIe 交换部分送到 GPU，不必先落到 Host DRAM。这条“网卡→GPU”的数据面路径才对应前面介绍的 GPUDirect RDMA。于是，同一个器件可以出现在两条路径上，但 Host→GPU 复制和网卡→GPU 直达使用的功能分支、发起方和带宽约束并不相同。</p>
 <p>因此，计算本机 Host→GPU 的搬运能力，要同时列出 Gen5 和 Gen6 两段，再找其中的限制。计算远端直达，则沿“源端内存→源端网卡→网络→目标 CX-8→目标 GPU”展开，目标 CPU 的 Gen5 链路不在这条载荷路径上，源端的内存和 PCIe 却仍然在。这是按路径预算带宽的具体做法。</p>
 <p>把这张图对应到一台 Linux 机器上，可以使用 **<code>lspci</code>**，它是读取 PCI/PCIe 设备配置的工具。<code>lspci -t</code> 列出设备、桥和总线的树形关系，找到 GPU 所在分支后，再用 <code>lspci -s &lt;PCI地址&gt; -vv</code> 读取该设备或沿途端口的详细信息。这里的 PCI 地址就是工具列出的设备标识，形如“总线:设备.功能”，命令中的占位符替换为待查看的地址。<a href="https://man7.org/linux/man-pages/man8/lspci.8.html" target="_blank" rel="noopener"><code>lspci</code> 手册</a></p>
 <p>详细输出中的 <code>LnkCap</code> 表示端口支持的链路能力，<code>LnkSta</code> 表示当前协商结果。做预算时，沿目标路径逐段记录 <code>LnkSta</code> 的 <code>Speed</code> 与 <code>Width</code>，再按前面的公式换算。例如一段当前为 32 GT/s、×8，就是 <code>32 × 8 ÷ 8 × 128/130 ≈ 31.5 GB/s</code> 的单向编码后上限，其中 32 GT/s 对应 Gen5，8 是当前 lane 数。即使 <code>LnkCap</code> 写着 ×16，这一段当前提供的仍是 ×8 的能力。</p>
@@ -603,7 +604,7 @@
 <td>400G 对应单向 50 GB/s，再预留两成余量。两端网卡和源端取数都能跟上。</td>
 </tr>
 </tbody></table>
-<p>这两成余量只是便于演算的取整选择，不是经验效率。真实的 CUDA 本地复制、GDR 写入和反向换出应分别测量，这里暂时把它们的差异收进有效带宽参数，好单独观察路径与共享资源的影响。</p>
+<p>这两成余量只是便于演算的取整选择，不是经验效率。真实的 Host→GPU 本地复制、GDR 写入和反向换出应分别测量，这里暂时把它们的差异收进有效带宽参数，好单独观察路径与共享资源的影响。</p>
 <p>设总数据量为 <code>S</code>，接收数据的 GPU 数为 <code>G</code>，能够独立工作的网络路径数为 <code>N</code>。如果分布均匀，各路没有共享瓶颈，源端内存也足够快，就可以写成：</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">本地 DRAM→HBM：                 Tlocal ≈ S / (G × Bp)</span><br><span class="line">远端 DRAM→目标 HBM：            Tdirect ≈ S / min(N × Bn, G × Bp)</span><br><span class="line">远端 DRAM→本机 DRAM→HBM，串行： Tstaged ≈ S / (N × Bn) + S / (G × Bp)</span><br></pre></td></tr></table></figure>
 
@@ -951,11 +952,11 @@
       
         <div class="post-tags">
           
-            <a href="/tags/机器学习/" rel="tag"># 机器学习</a>
-          
             <a href="/tags/AIGen/" rel="tag"># AIGen</a>
           
             <a href="/tags/LLM/" rel="tag"># LLM</a>
+          
+            <a href="/tags/机器学习/" rel="tag"># 机器学习</a>
           
         </div>
       
