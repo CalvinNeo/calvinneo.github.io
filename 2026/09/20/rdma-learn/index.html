@@ -91,18 +91,18 @@
 
 
 
-<meta name="description" content="学习 RDMA 的基本知识。">
+<meta name="description" content="围绕一次 RDMA Write，整理资源与地址、请求提交、完成队列以及驱动分工。重点区分请求提交成功、设备完成、远端得知数据到达，以及业务已经消费数据这几个时刻。">
 <meta name="keywords" content="RDMA">
 <meta property="og:type" content="article">
 <meta property="og:title" content="RDMA 学习">
 <meta property="og:url" content="http://www.calvinneo.com/2026/09/20/rdma-learn/index.html">
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
-<meta property="og:description" content="学习 RDMA 的基本知识。">
+<meta property="og:description" content="围绕一次 RDMA Write，整理资源与地址、请求提交、完成队列以及驱动分工。重点区分请求提交成功、设备完成、远端得知数据到达，以及业务已经消费数据这几个时刻。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2026-10-13T15:48:20.304Z">
+<meta property="og:updated_time" content="2026-10-15T16:07:16.866Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="RDMA 学习">
-<meta name="twitter:description" content="学习 RDMA 的基本知识。">
+<meta name="twitter:description" content="围绕一次 RDMA Write，整理资源与地址、请求提交、完成队列以及驱动分工。重点区分请求提交成功、设备完成、远端得知数据到达，以及业务已经消费数据这几个时刻。">
 
 
 
@@ -377,31 +377,24 @@
       
 
       
-        <p>学习 RDMA 的基本知识。</p>
+        <p>围绕一次 RDMA Write，整理资源与地址、请求提交、完成队列以及驱动分工。重点区分请求提交成功、设备完成、远端得知数据到达，以及业务已经消费数据这几个时刻。</p>
 <a id="more"></a>
 
-<h1 id="基本概念"><a href="#基本概念" class="headerlink" title="基本概念"></a>基本概念</h1><p>一些基础概念：</p>
-<ul>
-<li><p>PD<br>  用来实现隔离性的。不能跨 PD 访问。</p>
-</li>
-<li><p>CQ</p>
-</li>
-<li><p>QP<br>  在创建 QP 的时候，CQ 和 PD 会关联起来。</p>
-  <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">ibv_context：代表一块 RDMA 设备</span><br><span class="line">│</span><br><span class="line">├── PD A</span><br><span class="line">│   ├── MR A</span><br><span class="line">│   └── QP A ─────┐</span><br><span class="line">│                  ├── CQ X</span><br><span class="line">├── PD B           │</span><br><span class="line">│   ├── MR B       │</span><br><span class="line">│   └── QP B ─────┘</span><br><span class="line">│</span><br><span class="line">└── CQ X</span><br></pre></td></tr></table></figure></li>
-<li><p>QPN<br>  QP 的编号</p>
-</li>
-<li><p>Port<br>  HCA上的物理或逻辑端口编号</p>
-</li>
-<li><p>GID<br>  表示 RoCE 的 IP/网络地址</p>
-</li>
-<li><p>LID<br>  通常为 0</p>
-</li>
-</ul>
-<p>一些实现：</p>
-<ul>
-<li>InfiniBand 可以理解为很屌的专有实现</li>
-<li>RoCE 在以太网上的实现</li>
-</ul>
+<h1 id="基本概念"><a href="#基本概念" class="headerlink" title="基本概念"></a>基本概念</h1><p><strong>RDMA（Remote Direct Memory Access，远程直接内存访问）</strong>允许网络适配器在已建立的映射和权限范围内，直接访问另一台主机的内存。以 RDMA Write 为例，发起端指定远端地址和访问密钥，接收端的网卡完成数据放置，不需要接收端 CPU 为每次写入执行一遍接收和复制。这不表示整个系统不再需要 CPU，资源建立、提交请求和消费数据仍然有软件参与。</p>
+<p><strong>verbs</strong> 是 RDMA 软件栈提供的资源管理与工作请求接口，Linux 用户态常用的设备无关接口库是 <code>libibverbs</code>。设备相关的用户态库负责实现这些接口，称为 <strong>provider</strong>。<strong>InfiniBand（IB）</strong>是包含链路、网络和传输机制的互联标准，原生支持 RDMA，并不是某一家厂商的私有协议。<strong>RoCE（RDMA over Converged Ethernet）</strong>则把 RDMA 传输放到以太网上。RoCEv1 使用以太网封装，RoCEv2 使用 UDP/IP 封装，能够经过 IP 路由。<a href="https://networking-docs.nvidia.com/doca/archive/3-5-0/rdma-aware-networks-programming-guide" target="_blank" rel="noopener">RDMA 编程指南</a>和 <a href="https://docs.nvidia.com/networking/display/mlnxenv24101140lts/rdma+over+converged+ethernet+(roce)" target="_blank" rel="noopener">RoCE 文档</a>分别介绍了这些层次。</p>
+<p>下文沿用 A 向 B 写数据的例子，两端使用 <strong>RC（Reliable Connection，可靠连接）</strong>：通信端点一对一配对，设备执行协议确认、顺序控制和重试。可靠不等于任何故障下都能成功，重试耗尽等情况仍会使请求失败。请求与完成的主线先限定在普通主机内存，GPU 的同步条件放在补充部分。</p>
+<h2 id="内存、队列与保护域"><a href="#内存、队列与保护域" class="headerlink" title="内存、队列与保护域"></a>内存、队列与保护域</h2><p>打开 RDMA 设备会得到 <code>ibv_context</code>，它代表应用对某个 RDMA 设备的访问上下文。设备可以暴露多个端口，设备对象也不一定与物理网卡一一对应。RDMA 资料中的 <strong>HCA（Host Channel Adapter，主机通道适配器）</strong>指主机侧的适配器，下文统称网卡。</p>
+<p>A 分配了 <code>a_buffer</code>，B 分配了 <code>b_buffer</code>，还需要把这两段内存注册成 <strong>MR（Memory Region，内存区域）</strong>。MR 描述设备可访问的地址范围、映射和权限。注册不是复制数据，也不要求这段虚拟地址对应的物理页连续。注册结果中的 <code>lkey</code> 用于本端请求访问本地 MR，<code>rkey</code> 则用于远端发起的 RDMA 访问。B 把地址和 <code>rkey</code> 告诉 A 后，A 才有了描述远端目标所需的信息。<a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_reg_mr.3" target="_blank" rel="noopener"><code>ibv_reg_mr()</code></a></p>
+<p><strong>QP（Queue Pair，队列对）</strong>是应用提交通信工作的对象，在 RC 中，一个 QP 与远端的一个 QP 配对。这里使用的普通 QP 包含发送工作队列 <strong>SQ（Send Queue）</strong>和接收工作队列 <strong>RQ（Receive Queue）</strong>。应用提交的工作描述叫 <strong>WR（Work Request，工作请求）</strong>。SQ 接受本端发起的工作，除了 Write，还可以是把远端内容读到本地的 <strong>RDMA Read</strong>，或由对端接收请求决定数据落点的 <strong>SEND</strong>。所以 <code>ibv_post_send()</code>名字里的 send 表示向 SQ 提交，并不只指 SEND 操作。</p>
+<p>RQ 中放置预先提交的 Receive WR，供 SEND 等需要接收资源的操作使用。在 RC 中，需要接收资源的请求到达时，如果没有可匹配的 Receive WR，就会得到 <strong>RNR（Receiver Not Ready，接收端未就绪）</strong>响应。普通 Write 不依赖这类接收资源，具体区别在后文展开。</p>
+<p><strong>PD（Protection Domain，保护域）</strong>把 MR、QP 等资源组织在同一套本地访问保护关系中。本例中，A 的 QP 与它使用的本地 MR 属于同一个 PD，B 接受写入的 QP 与目标 MR 也属于同一个 PD。两台机器的 PD 是各自创建的对象，不需要有相同的编号。对普通 Write，B 的目标 MR 要允许远端写，注册时还必须同时允许本地写，接收该访问的 QP 也要开启相应权限。<a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_reg_mr.3" target="_blank" rel="noopener">内存注册</a>与 <a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_modify_qp.3" target="_blank" rel="noopener">QP 属性</a>分别控制这两层授权。</p>
+<p>执行结果放在 <strong>CQ（Completion Queue，完成队列）</strong>。创建 QP 时，<code>send_cq</code> 和 <code>recv_cq</code> 分别指定发送侧和接收侧使用的 CQ，它们可以是同一个 CQ，多个 QP 也可以共享 CQ。CQ 关联到设备上下文，不属于某个 PD，因此同一设备上下文中不同 PD 的 QP 也能共享它。<a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_create_qp.3" target="_blank" rel="noopener"><code>ibv_create_qp()</code></a>接受 PD 和 CQ 参数，<a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_create_cq.3" target="_blank" rel="noopener"><code>ibv_create_cq()</code></a>则没有所属 PD 这个参数。</p>
+<p>下面只画同一进程内的资源关系，PD X/Y 不是两台机器：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">ibv_context</span><br><span class="line">├── PD X</span><br><span class="line">│   ├── MR X</span><br><span class="line">│   └── QP X ──┐</span><br><span class="line">├── PD Y       │</span><br><span class="line">│   ├── MR Y   ├── 完成记录进入 CQ Z</span><br><span class="line">│   └── QP Y ──┘</span><br><span class="line">└── CQ Z</span><br></pre></td></tr></table></figure>
+
+<h2 id="端口、地址与连接状态"><a href="#端口、地址与连接状态" class="headerlink" title="端口、地址与连接状态"></a>端口、地址与连接状态</h2><p>建连时还需要区分几种标识。<strong>Port</strong> 是 RDMA 设备暴露的物理或逻辑端口，不是 TCP/UDP 端口。<strong>QPN（Queue Pair Number）</strong>是 QP 的编号，在指定远端设备和路径之后用它定位目标 QP。<strong>PSN（Packet Sequence Number）</strong>是传输协议中的包序号，RC 建连时双方交换初始 PSN，使发送端的起始序号与接收端期望的序号匹配。它不是应用请求的编号。</p>
+<p><strong>GID（Global Identifier，全局标识符）</strong>用于标识 RDMA 网络中的端口等对象，IB 和 RoCE 都会用到。在 RoCE 中，GID 表项与网口的 IP 地址及 RoCE 类型关联。<code>ibv_query_gid()</code>读取的是本地端口 GID 表中指定索引的值，选择索引时还要核对网口和 GID 类型，不能只看到地址相同就认为表项等价。<strong>LID（Local Identifier，本地标识符）</strong>则是 IB 子网内用于寻址的标识，由管理该子网拓扑与路径的 Subnet Manager 分配。RoCE 不使用 IB 的这套链路层地址，查询 RoCE 端口时 LID 显示为零，不能把它推广成所有 RDMA 端口的性质。<a href="https://networking-docs.nvidia.com/doca/archive/3-5-0/rdma-aware-networks-programming-guide" target="_blank" rel="noopener">标识符定义</a>、<a href="https://docs.nvidia.com/networking/display/mlnxenv24101140lts/rdma+over+converged+ethernet+(roce)" target="_blank" rel="noopener">RoCE GID 与 LID</a></p>
+<p>普通 RC QP 通过 <code>ibv_modify_qp()</code>经历 <code>RESET → INIT → RTR → RTS</code>。<code>INIT</code> 设置本地端口和访问权限，<code>RTR</code>（Ready to Receive）配置远端 QPN、路径与接收起始 PSN，使 QP 具备接收条件，<code>RTS</code>（Ready to Send）再配置发送起始 PSN、重试等参数，使发送侧可以工作。它们是 QP 的状态转换，TCP 建连本身不会代替这些配置。<a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_modify_qp.3" target="_blank" rel="noopener">接口手册</a>列出了每次转换需要的属性。</p>
 <h2 id="RDMA-Write-的基本链路"><a href="#RDMA-Write-的基本链路" class="headerlink" title="RDMA Write 的基本链路"></a>RDMA Write 的基本链路</h2><p>A 通过 rdma 往 B 写操作的流程，A 大概是：</p>
 <ol>
 <li>通过 ibv_get_device_list、ibv_open_device、ibv_free_device_list 打开设备。</li>
@@ -478,32 +471,159 @@
 <li>源端可以把大量 TransferEntry 批量转成 RDMA Write WR。</li>
 <li>目标 CPU 不参与每一次数据搬运，适合大块 GPU/Host 内存复制。</li>
 </ul>
-<h2 id="SEND-RECV"><a href="#SEND-RECV" class="headerlink" title="SEND/RECV"></a>SEND/RECV</h2><h1 id="同步原语"><a href="#同步原语" class="headerlink" title="同步原语"></a>同步原语</h1><ul>
-<li>cuPointerSetAttribute<br>  设置 SYNC_MEMOPS=1，是要求涉及这块显存的 CUDA 同步内存操作真正完成后，函数才返回 CPU，避免 CPU 随后安排网卡读取时，CUDA 复制还没完成。<br>  前者通常每块显存设置一次，约束 CUDA 自身的同步内存操作。</li>
-<li>cuFlushGPUDirectRDMAWrites<br>  数据由网卡通过 RDMA 写入显存，网卡报告完成后，GPU kernel 不一定立即能读到新数据，因此需要在确认 RDMA 写完成后、启动 kernel 读取前按需调用 flush，等待这些写入对 GPU 可见。<br>  在需要的消费点调用，保证外部 RDMA 写入的可见性。设置 SYNC_MEMOPS 并不意味着后续每次 RDMA 写入都会自动 flush。</li>
-</ul>
-<h1 id="InfiniBand"><a href="#InfiniBand" class="headerlink" title="InfiniBand"></a>InfiniBand</h1><ul>
-<li>SL<br>  流量属于哪一类，类似包裹上的分类标签。</li>
-<li>VL(VirtualLane，虚拟通道)<br>  流量具体走哪个逻辑通道。网络设备通过 SL -&gt; VL 映射表分配通道，再按配置的优先级和权重调度发送。<br>  即使映射到了不同 VL，它们仍然共享同一条物理链路，可以理解成“分了排队通道，但共用出口”。</li>
-</ul>
-<h1 id="RDMA-的-NUMA-亲和性：网卡、内存与-UPI"><a href="#RDMA-的-NUMA-亲和性：网卡、内存与-UPI" class="headerlink" title="RDMA 的 NUMA 亲和性：网卡、内存与 UPI"></a>RDMA 的 NUMA 亲和性：网卡、内存与 UPI</h1><p><a href="https://www.calvinneo.com/2025/01/03/memory-context-knowledge/">内存领域知识</a>讨论过 CPU 访问远端 NUMA 内存的代价。换成 RDMA，发起内存访问的变成了网卡（NIC），但物理距离并没有消失。因此，除了线程在哪运行，还要看 <strong>NIC 接在哪个 Socket，以及 buffer 的物理页在哪个 NUMA 节点</strong>。</p>
-<h2 id="数据怎么走：PCIe-和-UPI-不是二选一"><a href="#数据怎么走：PCIe-和-UPI-不是二选一" class="headerlink" title="数据怎么走：PCIe 和 UPI 不是二选一"></a>数据怎么走：PCIe 和 UPI 不是二选一</h2><p>在常见的 Intel 双路服务器中，每颗 CPU 各自连接 DRAM 和 PCIe 设备，两个 Socket 通过 UPI（Ultra Path Interconnect，Intel Xeon 的跨插槽互联）传输数据并维护缓存一致性。下面假设一个 Socket 对应一个 NUMA 节点，0、1 只是示例编号：</p>
+<h1 id="请求提交与完成"><a href="#请求提交与完成" class="headerlink" title="请求提交与完成"></a>请求提交与完成</h1><p>前面的链路中，A 调用 <code>ibv_post_send()</code>，随后循环调用 <code>ibv_poll_cq()</code>。这两个调用之间，请求由谁保存、谁执行、谁报告完成，决定了 buffer 什么时候能复用，也决定了没有完成时应该检查哪一层。</p>
+<p>下面仍然只看 A 向 B 的一次普通 Write。连接和注册已经完成，<code>a_buffer</code> 是源，<code>b_buffer_address</code> 和 <code>b_rkey</code> 来自控制协议。网卡需要从注册的源缓冲读取数据，数据长度在 MR 范围及设备支持范围内。用户态实现部分以 <strong>rdma-core v59.0 的 mlx5 provider</strong> 为核对版本，版本号用于限定源码，不代表业务环境使用这个版本。</p>
+<h2 id="WR-与-WQE"><a href="#WR-与-WQE" class="headerlink" title="WR 与 WQE"></a>WR 与 WQE</h2><p>传统发送接口用 <code>struct ibv_send_wr</code> 表示 WR。它描述执行什么操作、本地数据在哪里，以及远端目标是什么。<strong>SGE（Scatter/Gather Element，散布／聚集元素）</strong>描述一段本地缓冲区，包含地址、长度和 <code>lkey</code>。一个 WR 可以引用多个 SGE，本例只有一段连续源数据，因此 <code>num_sge</code> 设为 <code>1</code>，并不是某个经验调优值。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">ibv_sge</span> <span class="title">sge</span> = &#123;</span></span><br><span class="line">    .addr = (<span class="keyword">uintptr_t</span>)a_buffer,</span><br><span class="line">    .length = length,</span><br><span class="line">    .lkey = a_mr-&gt;lkey,</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">ibv_send_wr</span> <span class="title">wr</span> = &#123;</span><span class="number">0</span>&#125;;</span><br><span class="line">wr.wr_id = request_id;</span><br><span class="line">wr.sg_list = &amp;sge;</span><br><span class="line">wr.num_sge = <span class="number">1</span>;</span><br><span class="line">wr.opcode = IBV_WR_RDMA_WRITE;</span><br><span class="line">wr.send_flags = IBV_SEND_SIGNALED;</span><br><span class="line">wr.wr.rdma.remote_addr = b_buffer_address;</span><br><span class="line">wr.wr.rdma.rkey = b_rkey;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">ibv_send_wr</span> *<span class="title">bad_wr</span> = <span class="title">NULL</span>;</span></span><br><span class="line"><span class="keyword">int</span> ret = ibv_post_send(qp, &amp;wr, &amp;bad_wr);</span><br></pre></td></tr></table></figure>
+
+<p><code>request_id</code> 由应用分配，放在 <code>wr_id</code> 中，用于在完成时找到原请求。这里假设 QP 创建时 <code>sq_sig_all = 0</code>，由每个 WR 选择是否报告正常完成。<code>IBV_SEND_SIGNALED</code> 明确要求本次请求报告完成，否则后面的等待就没有成功完成可取。这里的 signaling 指完成记录的生成，与是否唤醒一个阻塞线程是两件事。</p>
+<p>WR 不直接等于设备执行的队列条目。用户态驱动读取 WR，按网卡格式生成 <strong>WQE（Work Queue Element，工作队列条目）</strong>，写入设备使用的工作队列，再通知网卡有新工作。类似于异步 I/O 的提交描述符，WQE 描述的是一次待执行的工作。一条较大的 Write 会拆成多个网络包，WQE 不能按网络包来理解。</p>
+<p>按照 <a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_post_send.3" target="_blank" rel="noopener"><code>ibv_post_send()</code> 的约定</a>，<code>ret == 0</code> 表示提交成功，非零值是提交阶段检测到的错误码。调用成功返回并不保证网卡已经读完 <code>a_buffer</code>，因此 A 此时还不能改写或释放源数据，也不能撤销相应注册。需要等待的是设备执行完成，不是用户态函数执行完。把源数据内嵌进 WQE 的 inline 方式，以及批量提交的失败边界，放在后面的补充中。</p>
+<h2 id="CQE-与-WC"><a href="#CQE-与-WC" class="headerlink" title="CQE 与 WC"></a>CQE 与 WC</h2><p>设备完成这次 Write 后，把结果写入 QP 的 <code>send_cq</code>。设备格式的完成记录叫 <strong>CQE（Completion Queue Entry，完成队列条目）</strong>。它可以报告成功，也可以报告失败，所以看到完成记录不等于请求成功。</p>
+<p>A 调用 <code>ibv_poll_cq()</code>，用户态驱动读取 CQE，再把设备格式整理成 verbs 接口中的 <strong>WC（Work Completion，工作完成信息）</strong>，通过 <code>struct ibv_wc</code> 返回。CQE 与 WC 描述的是相应的完成结果，但一个是队列中的设备表示，一个是应用接口的表示。</p>
+<p>本例只跟踪一个请求，所以一次最多取一个结果：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">ibv_wc</span> <span class="title">wc</span>;</span></span><br><span class="line"><span class="keyword">int</span> count = ibv_poll_cq(cq, <span class="number">1</span>, &amp;wc);</span><br></pre></td></tr></table></figure>
+
+<p><code>count == 0</code> 表示这次没有取到结果，之后可以继续轮询。返回正数才有相应数量的 WC 可读，负数表示轮询调用出错。取到 WC 后，还要检查 <code>wc.status</code>，只有 <code>IBV_WC_SUCCESS</code> 才是请求成功，不能把 <code>count &gt; 0</code> 当成 Write 成功。失败时也不能照常读取所有 WC 字段，<a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_poll_cq.3" target="_blank" rel="noopener">手册</a>明确保证有效的只有 <code>wr_id</code>、<code>status</code>、<code>qp_num</code> 和 <code>vendor_err</code>。</p>
+<p>应用用 <code>wc.wr_id</code> 找回请求并更新状态。对于本例，取得成功完成后，A 就可以复用 <code>a_buffer</code>。这条生命周期规则来自 <a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_post_send.3" target="_blank" rel="noopener"><code>ibv_post_send()</code></a>，而 B 的业务是否已经读过数据、是否处理成功，是另一层状态。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">A 应用构造 WR</span><br><span class="line">    ↓ ibv_post_send()</span><br><span class="line">A 用户态驱动构造 WQE，发布到 SQ，通知网卡</span><br><span class="line">    ↓</span><br><span class="line">A、B 的网卡执行 RC Write 与协议确认</span><br><span class="line">    ↓</span><br><span class="line">A 的 CQ 中出现 CQE</span><br><span class="line">    ↓ ibv_poll_cq()</span><br><span class="line">A 应用取得 WC，检查状态，更新请求并复用源缓冲</span><br></pre></td></tr></table></figure>
+
+<p>RC 的协议确认由设备处理，不需要 B 的业务程序回复 <code>OK</code>，A 才能取得 Write 的完成。普通 Write 也不消耗 B 的 Receive WR，不会为这次写入在 B 端生成对应的 Receive WC。因此，“等待响应”至少要明确等的是设备的协议响应、本地完成，还是远端业务回复。</p>
+<h2 id="DONE、OK-与目标数据的使用"><a href="#DONE、OK-与目标数据的使用" class="headerlink" title="DONE、OK 与目标数据的使用"></a>DONE、OK 与目标数据的使用</h2><p>前面通过 TCP 发送的 <code>DONE</code> 和 <code>OK</code> 仍然有独立作用。A 在成功完成后发 <code>DONE</code>，把写入完成这件事通知 B。B 检查或消费数据后再返回 <code>OK</code>，A 才知道 B 执行到了应用协议约定的阶段。发送缓冲可复用与远端业务结束，不是同一个回收条件。</p>
+<p>这里要把目标内存的条件交代完整。普通主机内存例子限定在设备与 CPU 之间支持 DMA 一致性的映射上，也就是设备写入能通过平台的一致性机制被 CPU 观察到。B 在得知传输完成后才读取目标区域，不能与仍在进行的写入并发访问。如果收取 <code>DONE</code> 的线程还要通知另一业务线程读数据，这次线程间交接仍需应用自己的同步协议。TCP 在这里承担通知，不能凭一条消息推出任意内存与设备组合的可见性保证。<a href="https://docs.kernel.org/core-api/dma-api-howto.html" target="_blank" rel="noopener">Linux DMA 文档</a>区分了缓存一致性与访问顺序保证。</p>
+<p>链路中列出的 <code>__sync_synchronize()</code>是 GCC 的全内存屏障，它约束 CPU 访存顺序，不负责等待某个 RDMA 请求完成，也不能代替非一致性 DMA 所需的缓存维护，更不能代替 GPU 的可见性同步。它本身没有表达“哪个远端请求已经完成”的信息。<a href="https://gcc.gnu.org/onlinedocs/gcc/_005f_005fsync-Builtins.html" target="_blank" rel="noopener">GCC 接口定义</a>所提供的保证仅是屏障。后面把目标换成 GPU 时，需要重新建立设备写入与消费者之间的顺序，不能只沿用这个函数。</p>
+<h1 id="内核旁路与设备访问"><a href="#内核旁路与设备访问" class="headerlink" title="内核旁路与设备访问"></a>内核旁路与设备访问</h1><p>上面的 <code>ibv_post_send()</code>和 <code>ibv_poll_cq()</code>仍然由 CPU 执行，但 mlx5 的普通用户态快速路径不需要为每次调用进入内核。这就是这里所说的 <strong>kernel bypass，内核旁路</strong>。</p>
+<p>内核先参与资源准备。创建 QP/CQ、注册 MR、建立访问权限和映射等操作，通过 RDMA 子系统和设备驱动完成。mlx5 使用的内核模块包括 <code>mlx5_ib</code> 和 <code>mlx5_core</code>。资源准备好以后，进程可以在获准的范围内访问队列和设备映射，后续不用把每个 WR 再交给内核。<a href="https://docs.kernel.org/infiniband/user_verbs.html" target="_blank" rel="noopener">Linux 用户态 verbs 文档</a>明确区分了资源管理的慢路径和直接访问映射资源的快速路径。</p>
+<p>用户态也有驱动，mlx5 对应的 provider 是 <code>libmlx5</code>。它运行在应用进程中，负责生成 WQE、维护队列、通知设备，以及读取和解释 CQE。因而，只确认内核建连路径正常，还不能排除用户态驱动路径中的问题。</p>
+<p>这个边界可以从 <a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/verbs.h" target="_blank" rel="noopener">v59.0 的 <code>verbs.h</code></a>直接看到：<code>ibv_post_send()</code>调用设备上下文中的 <code>ops.post_send</code>，<code>ibv_poll_cq()</code>调用 <code>ops.poll_cq</code>。沿 mlx5 实现继续看，分别进入 <code>mlx5_post_send()</code>和 <code>mlx5_poll_cq()</code>或对应 CQE 格式的变体。这一段是应用进程内的函数调用。</p>
+<h2 id="队列发布与-doorbell"><a href="#队列发布与-doorbell" class="headerlink" title="队列发布与 doorbell"></a>队列发布与 doorbell</h2><p><strong>doorbell</strong> 是主机通知设备有新工作的机制。mlx5 提交时既更新内存中的 <strong>doorbell record</strong>，记录队列的提交位置，也写入映射到用户态的设备区域，通知设备检查新工作。内存中的队列记录和向设备发出的通知不是同一处写入。</p>
+<p>这两个动作需要顺序保证。如果设备先收到通知，而描述符内容还没有对设备可见，它就不能正确执行工作。v59.0 的 <a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/providers/mlx5/qp.c#L754" target="_blank" rel="noopener"><code>post_send_db()</code></a>先调用 <code>udma_to_device_barrier()</code>，再更新 doorbell record 和进行 MMIO 写。源码注释明确说明，这个屏障用于保证描述符先写好。这里的 MMIO 虽然由用户态代码发起，仍然是在访问实际设备。</p>
+<p>完成方向也有对应的顺序。mlx5 的 CQE 带有 <strong>ownership bit（所有权位）</strong>，provider 根据这个位和当前队列位置，判断条目是否已经交给软件消费。确认可用后，再通过 <code>udma_from_device_barrier()</code>保证后续读取 CQE 内容的顺序，然后解析结果并更新消费位置。<a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/providers/mlx5/cq.c#L531" target="_blank" rel="noopener"><code>cq.c</code></a>中的这条路径表明，<code>ibv_poll_cq()</code>是在读取和消费完成队列，并不是每次向固件同步发送一条查询命令。</p>
+<p><strong>FW（Firmware，固件）</strong>是运行在设备内部的软件，参与设备控制和内部状态管理。数据传输还由网卡的协议与 DMA 硬件引擎承担，不能把每个 WQE 都理解成设备上的一次软件 RPC。应用、用户态驱动、内核驱动、固件和设备硬件是不同层次，排障时需要说明证据覆盖了哪一层。</p>
+<blockquote>
+<p>TCP 上交换 QPN、地址、密钥和 <code>READY/DONE/OK</code>，是应用之间的控制协议。内核驱动向本机网卡下发创建或修改 QP 的命令，是本机的设备控制路径。两者都可以叫控制面，但它们不是同一条链路。QP 配置成功，也不等于后续每个 WQE 的发布、执行和 CQE 的读取都已经验证成功。</p>
+</blockquote>
+<h1 id="完成队列的共享与进展"><a href="#完成队列的共享与进展" class="headerlink" title="完成队列的共享与进展"></a>完成队列的共享与进展</h1><h2 id="完成分发"><a href="#完成分发" class="headerlink" title="完成分发"></a>完成分发</h2><p>单个请求只要找到自己的完成，多个 QP 共用 CQ 时，结果就会混在一起。应用正在等待请求 X，不代表下一次 poll 出来的 WC 就属于 X。完成处理代码要利用应用分配的 <code>wr_id</code>，必要时结合 <code>qp_num</code>，把每条结果交给对应请求的状态机。</p>
+<p>这里有个决定实现方式的性质：<strong>poll 是消费，不是窥视</strong>。<a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_poll_cq.3" target="_blank" rel="noopener"><code>ibv_poll_cq()</code></a>规定，每个取出的完成都会从 CQ 移除，不能再放回去。为了等待 X 而丢掉其他 WC，会让那些请求失去完成通知。CQ 空间是在消费完成记录时释放的，不会等应用的业务回调执行完才释放。</p>
+<p>因此，请求的状态更新和等待逻辑需要分开。完成线程负责分发所有已经到达的结果，等待 X 的业务线程观察 X 的状态。<code>wr_id</code> 所指向的请求状态也必须活到完成处理结束，不能在请求提交后就回收或复用。</p>
+<h2 id="完成线程停顿与-CQ-溢出"><a href="#完成线程停顿与-CQ-溢出" class="headerlink" title="完成线程停顿与 CQ 溢出"></a>完成线程停顿与 CQ 溢出</h2><p>把例子扩展为两个独立 QP：<code>QP_X</code> 的完成进入 <code>CQ_X</code>，<code>QP_Y</code> 的完成进入 <code>CQ_Y</code>，由同一个线程 T 轮流消费。只选两个 QP，是为了说明一条等待路径如何阻断另一条完成路径，不是在规定连接规模。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">QP_X → CQ_X ─┐</span><br><span class="line">              ├→ 完成线程 T → 各请求的状态</span><br><span class="line">QP_Y → CQ_Y ─┘</span><br></pre></td></tr></table></figure>
+
+<p>假设 T 处理请求 X 时，进入一个只轮询 <code>CQ_X</code> 的循环，直到 X 完成才退出。X 暂时没有结果，T 就不会再消费 <code>CQ_Y</code>。但 <code>QP_Y</code> 已提交的工作仍在执行，并把结果写进 <code>CQ_Y</code>。</p>
+<p>再假设这批工作会报告的完成数量超过 <code>CQ_Y</code> 的剩余容量，而且能在 T 恢复消费之前完成。当未消费的记录占满队列，设备还要写入下一条记录时，就发生 <strong>CQ overrun，完成队列溢出</strong>。这里特意选取了容量装不下这批结果的配置，不是容量建议，也不依赖停止消费后还能无限提交新工作。</p>
+<p>这个时序中，溢出依赖消费停顿和足够多的完成记录同时成立。只有 X 一直没有完成，而没有别的完成写入队列，并不会把 CQ 填满。所谓“其他事件”也必须具体到进入这个 CQ 的工作完成，例如其他 QP 的发送完成或接收完成。没有必要假设同一个 RC QP 的后续操作可以任意越过前面的操作。</p>
+<p>如果 X 与其他请求共用一个 CQ，且 T 等待 X 时继续正常 poll、分发其他 WC，X 缺少完成这件事本身就不会堵住 CQ。甚至可以只有 X 一个未完成请求，而 CQ 始终为空。此时占住的是请求及相关资源，和完成记录过多是不同的问题。</p>
+<p>由这个例子可以直接得到完成线程的约束：负责推进多个 CQ 的线程，不应在单个请求上进入无法退出的局部等待。它可以更新请求状态，再唤醒业务线程，耗时业务回调也不宜直接阻塞完成循环。</p>
+<p>CQ 容量能吸收突发，不能解决长期无人消费。容量要结合所有关联 QP 的完成数量和允许的消费停顿考虑，也要考虑错误完成。创建 CQ 时请求的是最低容量，实际容量应读取返回对象的 <code>cqe</code> 字段。<a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_create_cq.3" target="_blank" rel="noopener"><code>ibv_create_cq()</code></a>与 <a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_poll_cq.3" target="_blank" rel="noopener"><code>ibv_poll_cq()</code></a>分别规定了容量和溢出语义。在普通 verbs 配置下，overrun 会触发 <code>IBV_EVENT_CQ_ERR</code>，该 CQ 不再可用，需要进入受影响资源的恢复流程，不能继续把它当成普通积压处理。</p>
+<h2 id="工作完成与-CQ-通知"><a href="#工作完成与-CQ-通知" class="headerlink" title="工作完成与 CQ 通知"></a>工作完成与 CQ 通知</h2><p>前面都是忙轮询。如果希望没有工作时阻塞等待，可以创建 <strong>completion channel（完成通知通道）</strong>，把 CQ 关联到它，通过 <code>ibv_req_notify_cq()</code>请求通知，再用 <code>ibv_get_cq_event()</code>等待哪个 CQ 需要处理。通知用于唤醒应用，实际结果仍保存在 CQ 中，醒来后还要 <code>ibv_poll_cq()</code>。</p>
+<p>这几种对象不宜都笼统叫作“完成事件”：</p>
+<table>
+<thead>
+<tr>
+<th>对象</th>
+<th>获取方式</th>
+<th>表达的状态</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>工作完成 WC</td>
+<td><code>ibv_poll_cq()</code></td>
+<td>哪个请求完成，以及成功或失败状态</td>
+</tr>
+<tr>
+<td>CQ 通知</td>
+<td><code>ibv_get_cq_event()</code></td>
+<td>哪个 CQ 发出了通知，需要检查</td>
+</tr>
+<tr>
+<td>异步状态或错误事件</td>
+<td><code>ibv_get_async_event()</code></td>
+<td>QP、CQ 或设备等资源的状态变化，例如 <code>IBV_EVENT_CQ_ERR</code></td>
+</tr>
+</tbody></table>
+<p><code>ibv_req_notify_cq(cq, 0)</code>中的 <code>0</code> 表示不把通知限定为带 solicited 条件的完成。通知请求是一次性的，下一次通知需要重新请求，和 <code>IBV_SEND_SIGNALED</code>决定是否生成正常发送完成是两套机制。<a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_req_notify_cq.3.md" target="_blank" rel="noopener">通知接口定义</a></p>
+<p><a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_get_cq_event.3" target="_blank" rel="noopener"><code>ibv_get_cq_event()</code>的示例</a>给出的处理顺序是：在工作开始前请求通知，取得通知后确认事件、重新请求通知，然后把 CQ 排空，再进入下一轮等待。<strong>重新请求通知要在排空之前</strong>。如果先排空再请求，两者之间新到达的 CQE 就落在没有通知请求的窗口中，之后仅阻塞等通知会漏掉这次进展。</p>
+<p>反过来，在重新请求通知之后、排空之前到达的 CQE，既能触发通知，又会被本轮 poll 取走。因此下一次取得通知时，即使 CQ 已经为空，也是合法时序。通知不是每条 CQE 的一一对应副本。如果是在已经有工作的 CQ 上切换到通知模式，也要在请求通知后先检查并排空已有结果，再决定是否阻塞。</p>
+<p>从通道取出的通知必须用 <code>ibv_ack_cq_events()</code>确认，这个 ack 只确认通知事件，不消费工作完成，也不替代重新请求通知。<a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_get_async_event.3" target="_blank" rel="noopener">异步资源事件</a>则走另一条接口路径，不能用空 CQ 来判断是否存在设备或 QP 错误。阻塞等待通知涉及操作系统的等待与唤醒，前文不进入内核的说法限定在普通提交和轮询的快速路径。</p>
+<h2 id="完成状态与故障归因"><a href="#完成状态与故障归因" class="headerlink" title="完成状态与故障归因"></a>完成状态与故障归因</h2><p>请求重试耗尽可以正常生成一条失败 WC，这是“执行失败，但结果被送达”。CQ overrun 是传递结果的队列出了问题。长期没有拿到预期 WC，则只是“应用尚未获得结果”，还不能直接归入前面任何一种，更不能直接归因于固件。</p>
+<p>仍然沿同一次 Write 检查，就能把证据串起来。先确认 <code>ibv_post_send()</code>返回什么、WR 是否要求报告完成，再确认 WQE 是否发布给设备、队列是否推进，以及 CQE 是否被某个完成线程取走却没有正确分发。失败 WC 的状态与 <code>vendor_err</code>、异步资源事件、设备侧诊断，则用来进一步区分权限、传输和设备状态问题。</p>
+<p>内核创建和修改 QP 成功，只覆盖了资源配置路径。源码中 WQE 构造、doorbell 发布和 CQE 消费都有用户态 provider 参与，因此“数据路径绕过内核”不能作为“已经排除驱动”的证据。要把问题缩小到 FW，需要设备侧证据，或能区分上述环节的对照验证。一次空轮询只说明这次没有取到完成。</p>
+<h1 id="SEND-RECV-与远端通知"><a href="#SEND-RECV-与远端通知" class="headerlink" title="SEND/RECV 与远端通知"></a>SEND/RECV 与远端通知</h1><p>普通 Write 由 A 指定 B 的目标地址。<strong>SEND/RECV</strong>则是匹配发送请求与接收请求的双边消息语义：B 先调用 <code>ibv_post_recv()</code>，用 Receive WR 描述可用接收缓冲，A 再用 SEND 发消息，B 的网卡把消息放进匹配的接收缓冲，并报告接收完成。A 不需要知道 B 的具体 buffer 地址，目标位置由 B 的接收请求决定。<a href="https://networking-docs.nvidia.com/doca/archive/3-5-0/rdma-aware-networks-programming-guide" target="_blank" rel="noopener">操作说明</a></p>
+<p>“双边”并不表示 B 的 CPU 要参与每个字节的复制。B 可以通过 <code>ibv_post_recv()</code>的链表参数预先提交一批 Receive WR，由后续消息逐条消耗，但完成后需要按协议补充接收资源。在 RC 上，SEND 到达时没有可匹配的 Receive WR，会触发 RNR 响应，发送端按 RNR 重试配置处理，耗尽时报告失败。</p>
+<p><strong>Write with Immediate</strong>仍按 A 提供的远端地址和 <code>rkey</code>写数据，同时携带一份 <strong>immediate data（即时数据）</strong>，把它作为通知交给 B 的接收完成。它消耗 B 预先提交的 Receive WR，并产生 <code>IBV_WC_RECV_RDMA_WITH_IMM</code>。接收请求在这里提供的是通知所需的接收资源，数据正文仍写入远端地址指定的位置，不写进 Receive WR 的 SGE 所指定的缓冲。<a href="https://networking-docs.nvidia.com/doca/archive/3-5-0/rdma-aware-networks-programming-guide" target="_blank" rel="noopener">操作语义</a>、<a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_wr_post.3.md" target="_blank" rel="noopener">扩展 WR 接口</a></p>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>B 端数据地址由谁决定</th>
+<th>是否消耗 B 的 Receive WR</th>
+<th>B 是否得到对应的接收完成</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>普通 RDMA Write</td>
+<td>A 提供的远端地址与 <code>rkey</code></td>
+<td>否</td>
+<td>否</td>
+</tr>
+<tr>
+<td>SEND</td>
+<td>B 预先提交的接收请求</td>
+<td>是</td>
+<td>是</td>
+</tr>
+<tr>
+<td>Write with Immediate</td>
+<td>A 提供的远端地址与 <code>rkey</code></td>
+<td>是，用于通知</td>
+<td>是，带即时数据</td>
+</tr>
+</tbody></table>
+<p>这也限定了前面讨论 KVCache 传输时的适用条件。普通 Write 避免的是每次写入对 Receive WR 的依赖，所以不会因缺少 Receive WR 而遇到 RNR，但 B 仍要负责目标缓存块的分配、授权、生命周期和就绪通知。改用 Write with Immediate 后，接收资源的供给又成为必要条件，缺少 Receive WR 同样会触发 RNR。</p>
+<p>Write 能直接落入最终缓存地址，前提是这段内存可注册、可访问，并且 A 已获得目标位置。SEND 也能把最终目标 buffer 预先作为接收缓冲，并不必然多一次中转。对 KVCache，真正的选择在于由谁决定块的位置、怎样管理接收资源，以及用什么协议交接数据。前面的 <code>TransferEntry</code>只是应用组织传输条目的例子，不是 verbs 对象，批量提交也不是 Write 独有的能力。</p>
+<h1 id="接口与完成语义补充"><a href="#接口与完成语义补充" class="headerlink" title="接口与完成语义补充"></a>接口与完成语义补充</h1><h2 id="发送完成策略与缓冲区生命周期"><a href="#发送完成策略与缓冲区生命周期" class="headerlink" title="发送完成策略与缓冲区生命周期"></a>发送完成策略与缓冲区生命周期</h2><p><code>sq_sig_all</code>非零时，所有发送侧 WR 都要求生成完成记录。它为零时，由各 WR 的 <code>IBV_SEND_SIGNALED</code>选择要报告的正常完成。没有设置 signaling 的请求称为 <strong>unsignaled WR</strong>，成功执行后不生成独立的成功完成记录，因此不能逐个等待它们的成功 WC。</p>
+<p>Unsignaled 并不意味着请求不占发送资源，也不允许立即复用源数据。选择性 signaling 的实现还必须跟踪队列进度和可回收的请求范围，不能只减少 CQE 数量，却取消资源回收协议。本篇单次 Write 显式请求完成，就是为了让这个生命周期直接可见。</p>
+<p>错误又是另一种情况。Unsignaled 抑制正常成功完成，不屏蔽失败完成。QP 进入错误状态后，未完成工作还会以 flush 错误结束，<strong>flush 在这里表示清理尚未完成的工作，不表示成功传输</strong>。<a href="https://github.com/torvalds/linux/blob/v6.12/drivers/infiniband/sw/rxe/rxe_comp.c#L432" target="_blank" rel="noopener">Linux v6.12 的 RXE 完成实现</a>直接引用了 InfiniBand 规范的这一要求，并分别处理正常、错误和 flush 完成。RXE 是 Linux 的软件 RoCE 实现，这里用它核对规范语义，不用它代替 mlx5 的硬件实现。CQ 本身已经出错时，结果交付不再有健康 CQ 的保证，不能继续用正常完成规则推理。</p>
+<blockquote>
+<p>如果设置 <code>IBV_SEND_INLINE</code>，provider 会在提交过程中把源数据复制进 WQE。按照 <a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_post_send.3" target="_blank" rel="noopener"><code>ibv_post_send()</code></a>的约定，调用返回后即可复用原始源缓冲，之后网卡使用的是 WQE 内的数据。这种方式受 QP 的 inline 容量限制，前面的例子没有使用它。源 buffer 可以复用，也不表示远端业务已经完成。</p>
+</blockquote>
+<h2 id="批量提交与扩展接口"><a href="#批量提交与扩展接口" class="headerlink" title="批量提交与扩展接口"></a>批量提交与扩展接口</h2><p><code>ibv_post_send()</code>可以提交由 <code>next</code>连接的 WR 链表。如果中途遇到能立即检测的错误，<code>bad_wr</code>指向失败项，之前的 WR 已经提交，失败项和后续项没有继续提交。因此处理返回错误时，要区分整批失败和前缀已经提交，不能盲目重试整条链表。<a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_post_send.3" target="_blank" rel="noopener">提交接口</a></p>
+<p>扩展的 <code>ibv_wr_*</code>接口用 <code>ibv_wr_start()</code>开始构造，通过若干 builder/setter 调用描述工作，最后用 <code>ibv_wr_complete()</code>提交。这里的 complete 是结束构造与提交，不是等待设备执行结束。它与传统链表接口的失败边界也不同：构造期间检测到错误后，<code>ibv_wr_complete()</code>会报告失败并放弃这一批提交。两套接口都需要通过完成机制管理成功提交的异步工作。<a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_wr_post.3.md" target="_blank" rel="noopener">扩展接口手册</a></p>
+<h1 id="GPUDirect-RDMA-同步补充"><a href="#GPUDirect-RDMA-同步补充" class="headerlink" title="GPUDirect RDMA 同步补充"></a>GPUDirect RDMA 同步补充</h1><p><strong>GPUDirect RDMA</strong>允许支持的第三方设备直接访问 GPU 内存，让网卡传输不必先在普通主机内存中转。它增加了一条外部设备访问显存的路径，因此需要分别确认网卡完成、数据对 GPU 可见，以及消费数据的 GPU kernel 已经结束。后一个状态决定显存块什么时候能被覆盖或释放。<a href="https://docs.nvidia.com/cuda/gpudirect-rdma/index.html#synchronization-and-memory-ordering" target="_blank" rel="noopener">NVIDIA GPUDirect RDMA 文档</a></p>
+<h2 id="CUDA-生成数据后交给网卡"><a href="#CUDA-生成数据后交给网卡" class="headerlink" title="CUDA 生成数据后交给网卡"></a>CUDA 生成数据后交给网卡</h2><p>假设 A 先用 CUDA 在显存中生成源数据，再让网卡读取。<code>cuPointerSetAttribute()</code>的 <code>CU_POINTER_ATTRIBUTE_SYNC_MEMOPS</code>属性以一次显存分配为作用范围。把它设为布尔值 <code>1</code>，要求涉及这块分配的 CUDA <strong>同步内存操作</strong>真正同步完成，不再采用使这类 API 提前返回的优化。<a href="https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__UNIFIED.html" target="_blank" rel="noopener">属性定义</a></p>
+<p>NVIDIA 给出的例子是 <code>cuMemcpyDtoD()</code>后紧接一次外部设备读取。没有相应同步约束时，这类设备到设备复制允许在排入 GPU 调度后就向 CPU 返回，随后安排的网卡读取就会与尚未完成的复制冲突。启用该属性后，CUDA 复制的返回才提供这里所需的同步边界。属性按分配设置，通常不应在每次传输时重复配置。<a href="https://docs.nvidia.com/cuda/gpudirect-rdma/index.html#synchronization-and-memory-ordering" target="_blank" rel="noopener">同步规则与示例</a></p>
+<p>这个属性没有把所有 CUDA 工作改成同步执行。若数据由异步复制或 kernel 生成，仍需等待相应 stream 或 event 所表达的生产完成，再把源数据交给网卡。它也不负责把未来的外部 RDMA 写入自动发布给 GPU 消费者。</p>
+<h2 id="网卡写入后交给-GPU"><a href="#网卡写入后交给-GPU" class="headerlink" title="网卡写入后交给 GPU"></a>网卡写入后交给 GPU</h2><p>方向换成网卡写 B 的显存后，关注点就变成 GPU 何时能观察到写入。<a href="https://docs.nvidia.com/cuda/gpudirect-rdma/index.html#synchronization-and-memory-ordering" target="_blank" rel="noopener">GPUDirect 文档</a>明确指出，与 RDMA 写入并发运行、又读取被覆盖内存的 kernel 会形成数据竞争，能够看到旧数据、部分数据或乱序到达的数据。CPU 上的通用内存屏障不能修复这种竞争。</p>
+<p><code>cuFlushGPUDirectRDMAWrites(target, scope)</code>用于等待针对目标 CUDA context 的外部写入对指定的 GPU 观察范围可见。这里的 CUDA context 是 CUDA 管理设备执行状态和资源的上下文，和 <code>ibv_context</code>是不同对象。<code>target</code>目前使用 <code>CU_FLUSH_GPU_DIRECT_RDMA_WRITES_TARGET_CURRENT_CTX</code>指定当前 CUDA context，<code>scope</code>指定要求哪个范围能一致地消费这些写入，例如拥有这段数据的设备 context，或所有 CUDA 设备 context。它不负责等待未来还没有发出的 RDMA 请求，也不表示 GPU 已经处理完数据。<a href="https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__DEVICE.html" target="_blank" rel="noopener">CUDA Driver API</a>、<a href="https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__TYPES.html" target="_blank" rel="noopener">参数枚举</a></p>
+<p>这里的“按需 flush”有明确判断条件。用 <code>cuDeviceGetAttribute()</code>查询 <code>CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_WRITES_ORDERING</code>，得到平台原生保证的可见范围。如果所需 scope 已经被它覆盖，文档规定 flush 是空操作，可以省略。如果需要显式的主机侧 flush，还要查询 <code>CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_FLUSH_WRITES_OPTIONS</code>是否含有 <code>CU_FLUSH_GPU_DIRECT_RDMA_WRITES_OPTION_HOST</code>，确认设备支持这个 API。<a href="https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__TYPES.html" target="_blank" rel="noopener">能力枚举</a>不能用“所有 GPU 都需要 flush”或“所有 GPU 都自动可见”代替。</p>
+<p>因此，一条由 CPU 协调的消费路径是：先通过通信完成协议确认本轮 RDMA 写入结束，再在需要且支持时建立所需 scope 的可见性，随后由 CPU 提交依赖这些数据的 CUDA 工作。GPU 工作结束后，才能按应用协议允许下一轮覆盖目标块。<code>SYNC_MEMOPS</code>与 flush 约束的是这条路径中的不同方向，不能互相替代。</p>
+<blockquote>
+<p>CUDA 文档还单独指出：在支持多条硬件访问路径的平台上，不同路径可以属于不同的排序域。混合使用这些路径时，即便查询结果显示原生支持所需范围，也需要按具体路径建立额外顺序，不能把本节的单一路径推理直接推广过去。本文没有具体硬件配置，不据此判断某台机器是否需要显式 flush。</p>
+</blockquote>
+<h1 id="InfiniBand-流量分类补充"><a href="#InfiniBand-流量分类补充" class="headerlink" title="InfiniBand 流量分类补充"></a>InfiniBand 流量分类补充</h1><p><strong>SL（Service Level，服务级别）</strong>是包携带的流量分类标记，<strong>VL（Virtual Lane，虚拟通道）</strong>是物理链路上用于区分排队与流控状态的逻辑通道。SL 表达流量属于哪一类，VL 决定它在这一跳走哪个逻辑通道，这两个编号不是同一个对象。</p>
+<p>交换设备根据入端口、出端口和 SL，通过 SL-to-VL 映射表选取输出 VL，再按配置的优先级和权重在不同 VL 间仲裁。<a href="https://docs.nvidia.com/networking/display/mlnxofedv24101140lts/qos+-+quality+of+service" target="_blank" rel="noopener">NVIDIA 的 IB QoS 文档</a>描述了映射与仲裁机制。因此，相同 SL 不能脱离路径配置直接理解成全网固定的一条 VL。</p>
+<p>即使映射到了不同 VL，它们仍共享同一条物理链路。可以理解为分了排队通道，但共用出口，增加逻辑通道并没有增加物理带宽。这一段讲的是 IB，RoCE 的以太网优先级与队列映射需要按对应配置判断，不能直接套用 IB 的 VL。</p>
+<h1 id="NUMA-亲和性补充：网卡、内存与-UPI"><a href="#NUMA-亲和性补充：网卡、内存与-UPI" class="headerlink" title="NUMA 亲和性补充：网卡、内存与 UPI"></a>NUMA 亲和性补充：网卡、内存与 UPI</h1><p><a href="https://www.calvinneo.com/2025/01/03/memory-context-knowledge/">内存领域知识</a>讨论过 CPU 访问远端 NUMA 内存的代价。换成 RDMA，发起内存访问的变成了网卡（NIC），但物理距离并没有消失。因此，除了线程在哪运行，还要看 <strong>NIC 接在哪个 Socket，以及 buffer 的物理页在哪个 NUMA 节点</strong>。</p>
+<h2 id="PCIe、UPI-与跨插槽数据路径"><a href="#PCIe、UPI-与跨插槽数据路径" class="headerlink" title="PCIe、UPI 与跨插槽数据路径"></a>PCIe、UPI 与跨插槽数据路径</h2><p>在常见的 Intel 双路服务器中，每颗 CPU 各自连接 DRAM 和 PCIe 设备，两个 Socket 通过 UPI（Ultra Path Interconnect，Intel Xeon 的跨插槽互联）传输数据并维护缓存一致性。下面假设一个 Socket 对应一个 NUMA 节点，0、1 只是示例编号：</p>
 <figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">DRAM 0 -- Socket 0 ===== UPI ===== Socket 1 -- DRAM 1</span><br><span class="line">             |                       |</span><br><span class="line">            PCIe                    PCIe</span><br><span class="line">             |                       |</span><br><span class="line">            NIC 0                   NIC 1</span><br></pre></td></tr></table></figure>
 
-<p>如果 NIC 1 发送的数据需要从 DRAM 0 取回，数据路径就是 <code>DRAM 0 → Socket 0 → UPI → Socket 1 → PCIe → NIC 1</code>。这里经过的是处理器内部的内存控制器和 I/O 硬件，不是 CPU 核在执行 <code>memcpy</code>。DMA 省掉了 CPU 复制，却没有省掉跨插槽传输，所以 UPI 仍可能成为带宽竞争点。</p>
+<p>如果 NIC 1 发送的数据需要从 DRAM 0 取回，数据路径就是 <code>DRAM 0 → Socket 0 → UPI → Socket 1 → PCIe → NIC 1</code>。这里经过的是处理器内部的内存控制器和 I/O 硬件，不是 CPU 核在执行 <code>memcpy</code>。DMA 省掉了 CPU 复制，却没有省掉跨插槽传输，这部分流量仍会与其他跨插槽访问竞争 UPI 带宽。</p>
 <p>这也说明，PCIe 与 UPI 是这条路径上串联的两段路。要避开 UPI，应让 NIC 1 使用 DRAM 1 中的 buffer，或者改用 NIC 0 发送 DRAM 0 中的数据。先把数据从 DRAM 0 复制到 DRAM 1，只是把跨 UPI 的工作移到了复制阶段。</p>
-<p>线程位置则是另一件事。buffer 与 NIC 都在节点 1 时，即使提交线程在节点 0，数据的 DMA 也可以是本地的，只是提交请求、轮询 CQ 或处理数据仍可能跨节点。RDMA Write 的接收端同样要检查 NIC 与目标 buffer 的位置，不能因为目标 CPU 不参与复制，就认为没有跨插槽流量。</p>
+<p>线程位置则是另一件事。buffer 与 NIC 都在节点 1 时，即使提交线程在节点 0，数据的 DMA 仍可以是本地的。但这个线程访问节点 1 上的队列内存、网卡映射或数据时，CPU 的访问路径仍然跨节点。RDMA Write 的接收端同样要检查 NIC 与目标 buffer 的位置，不能因为目标 CPU 不参与复制，就认为没有跨插槽流量。</p>
 <p><a href="https://docs.kernel.org/driver-api/pci/p2pdma.html" target="_blank" rel="noopener">PCIe P2P</a> 指设备之间的直接访问，例如 NIC 读写 GPU 显存。拓扑允许时，事务可以在 PCIe 交换芯片内转发，但它并没有给普通 DRAM 增加一个绕过 UPI 的入口。真正改变上述连接方式的是 <a href="https://networking-docs.nvidia.com/connectx8hw/introduction#Socket-Direct-SuperNICs" target="_blank" rel="noopener">Socket Direct</a>：支持它的网卡通过两条独立的 PCIe 连接分别接入两个 Socket，在正确选择和配置接口后，两侧都能获得本地 DMA 路径。双网络端口不等于双主机侧 PCIe 连接。</p>
 <p>此外，跨 NUMA 不一定跨 Socket。Intel SNC（Sub-NUMA Clustering）能把一个 Socket 划成多个 NUMA 节点，同 Socket 内的跨节点访问不需要经过跨插槽 UPI，所以必须结合实际拓扑判断。</p>
-<h2 id="从-RDMA-设备查到物理拓扑"><a href="#从-RDMA-设备查到物理拓扑" class="headerlink" title="从 RDMA 设备查到物理拓扑"></a>从 RDMA 设备查到物理拓扑</h2><p>verbs 选择的是 <code>mlx5_0</code> 这样的 RDMA 设备，而不是 <code>eth0</code> 这样的 Linux 网口。<a href="https://www.calvinneo.com/2026/09/18/rdma-assessment/">RDMA 评估指标</a>里的 <code>mlx5_bond_0</code> 则是某些 RoCE LAG（链路聚合组）配置中的 RDMA 聚合设备。名称不能告诉我们 NUMA 归属，需要先查它对应的网口：</p>
+<h2 id="从-RDMA-设备查到物理拓扑"><a href="#从-RDMA-设备查到物理拓扑" class="headerlink" title="从 RDMA 设备查到物理拓扑"></a>从 RDMA 设备查到物理拓扑</h2><p>verbs 选择的是 <code>mlx5_0</code> 这样的 RDMA 设备，而不是 <code>eth0</code> 这样的 Linux 网口。<a href="https://www.calvinneo.com/2026/09/18/rdma-assessment/">RDMA 评估指标</a>里的 <code>mlx5_bond_0</code> 则是某些 RoCE LAG（Link Aggregation，链路聚合）配置中的 RDMA 聚合设备。名称不包含 NUMA 归属，需要先查它对应的网口：</p>
 <figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">ibdev2netdev</span><br><span class="line">rdma link show</span><br></pre></td></tr></table></figure>
 
 <p>输出中的 RDMA 端口号，也就是 <code>ib_write_bw -i</code> 的参数，与 NUMA 节点号无关。如果网口是 Linux 聚合接口 <code>bond0</code>，先用 <code>cat /proc/net/bonding/bond0</code> 找到 <code>Slave Interface</code> 成员，再逐个查询物理网口。下面的设备名均为示例，应替换成机器的实际输出：</p>
 <figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">nic=eth0</span><br><span class="line">cat <span class="string">"/sys/class/net/<span class="variable">$nic</span>/device/numa_node"</span></span><br><span class="line">cat <span class="string">"/sys/class/net/<span class="variable">$nic</span>/device/local_cpulist"</span></span><br><span class="line">readlink -f <span class="string">"/sys/class/net/<span class="variable">$nic</span>/device"</span></span><br><span class="line">lscpu -e=CPU,NODE,SOCKET</span><br></pre></td></tr></table></figure>
 
 <p><code>numa_node</code> 是内核报告的设备所属节点，<code>local_cpulist</code> 是就近逻辑 CPU 列表，<code>readlink</code> 显示 PCI 设备路径。将节点号与 <code>lscpu</code> 的 <code>NODE</code>、<code>SOCKET</code> 两列对照，就能确定对应的 Socket。若 <code>numa_node</code> 返回 <code>-1</code>，表示归属未知，不是访问各节点的成本相同。</p>
-<p>聚合设备自身的 sysfs 路径可能只反映一个底层 PCI 设备，不能代替逐成员检查。成员若分属不同 Socket，还要结合聚合实现确认实际使用的 PCIe 路径。RoCE LAG 与 Socket Direct 是不同机制，不能从一个 bond 名字推断出双 Socket 连接。</p>
-<h2 id="先放对内存，再注册-MR"><a href="#先放对内存，再注册-MR" class="headerlink" title="先放对内存，再注册 MR"></a>先放对内存，再注册 MR</h2><p>前面示例中的 <code>posix_memalign</code> 只保证对齐。对常规主机内存而言，<code>ibv_reg_mr</code> 注册 MR（Memory Region，供 RDMA 访问的注册内存区域）时会固定物理页并建立设备映射，但不会按 NIC 的位置自动迁移页面。</p>
+<p>聚合设备自身的 sysfs 路径不能代替逐成员检查，单个 <code>device</code>链接不提供所有成员的拓扑。成员若分属不同 Socket，还要结合聚合实现确认实际使用的 PCIe 路径。RoCE LAG 与 Socket Direct 是不同机制，不能从一个 bond 名字推断出双 Socket 连接。</p>
+<h2 id="内存分配与-MR-注册"><a href="#内存分配与-MR-注册" class="headerlink" title="内存分配与 MR 注册"></a>内存分配与 MR 注册</h2><p>前面示例中的 <code>posix_memalign</code>只保证对齐。对常规、非按需分页的主机内存注册，<code>ibv_reg_mr()</code>会固定物理页并建立设备映射，但不会按 NIC 的位置自动迁移页面。</p>
+<blockquote>
+<p><strong>ODP（On-Demand Paging，按需分页）</strong>允许支持它的设备与驱动按需建立页面访问，<code>ibv_reg_mr()</code>提供 <code>IBV_ACCESS_ON_DEMAND</code>选项。因此“注册 MR”不能一概定义成“一次性固定所有物理页”。这里讨论的是普通预注册 buffer 的落点。<a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_reg_mr.3" target="_blank" rel="noopener">注册接口</a></p>
+</blockquote>
 <p><a href="https://docs.kernel.org/admin-guide/mm/numa_memory_policy.html" target="_blank" rel="noopener">Linux 默认的本地分配策略</a>下，新匿名页通常在首次写入触发缺页时才分配物理内存，这就是 first-touch。主线程在节点 0 初始化 buffer 后，再把发送线程绑到节点 1，已有页面并不会跟着移动。注册 MR 也可能触发尚未分配页面的缺页，所以应当<strong>先设置线程与内存策略，再分配、初始化 buffer，最后注册 MR</strong>。</p>
 <p>假设查出的 NIC 属于节点 1，可以这样启动程序，两个 <code>1</code> 都来自刚才的节点查询结果，<code>./rdma_demo</code> 替换成实际程序：</p>
 <figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">numactl --cpunodebind=1 --membind=1 ./rdma_demo</span><br></pre></td></tr></table></figure>
@@ -511,8 +631,17 @@
 <p><code>numactl</code> 不会替程序选网卡，程序仍需选择对应的 RDMA 设备。多网卡程序可以按节点建立 buffer 池，用 <code>mbind</code> 为各池设置内存分配策略，让生产数据的线程直接写入对应 NIC 的本地内存。</p>
 <p>页面落点可以沿用前文的 <code>move_pages</code> 验证：传入 <code>nodes == NULL</code> 查询各页的实际节点。<code>numastat -p</code> 只有进程整体分布，不能证明某个 buffer 已经本地化。</p>
 <p>性能验证时，固定 RDMA 设备、线程亲和性、消息大小和 QP 配置，只切换 buffer 所在节点，再比较吞吐和延迟，必要时结合平台的互联与 I/O 硬件计数器。<code>perf mem</code> 采样的是 CPU 访存，不能据此判断 NIC 的 DMA 有没有跨 Socket。</p>
-<h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><ul>
-<li><a href="https://zhuanlan.zhihu.com/p/652925814" target="_blank" rel="noopener">https://zhuanlan.zhihu.com/p/652925814</a></li>
+<h1 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h1><p>接口与 mlx5 用户态源码固定到 rdma-core <strong>v59.0</strong>，错误完成的规范引用核对 Linux <strong>v6.12</strong> 的 RXE 实现。NVIDIA 与内核在线文档核对日期为 <strong>2026-10-15</strong>。本文示例用于说明语义，不是特定网卡或固件的实测结论。</p>
+<ul>
+<li><a href="https://docs.kernel.org/infiniband/user_verbs.html" target="_blank" rel="noopener">Linux：Userspace verbs access</a>，资源管理与用户态快速路径。</li>
+<li><a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_reg_mr.3" target="_blank" rel="noopener">ibv_reg_mr</a>、<a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_create_qp.3" target="_blank" rel="noopener">ibv_create_qp</a>、<a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_modify_qp.3" target="_blank" rel="noopener">ibv_modify_qp</a>、<a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_create_cq.3" target="_blank" rel="noopener">ibv_create_cq</a>，资源、权限与 QP 状态转换。</li>
+<li><a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_post_send.3" target="_blank" rel="noopener">ibv_post_send</a>、<a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_poll_cq.3" target="_blank" rel="noopener">ibv_poll_cq</a>、<a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_wr_post.3.md" target="_blank" rel="noopener">ibv_wr API</a>，提交、完成和源缓冲生命周期。</li>
+<li><a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/verbs.h" target="_blank" rel="noopener">verbs.h</a>、<a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/providers/mlx5/qp.c#L754" target="_blank" rel="noopener">mlx5 qp.c</a>、<a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/providers/mlx5/cq.c#L531" target="_blank" rel="noopener">mlx5 cq.c</a>，provider 分发、WQE 发布和 CQE 消费。</li>
+<li><a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_req_notify_cq.3.md" target="_blank" rel="noopener">ibv_req_notify_cq</a>、<a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_get_cq_event.3" target="_blank" rel="noopener">ibv_get_cq_event</a>、<a href="https://github.com/linux-rdma/rdma-core/blob/v59.0/libibverbs/man/ibv_get_async_event.3" target="_blank" rel="noopener">ibv_get_async_event</a>、<a href="https://github.com/torvalds/linux/blob/v6.12/drivers/infiniband/sw/rxe/rxe_comp.c#L432" target="_blank" rel="noopener">RXE 完成与 flush</a>，通知、错误和完成策略。</li>
+<li><a href="https://networking-docs.nvidia.com/doca/archive/3-5-0/rdma-aware-networks-programming-guide" target="_blank" rel="noopener">NVIDIA：RDMA 编程指南</a>、<a href="https://docs.nvidia.com/networking/display/mlnxenv24101140lts/rdma+over+converged+ethernet+(roce)" target="_blank" rel="noopener">RoCE</a>、<a href="https://docs.nvidia.com/networking/display/mlnxofedv24101140lts/qos+-+quality+of+service" target="_blank" rel="noopener">IB QoS</a>，操作语义、网络标识与流量分类。</li>
+<li><a href="https://docs.nvidia.com/cuda/gpudirect-rdma/index.html#synchronization-and-memory-ordering" target="_blank" rel="noopener">GPUDirect RDMA</a>、<a href="https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__UNIFIED.html" target="_blank" rel="noopener">CUDA 指针属性</a>、<a href="https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__DEVICE.html" target="_blank" rel="noopener">RDMA 写入 flush</a>及<a href="https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__TYPES.html" target="_blank" rel="noopener">能力枚举</a>，GPU 与网卡之间的同步边界。</li>
+<li><a href="https://docs.kernel.org/core-api/dma-api-howto.html" target="_blank" rel="noopener">Linux DMA API HOWTO</a>与 <a href="https://gcc.gnu.org/onlinedocs/gcc/_005f_005fsync-Builtins.html" target="_blank" rel="noopener">GCC 同步内建函数</a>，DMA 一致性与 CPU 屏障。</li>
+<li><a href="https://zhuanlan.zhihu.com/p/652925814" target="_blank" rel="noopener">知乎文章</a>。</li>
 </ul>
 
       
@@ -774,7 +903,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#基本概念"><span class="nav-number">1.</span> <span class="nav-text">基本概念</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#RDMA-Write-的基本链路"><span class="nav-number">1.1.</span> <span class="nav-text">RDMA Write 的基本链路</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#SEND-RECV"><span class="nav-number">1.2.</span> <span class="nav-text">SEND/RECV</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#同步原语"><span class="nav-number">2.</span> <span class="nav-text">同步原语</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#InfiniBand"><span class="nav-number">3.</span> <span class="nav-text">InfiniBand</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#RDMA-的-NUMA-亲和性：网卡、内存与-UPI"><span class="nav-number">4.</span> <span class="nav-text">RDMA 的 NUMA 亲和性：网卡、内存与 UPI</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#数据怎么走：PCIe-和-UPI-不是二选一"><span class="nav-number">4.1.</span> <span class="nav-text">数据怎么走：PCIe 和 UPI 不是二选一</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#从-RDMA-设备查到物理拓扑"><span class="nav-number">4.2.</span> <span class="nav-text">从 RDMA 设备查到物理拓扑</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#先放对内存，再注册-MR"><span class="nav-number">4.3.</span> <span class="nav-text">先放对内存，再注册 MR</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#Reference"><span class="nav-number">5.</span> <span class="nav-text">Reference</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#基本概念"><span class="nav-number">1.</span> <span class="nav-text">基本概念</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#内存、队列与保护域"><span class="nav-number">1.1.</span> <span class="nav-text">内存、队列与保护域</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#端口、地址与连接状态"><span class="nav-number">1.2.</span> <span class="nav-text">端口、地址与连接状态</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#RDMA-Write-的基本链路"><span class="nav-number">1.3.</span> <span class="nav-text">RDMA Write 的基本链路</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#请求提交与完成"><span class="nav-number">2.</span> <span class="nav-text">请求提交与完成</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#WR-与-WQE"><span class="nav-number">2.1.</span> <span class="nav-text">WR 与 WQE</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#CQE-与-WC"><span class="nav-number">2.2.</span> <span class="nav-text">CQE 与 WC</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#DONE、OK-与目标数据的使用"><span class="nav-number">2.3.</span> <span class="nav-text">DONE、OK 与目标数据的使用</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#内核旁路与设备访问"><span class="nav-number">3.</span> <span class="nav-text">内核旁路与设备访问</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#队列发布与-doorbell"><span class="nav-number">3.1.</span> <span class="nav-text">队列发布与 doorbell</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#完成队列的共享与进展"><span class="nav-number">4.</span> <span class="nav-text">完成队列的共享与进展</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#完成分发"><span class="nav-number">4.1.</span> <span class="nav-text">完成分发</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#完成线程停顿与-CQ-溢出"><span class="nav-number">4.2.</span> <span class="nav-text">完成线程停顿与 CQ 溢出</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#工作完成与-CQ-通知"><span class="nav-number">4.3.</span> <span class="nav-text">工作完成与 CQ 通知</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#完成状态与故障归因"><span class="nav-number">4.4.</span> <span class="nav-text">完成状态与故障归因</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#SEND-RECV-与远端通知"><span class="nav-number">5.</span> <span class="nav-text">SEND/RECV 与远端通知</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#接口与完成语义补充"><span class="nav-number">6.</span> <span class="nav-text">接口与完成语义补充</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#发送完成策略与缓冲区生命周期"><span class="nav-number">6.1.</span> <span class="nav-text">发送完成策略与缓冲区生命周期</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#批量提交与扩展接口"><span class="nav-number">6.2.</span> <span class="nav-text">批量提交与扩展接口</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#GPUDirect-RDMA-同步补充"><span class="nav-number">7.</span> <span class="nav-text">GPUDirect RDMA 同步补充</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#CUDA-生成数据后交给网卡"><span class="nav-number">7.1.</span> <span class="nav-text">CUDA 生成数据后交给网卡</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#网卡写入后交给-GPU"><span class="nav-number">7.2.</span> <span class="nav-text">网卡写入后交给 GPU</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#InfiniBand-流量分类补充"><span class="nav-number">8.</span> <span class="nav-text">InfiniBand 流量分类补充</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#NUMA-亲和性补充：网卡、内存与-UPI"><span class="nav-number">9.</span> <span class="nav-text">NUMA 亲和性补充：网卡、内存与 UPI</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#PCIe、UPI-与跨插槽数据路径"><span class="nav-number">9.1.</span> <span class="nav-text">PCIe、UPI 与跨插槽数据路径</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#从-RDMA-设备查到物理拓扑"><span class="nav-number">9.2.</span> <span class="nav-text">从 RDMA 设备查到物理拓扑</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#内存分配与-MR-注册"><span class="nav-number">9.3.</span> <span class="nav-text">内存分配与 MR 注册</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#参考资料"><span class="nav-number">10.</span> <span class="nav-text">参考资料</span></a></li></ol></div>
             
 
           </div>

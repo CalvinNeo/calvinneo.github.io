@@ -91,18 +91,18 @@
 
 
 
-<meta name="description" content="这次在 NVIDIA B300 和 PPU 上做 RDMA visibility 实验，我想建立的对照是：不加额外处理时读错，加入处理后恢复正确。但截至 2026 年 10 月 14 日的实验记录，两组一直都通过。值得整理的是，每次未复现以后改了什么条件，以及查到的 OWNER 保证怎样改变了我对结果的理解。">
+<meta name="description" content="这组实验在 NVIDIA B300 和 PPU 上检查 RDMA Write 之后的 GPU visibility，并对比一个 flush workaround 的效果。截至 2026 年 10 月 14 日，启用和关闭 workaround 都没有复现不一致。">
 <meta name="keywords" content="AIGen,RDMA">
 <meta property="og:type" content="article">
 <meta property="og:title" content="一个 RDMA visibility 问题的讨论">
 <meta property="og:url" content="http://www.calvinneo.com/2026/10/14/rdma-visibility/index.html">
 <meta property="og:site_name" content="Calvin&#39;s Marbles">
-<meta property="og:description" content="这次在 NVIDIA B300 和 PPU 上做 RDMA visibility 实验，我想建立的对照是：不加额外处理时读错，加入处理后恢复正确。但截至 2026 年 10 月 14 日的实验记录，两组一直都通过。值得整理的是，每次未复现以后改了什么条件，以及查到的 OWNER 保证怎样改变了我对结果的理解。">
+<meta property="og:description" content="这组实验在 NVIDIA B300 和 PPU 上检查 RDMA Write 之后的 GPU visibility，并对比一个 flush workaround 的效果。截至 2026 年 10 月 14 日，启用和关闭 workaround 都没有复现不一致。">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2026-10-14T16:53:21.151Z">
+<meta property="og:updated_time" content="2026-10-15T15:54:33.815Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="一个 RDMA visibility 问题的讨论">
-<meta name="twitter:description" content="这次在 NVIDIA B300 和 PPU 上做 RDMA visibility 实验，我想建立的对照是：不加额外处理时读错，加入处理后恢复正确。但截至 2026 年 10 月 14 日的实验记录，两组一直都通过。值得整理的是，每次未复现以后改了什么条件，以及查到的 OWNER 保证怎样改变了我对结果的理解。">
+<meta name="twitter:description" content="这组实验在 NVIDIA B300 和 PPU 上检查 RDMA Write 之后的 GPU visibility，并对比一个 flush workaround 的效果。截至 2026 年 10 月 14 日，启用和关闭 workaround 都没有复现不一致。">
 
 
 
@@ -377,27 +377,28 @@
       
 
       
-        <p>这次在 NVIDIA B300 和 PPU 上做 RDMA visibility 实验，我想建立的对照是：不加额外处理时读错，加入处理后恢复正确。但截至 2026 年 10 月 14 日的实验记录，两组一直都通过。值得整理的是，每次未复现以后改了什么条件，以及查到的 <code>OWNER</code> 保证怎样改变了我对结果的理解。</p>
+        <p>这组实验在 NVIDIA B300 和 PPU 上检查 RDMA Write 之后的 GPU visibility，并对比一个 flush workaround 的效果。截至 2026 年 10 月 14 日，启用和关闭 workaround 都没有复现不一致。</p>
 <a id="more"></a>
 
-<h2 id="实验目标：RDMA-Write-的-GPU-visibility"><a href="#实验目标：RDMA-Write-的-GPU-visibility" class="headerlink" title="实验目标：RDMA Write 的 GPU visibility"></a>实验目标：RDMA Write 的 GPU visibility</h2><p>我关心的是网卡直接写入 GPU memory 之后，GPU kernel 读到的究竟是哪一轮数据。这条绕过接收端 host memory 中转的路径，在 NVIDIA 上由 GPUDirect RDMA 支持。本文的 <strong>visibility</strong> 是指：在约定的传输完成和同步条件成立后，指定 GPU 消费者能够从目标地址读到本轮写入结果。</p>
-<p>NVIDIA 文档给出了一个具体风险场景：已经运行的 kernel 与外部 RDMA Write 并发访问同一块 GPU memory，缺少相应的同步关系，即使网卡已经完成 RDMA Write，kernel 仍会面临旧数据、部分更新或乱序更新的问题。[1] 因而，RDMA Write completion 与 GPU visibility 不能脱离平台保证直接画等号。我想验证的是这个边界，而不是在本轮尚未写完时读到半成品。</p>
-<p>候选处理是在写完后，额外做一次 loopback RDMA Read，再等待它完成。这里的 loopback 是让接收端网卡向本机目标发起请求，读的是刚接收数据的 GPU memory。我把这次额外访问称为 <strong>readback</strong>。实验选择读一个字节到临时 host buffer，目的是插入一笔需要完成确认的访问，不承担整份数据的校验。GPU 通信库 NCCL 的公开 RDMA 后端也采用了这种 readback，源码将请求长度设为 1。[2]</p>
-<p>我把不做 readback 记为 OFF，增加 readback 记为 ON。这笔 RDMA Read 使用独立 QP，不能拿同一 QP 内的 ordering guarantee，直接推导它是跨 QP、跨设备的 memory barrier。它是否建立了所需的 visibility，正是要检验的假设。</p>
-<h2 id="基础实验：同机-RDMA-传输与设备端校验"><a href="#基础实验：同机-RDMA-传输与设备端校验" class="headerlink" title="基础实验：同机 RDMA 传输与设备端校验"></a>基础实验：同机 RDMA 传输与设备端校验</h2><p>起步时先确认网络和 memory registration 能够工作，也在两台 PPU 主机之间用 host memory 跑通过 RDMA Write。这个检查只覆盖跨机网络，没有验证跨机 GPU memory 的 visibility。</p>
-<p>GPU memory 测试从同机 loopback 开始，随后拆成独立的发送、接收进程，让完成确认和消费分别发生在通信两端。同机没有绕过网卡，TCP 只传控制通知，数据仍由 RDMA 设备直接写入注册过的 GPU memory。每轮的流程是：</p>
-<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">接收端准备好结果区，完成初始化后才允许本轮 RDMA Write</span><br><span class="line">    → 发送端提交 RDMA Write，确认本轮 completion</span><br><span class="line">    → 通过 TCP 通知接收端</span><br><span class="line">    → OFF 直接继续，ON 额外做 readback 并等待完成</span><br><span class="line">    → 接收端 CPU 发起 kernel launch，提交验证 kernel</span><br><span class="line">    → GPU 校验完成，返回结果后才开始下一轮</span><br></pre></td></tr></table></figure>
+<h2 id="实验目标：RDMA-Write-的-GPU-visibility"><a href="#实验目标：RDMA-Write-的-GPU-visibility" class="headerlink" title="实验目标：RDMA Write 的 GPU visibility"></a>实验目标：RDMA Write 的 GPU visibility</h2><p>本次实验检查一个具体流程：发送端收到确认本轮最后一个 RDMA Write 的 ACK，通知接收端，接收端在目标 GPU 上 launch kernel。这个 kernel 应当从接收 buffer 中读到本轮的完整数据。如果仍然读到上一轮内容或新旧混合的数据，就是要捕获的 visibility 问题。</p>
+<p>“收到最后一个 ACK”在程序中的判断标准是：在同一条 RC（Reliable Connected）QP 上按序提交本轮 Write，每次提交的操作称为 WR（Work Request），只给最后一个 WR 设置 <code>IBV_SEND_SIGNALED</code>，要求它产生 CQE，并等待该请求成功完成。CQE 是网卡提供给应用的 completion 记录，程序检查 <code>status == IBV_WC_SUCCESS</code>、<code>opcode == IBV_WC_RDMA_WRITE</code>，以及 <code>wr_id</code> 属于本轮最后一个 WR，再通过 TCP 发送 <code>WRITE_DONE</code>。[6] 程序通过 CQE 判断 ACK 对应的 Write 已完成，不直接读取 ACK 报文。<code>WRITE_DONE</code> 负责把这个结果转告接收端。</p>
+<p>NVIDIA 文档指出，已经运行的 kernel 与外部 RDMA Write 并发访问同一块 GPU memory、缺少相应同步时，会有读到旧数据、部分更新或乱序更新的风险。[1] 当前实验检查的是完成 ACK 之后再 launch kernel 的流程，不能仅凭网卡确认写完，就省略对 GPU 读取结果的验证。</p>
+<p>为了做对照，测试程序实现了一段类似 <code>cuFlushGPUDirectRDMAWrites()</code> 的 workaround：在接收端 launch kernel 前，额外执行一次 RDMA Read，并等待它完成。具体做法是让本机网卡通过一条自连的 QP，也就是 loopback QP，从刚写入的 GPU buffer 读一个 byte 到临时 host buffer。这个额外读取称为 readback，长度 1 是 workaround 的请求设置，NCCL 的公开实现也有类似做法。[2] 读取的值不参与校验，程序只等待 Read completion。</p>
+<p>OFF 跳过 workaround，ON 执行 workaround，两组都不调用原生 <code>cuFlushGPUDirectRDMAWrites()</code>。这里比较的是这段额外代码能否消除不一致，尚未证明它与原生 API 的保证等价。</p>
+<h2 id="基础实验：同机-RDMA-传输与设备端校验"><a href="#基础实验：同机-RDMA-传输与设备端校验" class="headerlink" title="基础实验：同机 RDMA 传输与设备端校验"></a>基础实验：同机 RDMA 传输与设备端校验</h2><p><strong>假设。</strong> 目标错误应当表现为 GPU kernel 读取 RDMA 写入的 buffer 时发生不匹配。基础实验需要验证这条直接写入 GPU memory 的路径，并建立 OFF/ON 对照。</p>
+<p><strong>验证。</strong> 先在两台 PPU 主机之间用 host memory 跑通 RDMA Write，确认网络和 memory registration 可用。随后测试同机 GPU memory，先用 loopback，再拆成独立的发送、接收进程。payload 始终经网卡写入 GPU memory，TCP 只传通知。每轮执行：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">接收端初始化 result buffer，允许本轮写入</span><br><span class="line">    → 发送端提交本轮 RDMA Write</span><br><span class="line">    → 发送端等到最后一个 Write 的成功 CQE，发送 WRITE_DONE</span><br><span class="line">    → 接收端收到 WRITE_DONE</span><br><span class="line">    → OFF 直接继续，ON 执行 workaround 并等待 Read completion</span><br><span class="line">    → 在目标 GPU 上 launch 校验 kernel</span><br><span class="line">    → kernel 完成，返回校验结果，再允许下一轮写入</span><br></pre></td></tr></table></figure>
 
-<p>一轮普通 RDMA Write 在同一条 RC（Reliable Connected）QP 上顺序提交。每次提交给 RDMA 接口的操作请求称为 WR（Work Request），只有批末 WR 设置 signaled，要求网卡为该请求生成 CQE（Completion Queue Entry）。[6] 发送端核对这条 CQE 的成功状态、操作类型和请求编号后才发通知。这个完成条件针对本轮、这条 QP 上的 RDMA Write 批次，不能拿其他 QP 或上一轮的 CQE 来代替。</p>
-<p>发送内容同时随轮次和位置变化，kernel 直接读取原本注册给网卡的 GPU memory，逐位置比较。CPU 只取回小块结果。因此，PASS 不是 host 副本正确，而是设备确实执行了读取和校验。等校验结果返回后才进入下一轮，则把“数据还没用完就被覆盖”排除在这个协议之外。</p>
-<p>两种模式都不调用 CUDA 提供的显式 flush API，唯一的对照变量是额外 readback。基础版本的 OFF 和 ON 都通过了，于是继续改变 RDMA Write 的条件。</p>
-<h2 id="PPU：单连接负载与-WR-拆分"><a href="#PPU：单连接负载与-WR-拆分" class="headerlink" title="PPU：单连接负载与 WR 拆分"></a>PPU：单连接负载与 WR 拆分</h2><p>10 月 12 日的 PPU 单连接记录覆盖了下面三种负载。数据量和轮数是按检查目的与测试预算选的，不是从硬件规格推出来的阈值。</p>
+<p>数据随轮次和位置变化，kernel 直接比较注册给网卡的 GPU buffer，CPU 只取回小块 result。下一轮等待本轮校验结束，避免提前覆盖 buffer。</p>
+<p><strong>结果与分析。</strong> OFF 和 ON 都通过，说明这条传输、通知、kernel 校验的流程能够运行。由于 OFF 没有读错，这一步无法证明 workaround 有效，后续继续改变写入条件。</p>
+<h2 id="PPU：单连接负载与-WR-拆分"><a href="#PPU：单连接负载与-WR-拆分" class="headerlink" title="PPU：单连接负载与 WR 拆分"></a>PPU：单连接负载与 WR 拆分</h2><h3 id="payload-大小与-WR-数量"><a href="#payload-大小与-WR-数量" class="headerlink" title="payload 大小与 WR 数量"></a>payload 大小与 WR 数量</h3><p><strong>假设。</strong> 单轮访问范围太小，或者一轮只有一个 Write，未覆盖目标错误需要的条件。增加 payload 和 WR 数量，用来检查这两个因素。</p>
+<p><strong>验证。</strong> 10 月 12 日的 PPU 单连接记录包含下表。大小和轮数按测试目的与运行预算选取，表中每行分别用 1 个和 16 个 WR 发送。</p>
 <table>
 <thead>
 <tr>
-<th>每轮数据量</th>
+<th>每轮 payload</th>
 <th align="right">每种配置的轮数</th>
-<th>用途</th>
+<th>目的</th>
 </tr>
 </thead>
 <tbody><tr>
@@ -416,59 +417,65 @@
 <td>扩大单轮访问范围</td>
 </tr>
 </tbody></table>
-<p>除了增加数据量，我还改变了 WR 拆分：同一份数据分别用 1 个和 16 个 WR 发送。例如 1 MiB 拆成 16 个 RDMA Write，每个就是 64 KiB。这样改变请求批次，而不同时改变总数据量，才能分清测试增加的到底是什么。</p>
-<p>另一个变量是 <code>CU_POINTER_ATTRIBUTE_SYNC_MEMOPS</code>。按 CUDA 的定义，它是作用于单个 allocation 的 pointer attribute。开启后，该区域上的 synchronous memory operation 必须满足接口规定的同步完成条件。[3] 具体例子是，CPU 调用 <code>cuMemcpyDtoD()</code> 复制 GPU memory 后，让网卡读取目的地址。该复制原本允许排入设备队列后就向 CPU 返回，开启这个属性会禁止这里的提前返回，维持“复制完成以后再供网卡读取”的依赖。[1] 它不是缓存开关，也不会等待未来的外部 RDMA Write。</p>
-<p>PPU 测试同样比较了这个属性的 0/1 设置，但引用 CUDA 定义不等于确认 PPU 后端具有相同实现。每种负载都覆盖 WR 数 1/16、属性 0/1 和 OFF/ON，因此每行有 <code>2 × 2 × 2 = 8</code> 种配置，全部通过。这些结果没有区分出哪项额外处理是必需的，我也开始检查设备已经提供的保证，而不是继续只从负载大小找原因。</p>
-<h2 id="B300：OWNER-memory-ordering"><a href="#B300：OWNER-memory-ordering" class="headerlink" title="B300：OWNER memory ordering"></a>B300：OWNER memory ordering</h2><p>我查询了本次测试中 B300 的 <code>CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_WRITES_ORDERING</code>，返回 <code>100</code>，在 CUDA 枚举中对应 <code>OWNER</code>。这个属性描述的是设备对 GPUDirect RDMA writes 原生提供的 memory ordering，范围按哪些 GPU 能一致地读取写入结果来区分：[4]</p>
+<p>例如 1 MiB 拆成 16 个 Write，每个就是 64 KiB。总数据量相同，变化的是请求拆分，避免把这两个变量混在一起。</p>
+<p><strong>结果与分析。</strong> 三种大小、两种拆分的 OFF/ON 都通过。当前范围内，扩大 payload 和增加 WR 没有得到失败的 baseline。</p>
+<h3 id="SYNC-MEMOPS"><a href="#SYNC-MEMOPS" class="headerlink" title="SYNC_MEMOPS"></a>SYNC_MEMOPS</h3><p><strong>假设。</strong> 测试中的 CUDA memory operation 带来了额外同步，掩盖了 OFF/ON 差异。<code>CU_POINTER_ATTRIBUTE_SYNC_MEMOPS</code> 是需要检查的一个变量。</p>
+<p><strong>验证。</strong> 上述矩阵同时比较该属性的 0/1 设置。按 CUDA 定义，它作用于一块 allocation，开启后要求这块 memory 上的 synchronous memory operation 确实按同步语义完成。[3] 例如 CPU 调用 <code>cuMemcpyDtoD()</code> 后立刻让网卡读目标地址，该属性会禁止 copy 仅排入队列就向 CPU 返回的优化，确保 copy 完成后才开始后续访问。[1] 它约束这些 CUDA 操作，不会等待未来的 RDMA Write。这里引用的是 CUDA 语义，没有验证 PPU 内部是否采用相同实现。</p>
+<p><strong>结果与分析。</strong> 每种 payload 覆盖 WR 数 1/16、属性 0/1、OFF/ON，即 <code>2 × 2 × 2 = 8</code> 种配置，合计 24 种组合全部通过。关闭该属性仍未复现，但这不表示测试已移除所有同步：接收端仍然在 <code>WRITE_DONE</code> 之后才 launch 新 kernel。</p>
+<h2 id="B300：OWNER-memory-ordering"><a href="#B300：OWNER-memory-ordering" class="headerlink" title="B300：OWNER memory ordering"></a>B300：OWNER memory ordering</h2><p><strong>假设。</strong> B300 已经为目标 GPU 上的 kernel 提供所需的 native memory ordering，因此不加额外 flush 也能读对。</p>
+<p><strong>验证。</strong> 查询本次 B300 的 <code>CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_WRITES_ORDERING</code>，返回 <code>100</code>，对应 <code>OWNER</code>。这个属性描述外部 RDMA Write 对哪些 GPU 上的读取提供 native ordering。CUDA 的枚举值为：[4]</p>
 <table>
 <thead>
 <tr>
 <th align="right">返回值</th>
 <th>名称</th>
-<th>原生保证</th>
+<th>保证范围</th>
 </tr>
 </thead>
 <tbody><tr>
 <td align="right">0</td>
 <td><code>NONE</code></td>
-<td>不提供原生的 GPUDirect RDMA writes ordering</td>
+<td>没有 native remote-write ordering 支持</td>
 </tr>
 <tr>
 <td align="right">100</td>
 <td><code>OWNER</code></td>
-<td>拥有目标内存的 GPU 能一致地消费 GPUDirect RDMA writes</td>
+<td>拥有目标 memory 的 GPU 能一致地读取 remote writes</td>
 </tr>
 <tr>
 <td align="right">200</td>
 <td><code>ALL_DEVICES</code></td>
-<td>保证范围扩展到系统内其他 CUDA 设备</td>
+<td>上述保证扩展到系统内其他 CUDA device</td>
 </tr>
 </tbody></table>
-<p>把接收卡记为 GPU A：网卡写入 A 的 GPU memory，再由 A 校验，就在 <code>OWNER</code> 范围内。即使源数据来自 GPU B，最终仍由 A 读取 A 的内存，也没有改变这个范围。只有改成由 B 直接读取 A 的目标内存，才需要考虑其他消费者的 visibility。这是消费者范围的例子，不是说这些访问自动具备所需的映射和权限。</p>
-<p>CUDA 的显式接口 <code>cuFlushGPUDirectRDMAWrites()</code> 会阻塞到外部 GPUDirect RDMA writes 满足指定 scope 内的 visibility 要求。scope 指需要覆盖的消费者范围，<code>TO_OWNER</code> 只要求内存所属设备读到结果，而不是“清空 GPU 缓存”。当这个 scope 已经被设备报告的 <code>OWNER</code> 覆盖时，文档规定调用是 no-op，可以省略。[5]</p>
-<p>这让我重新理解了“不加处理”：在本次 B300 环境中，由目标内存的 owner GPU 消费时，去掉 <code>TO_OWNER</code> flush 并没有撤掉一项额外保证。这里的 no-op 指原生 CUDA API，不是说 ON 里的 RDMA Read 没有执行。后者是否有额外作用，仍然需要对照。</p>
-<p><code>OWNER</code> 也没有替应用确认整轮 RDMA Write 完成，更不保证整块数据原子更新。文档还提醒，不同硬件写入路径之间的 ordering 需要额外协调，不能把设备属性当成跨路径的 memory barrier。[5] 这些是本次 B300 结果的契约依据，不能直接搬过去解释 PPU。</p>
-<h2 id="B300：显式-flush-与传输路径对照"><a href="#B300：显式-flush-与传输路径对照" class="headerlink" title="B300：显式 flush 与传输路径对照"></a>B300：显式 flush 与传输路径对照</h2><p>另一组独立实验记录在 10 月 13 日。它检查的是，移除显式 CUDA flush，并减少完成通知到消费之间的附加操作后，是否还能读对。kernel 和结果区提前准备、预热，收到 TCP 完成通知就提交校验，中间不再插入整块数据的 readback、清零、分配或显式 CUDA synchronization。</p>
-<p>这组还改变了数据来源和设备路径：既有 H2D（host-to-device），即 host memory 经网卡写入 B300 GPU memory，也有 D2D（device-to-device），即两张 B300 的 GPU memory 之间经网卡传输，覆盖同网卡、不同网卡和交换传输方向。这里 H2D、D2D 都指 RDMA 数据路径。记录中的最大场景，单轮有效数据超过 1 GiB，用来扩大单轮访问范围。</p>
-<p>结果仍然通过。不过，它没有做额外 readback 的 OFF/ON 对照，而且保留了 <code>SYNC_MEMOPS=1</code>，不能与前面的组合混算。结合 <code>OWNER</code> 再看这组记录，源设备和网卡路径虽然变了，消费者始终是目标内存的 owner GPU，并且仍在收到通知后才发起 kernel launch。换成 D2D 传输，没有自动换成“其他 GPU 读取目标内存”的实验。</p>
-<h2 id="并发负载与验证器检查"><a href="#并发负载与验证器检查" class="headerlink" title="并发负载与验证器检查"></a>并发负载与验证器检查</h2><p>单连接没有暴露问题，接下来把负载改为多个发送者汇聚到一个接收进程。10 月 14 日的 B300 并发记录覆盖 64 和 128 个发送者，每个发送者每轮传 1 MiB、拆成 16 个 RDMA Write，分别跑 100 和 1000 轮，并比较同步属性开关和 OFF/ON。这些数值是选定的并发规模和重复次数，所有组合仍然通过。</p>
-<p>针对 WR 拆分，又在 B300 上补跑四个发送者、每个十轮的短测，每轮仍是 1 MiB，但拆成 256 个 RDMA Write，即每个 4 KiB。这组关闭 <code>SYNC_MEMOPS</code>，分别跑 OFF 和 ON，仍然没有错误。</p>
-<p>PPU 上也验证了 64 和 128 个发送者，但每个发送者每轮只传 4 KiB，运行三轮，用于检查并发实现能否在该环境运行。同步属性开关和 OFF/ON 都通过了，但这不是 B300 那组每轮 1 MiB、1000 轮长测的重复。</p>
-<p>并发没有改变每块数据的消费条件：每个发送者都有独立 buffer，自己的 RDMA Write 完成后才提交校验。即便出现“GPU 读已经写完的 buffer A，网卡同时写 buffer B”，也不等于已经运行的 kernel 在观察同一个 buffer 的外部更新。日志中的 64 或 128 个并发窗口，从允许写入计数到结果返回，只能证明轮次重叠，不能证明同一瞬间有相同数量的 kernel 在执行，也没有测定具体的传输与 kernel 执行重叠。</p>
-<p>验证器另外做过反例检查。在 B300 的 H2D、D2D 测试中，我故意跳过某轮 RDMA Write，仍按新一轮内容校验，设备识别出了旧数据，并把失败传回发送端。并发版也检查了设备校验失败、kernel launch error 和错误 CQE 的传播。这些检查验证了检测链路，没有替代始终缺少的 OFF 自然失败。</p>
-<h2 id="实验局限：GPU-消费时序"><a href="#实验局限：GPU-消费时序" class="headerlink" title="实验局限：GPU 消费时序"></a>实验局限：GPU 消费时序</h2><p>两种设备上的测试都保留着同一个顺序：<strong>RDMA Write 完成，CPU 收到通知，再发起新的 kernel launch。</strong> GPUDirect RDMA 文档要求先确认外部 RDMA Write 相对于提交线程已经完成，再通过 CPU 发起的相关 CUDA work submission 或 synchronization API 建立依赖。[1] 对本次 B300，这与查询到的 <code>OWNER</code> 保证相吻合。所以，去掉显式 flush 不等于消除了消费前的 ordering guarantee。</p>
-<p>对 PPU，只能确认当前时序下全部通过。我没有能区分设备写入路径与运行时提交行为的证据，不能照搬 NVIDIA 的机制解释。类似地，记录既没有证明新 kernel 的缓存为空，也没有测出完成通知到实际读取的间隔，不能用“TCP 恰好多等了一会儿”作为原因。</p>
-<p>尚未覆盖的一个条件是 <strong>persistent kernel</strong>：它启动后持续等待后续轮次，而不是每轮由 CPU 重新提交。这样的消费者不经过每轮的新 kernel launch，但这只是需要验证的差异，不是已经确认的故障根因。现有材料没有完整还原原始失败场景，不能断言改成 persistent kernel 就一定复现。</p>
-<p>继续实验时，需要同时说清本轮完成通知、数据发布和 buffer 复用的规则。尤其是发布标志与数据的顺序，必须有平台支持的外部 RDMA Write synchronization 依据，不能直接套用 CPU 线程之间的 release/acquire 关系。否则，读到半成品、上一轮残留或下一轮覆盖，都能表现为校验失败，却不一定是在检验同一个 visibility 问题。</p>
-<p>这次能得出的结论是：传输和设备校验跑通了，在记录覆盖的条件下，额外 readback 前后都正确。实验没有证明 readback 必需，也没有证明它足以解决原本想抓的错误。要进一步判断它的作用，缺少的是一个完成条件明确、能够失败的 baseline，而不是更多通过记录。</p>
-<h2 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h2><p>实验参数与结果来自本次记录，下面的公开资料用于核对 API 语义，不代替实验结果。</p>
+<p>例如网卡写入 GPU A 的 memory，随后在 A 上 launch kernel 校验，就在 <code>OWNER</code> 范围内。即使数据来自 GPU B，只要 kernel 仍在 A 上读取 A 的 memory，范围也没有变化。若改成 B 上的 kernel 直接读取 A 的目标 memory，才需要其他 GPU 的保证。</p>
+<p><code>cuFlushGPUDirectRDMAWrites()</code> 的 scope 指要求哪些 GPU 能读到 remote writes，<code>TO_OWNER</code> 只要求拥有目标 memory 的 GPU。CUDA 规定，scope 已被设备的 native ordering 覆盖时，调用就是 no-op。[5] 因此，本次报告 <code>OWNER</code> 的 B300 上，<code>TO_OWNER</code> flush 可以省略。</p>
+<p><strong>结果与分析。</strong> 对本次由 B300 读取自身 memory 的测试，去掉这个原生 flush 并没有撤掉一项必要保证。这为 B300 的通过结果提供了解释，但不能用于推断 PPU 的实现。原生 API 的 no-op 也不表示 workaround 中的 RDMA Read 没有执行。无论是否需要 flush，发送端仍要等本轮最后一个 Write 的成功 CQE，接收端才开始后续校验。</p>
+<h2 id="B300：显式-flush-与传输路径对照"><a href="#B300：显式-flush-与传输路径对照" class="headerlink" title="B300：显式 flush 与传输路径对照"></a>B300：显式 flush 与传输路径对照</h2><p><strong>假设。</strong> 显式 flush 或 <code>WRITE_DONE</code> 与 kernel launch 之间的其他操作消除了待观察的差异，或者此前的数据路径没有覆盖触发条件。</p>
+<p><strong>验证。</strong> 10 月 13 日的独立实验移除了显式 CUDA flush。kernel 和 result buffer 提前准备、预热，收到 <code>WRITE_DONE</code> 就 launch 校验 kernel，中间不插入整块 payload 的 readback、清零、allocation 或显式 CUDA synchronization。</p>
+<p>这组同时覆盖 H2D（host-to-device，host memory 经网卡写入 B300 GPU memory）和 D2D（device-to-device，两张 B300 之间经网卡传输），以及同网卡、不同网卡和两个传输方向。最大场景的单轮有效 payload 超过 1 GiB，用于扩大访问范围。这里的 H2D、D2D 都是实际 RDMA 传输。该组保留 <code>SYNC_MEMOPS=1</code>，没有做 workaround 的 OFF/ON 对照。</p>
+<p><strong>结果与分析。</strong> 各场景都通过。换了数据来源和网卡路径，校验 kernel 仍在目标 B300 上运行，并且在收到 <code>WRITE_DONE</code> 后才 launch。因此，D2D 没有改变 <code>OWNER</code> 的适用范围，也没有检验已经运行的 kernel 如何观察外部写入。</p>
+<h2 id="并发负载与-validator-检查"><a href="#并发负载与-validator-检查" class="headerlink" title="并发负载与 validator 检查"></a>并发负载与 validator 检查</h2><h3 id="并发-sender-与重复轮数"><a href="#并发-sender-与重复轮数" class="headerlink" title="并发 sender 与重复轮数"></a>并发 sender 与重复轮数</h3><p><strong>假设。</strong> 单连接负载不足以触发不一致，需要增加同时传输的 sender 数量和重复次数。</p>
+<p><strong>验证。</strong> 10 月 14 日的 B300 长测使用 64 和 128 个 sender，每个 sender 每轮传 1 MiB、拆成 16 个 Write，分别运行 100 和 1000 轮，并覆盖 <code>SYNC_MEMOPS</code> 0/1 与 OFF/ON。这些数值来自选定的并发规模和测试预算。PPU 也测试了 64 和 128 个 sender，但每轮每个 sender 只传 4 KiB、运行三轮，用于检查并发实现能否运行。</p>
+<p><strong>结果与分析。</strong> 两种平台的组合都通过，但 PPU 没有覆盖 B300 的长测。每个 sender 使用独立 buffer，自己的 Write 完成后才 launch 校验 kernel。因此，即使出现读取已写完的 buffer A 与写入 buffer B 的重叠，也没有让 kernel 与网卡并发访问同一个 buffer。日志里的 64 或 128 个窗口按 READY 到结果返回计数，只证明轮次重叠，不能据此认定同样数量的 kernel 同时执行。</p>
+<h3 id="WR-拆分补测"><a href="#WR-拆分补测" class="headerlink" title="WR 拆分补测"></a>WR 拆分补测</h3><p><strong>假设。</strong> 前面的 16 个 WR 还不足以触发目标现象，进一步拆细请求能检验这一点。</p>
+<p><strong>验证。</strong> B300 上用四个 sender、每个十轮，每轮仍传 1 MiB，但拆成 256 个 Write，即每个 4 KiB。这组关闭 <code>SYNC_MEMOPS</code>，分别运行 OFF 和 ON。sender 数和轮数是补测规模，主要变化是单轮 WR 数量。</p>
+<p><strong>结果与分析。</strong> 两组仍然通过。更细的请求拆分没有改变“最后一个 Write 完成后再 launch kernel”的顺序。</p>
+<h3 id="validator-检查"><a href="#validator-检查" class="headerlink" title="validator 检查"></a>validator 检查</h3><p><strong>假设。</strong> 连续 PASS 也需要排除 validator 漏报错误。</p>
+<p><strong>验证。</strong> B300 的 H2D、D2D 测试故意跳过某轮 Write，仍按新一轮内容校验。并发版另外检查了设备校验失败、kernel launch error 和错误 CQE 的传播。</p>
+<p><strong>结果与分析。</strong> 跳过 Write 后，kernel 识别出了旧数据，错误也传回发送端。其他错误没有被汇总成成功。这验证了检测链路，但人工留下旧数据与自然出现的 visibility 问题不是同一个原因。</p>
+<h2 id="实验局限：kernel-launch-时序"><a href="#实验局限：kernel-launch-时序" class="headerlink" title="实验局限：kernel launch 时序"></a>实验局限：kernel launch 时序</h2><p>现有实验一直保留同一条顺序：<strong>最后一个 Write 获得 ACK，发送端取到成功 CQE 并发送 <code>WRITE_DONE</code>，接收端收到通知后 launch 新 kernel。</strong> NVIDIA 文档把 CPU 发起的相关 CUDA work submission 和 synchronization API 列为建立 GPUDirect RDMA ordering 的机制，前提是外部写入在提交依赖 kernel 前已经完成。[1] 这与 B300 的 <code>OWNER</code> 一起解释了为什么关闭显式 flush 仍然正确。</p>
+<p>剩下的一个待验证假设是 kernel 的运行方式。<strong>persistent kernel</strong> 指一次 launch 后留在 GPU 上等待后续轮次的 kernel，它不会每轮都经过新的 CPU launch。当前实验没有覆盖这个条件，原始失败场景也没有被完整还原，不能把它直接写成根因或保证能够复现的方案。</p>
+<p>后续验证需要保留同样明确的完成条件，并说明 persistent kernel 怎样得知本轮已写完、何时读取 buffer，以及何时允许下一轮覆盖。用于通知 kernel 的标志与 payload 之间需要平台支持的同步保证，不能仅把 CPU 线程间的 release/acquire 写法搬过去就认定成立。</p>
+<p>对 PPU，记录只支持当前流程全部通过，缺少进一步解释内部机制的证据。记录也没有测出 <code>WRITE_DONE</code> 到实际读取的间隔，不能把通知耗时当作已确认的原因。当前结论仍是：未得到 OFF 失败、ON 成功的对照，因此尚未证明 workaround 的必要性或它对原始问题的修复作用。</p>
+<h2 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h2><p>实验参数与结果来自本次记录。以下公开资料用于核对 API 语义。</p>
 <ol>
 <li><a href="https://docs.nvidia.com/cuda/gpudirect-rdma/index.html#synchronization-and-memory-ordering" target="_blank" rel="noopener">GPUDirect RDMA: Synchronization and Memory Ordering</a>。</li>
 <li><a href="https://github.com/NVIDIA/nccl/blob/v2.27.7-1/src/transport/net_ib.cc" target="_blank" rel="noopener">NCCL v2.27.7-1 RDMA implementation</a>：loopback readback、请求长度和 <code>ncclIbIflush()</code>。版本用于固定源码依据，不代表实验环境。</li>
 <li><a href="https://docs.nvidia.com/cuda/archive/13.0.1/cuda-driver-api/group__CUDA__UNIFIED.html" target="_blank" rel="noopener">CUDA 13.0.1: Unified Addressing</a>。</li>
 <li><a href="https://docs.nvidia.com/cuda/archive/13.0.1/cuda-driver-api/group__CUDA__TYPES.html" target="_blank" rel="noopener">CUDA 13.0.1: Data Types</a>。</li>
 <li><a href="https://docs.nvidia.com/cuda/archive/13.0.1/cuda-driver-api/group__CUDA__DEVICE.html" target="_blank" rel="noopener">CUDA 13.0.1: Device Management</a>：flush scope 与 no-op 条件。</li>
-<li><a href="https://github.com/linux-rdma/rdma-core/blob/master/libibverbs/man/ibv_post_send.3" target="_blank" rel="noopener">rdma-core: ibv_post_send</a>：WR 提交与 signaled 设置。</li>
+<li><a href="https://networking-docs.nvidia.com/doca/sdk/rdma-aware-networks-programming-guide" target="_blank" rel="noopener">RDMA-Aware Networks Programming Guide</a>：<code>ibv_post_send()</code>、<code>ibv_poll_cq()</code> 与 completion 状态。</li>
 </ol>
 
       
@@ -728,7 +735,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#实验目标：RDMA-Write-的-GPU-visibility"><span class="nav-number">1.</span> <span class="nav-text">实验目标：RDMA Write 的 GPU visibility</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#基础实验：同机-RDMA-传输与设备端校验"><span class="nav-number">2.</span> <span class="nav-text">基础实验：同机 RDMA 传输与设备端校验</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#PPU：单连接负载与-WR-拆分"><span class="nav-number">3.</span> <span class="nav-text">PPU：单连接负载与 WR 拆分</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#B300：OWNER-memory-ordering"><span class="nav-number">4.</span> <span class="nav-text">B300：OWNER memory ordering</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#B300：显式-flush-与传输路径对照"><span class="nav-number">5.</span> <span class="nav-text">B300：显式 flush 与传输路径对照</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#并发负载与验证器检查"><span class="nav-number">6.</span> <span class="nav-text">并发负载与验证器检查</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#实验局限：GPU-消费时序"><span class="nav-number">7.</span> <span class="nav-text">实验局限：GPU 消费时序</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#参考资料"><span class="nav-number">8.</span> <span class="nav-text">参考资料</span></a></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#实验目标：RDMA-Write-的-GPU-visibility"><span class="nav-number">1.</span> <span class="nav-text">实验目标：RDMA Write 的 GPU visibility</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#基础实验：同机-RDMA-传输与设备端校验"><span class="nav-number">2.</span> <span class="nav-text">基础实验：同机 RDMA 传输与设备端校验</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#PPU：单连接负载与-WR-拆分"><span class="nav-number">3.</span> <span class="nav-text">PPU：单连接负载与 WR 拆分</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#payload-大小与-WR-数量"><span class="nav-number">3.1.</span> <span class="nav-text">payload 大小与 WR 数量</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#SYNC-MEMOPS"><span class="nav-number">3.2.</span> <span class="nav-text">SYNC_MEMOPS</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#B300：OWNER-memory-ordering"><span class="nav-number">4.</span> <span class="nav-text">B300：OWNER memory ordering</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#B300：显式-flush-与传输路径对照"><span class="nav-number">5.</span> <span class="nav-text">B300：显式 flush 与传输路径对照</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#并发负载与-validator-检查"><span class="nav-number">6.</span> <span class="nav-text">并发负载与 validator 检查</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#并发-sender-与重复轮数"><span class="nav-number">6.1.</span> <span class="nav-text">并发 sender 与重复轮数</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#WR-拆分补测"><span class="nav-number">6.2.</span> <span class="nav-text">WR 拆分补测</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#validator-检查"><span class="nav-number">6.3.</span> <span class="nav-text">validator 检查</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#实验局限：kernel-launch-时序"><span class="nav-number">7.</span> <span class="nav-text">实验局限：kernel launch 时序</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#参考资料"><span class="nav-number">8.</span> <span class="nav-text">参考资料</span></a></li></ol></div>
             
 
           </div>
