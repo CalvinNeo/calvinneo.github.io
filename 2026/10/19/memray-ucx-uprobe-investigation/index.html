@@ -1,0 +1,1452 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.1" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="Linux,内存管理,AIGen,profiling,RDMA," />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="Calvin's Marbles" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.1" />
+
+
+
+
+
+
+<meta name="description" content="Memray attach 到一个运行中的 Python 进程时，在创建辅助线程的过程中触发了 SIGSEGV。沿着调用栈检查，问题落在 libc 的 mmap 入口：首字节是 libc 文件中的原始内容，紧接着的四字节却能解出一条指向 UCX 的跳转位移。 调查记录中的独立映射实验复现了这个变化。实际使用的 memleak 安装 uprobe 时，把入口首字节从 E9 改成 CC，退出时又恢复成">
+<meta name="keywords" content="Linux,内存管理,AIGen,profiling,RDMA">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Memray attach 故障分析：uprobe 撤销与 UCX 内联 hook 的冲突">
+<meta property="og:url" content="http://www.calvinneo.com/2026/10/19/memray-ucx-uprobe-investigation/index.html">
+<meta property="og:site_name" content="Calvin&#39;s Marbles">
+<meta property="og:description" content="Memray attach 到一个运行中的 Python 进程时，在创建辅助线程的过程中触发了 SIGSEGV。沿着调用栈检查，问题落在 libc 的 mmap 入口：首字节是 libc 文件中的原始内容，紧接着的四字节却能解出一条指向 UCX 的跳转位移。 调查记录中的独立映射实验复现了这个变化。实际使用的 memleak 安装 uprobe 时，把入口首字节从 E9 改成 CC，退出时又恢复成">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2026-10-20T00:54:38.171Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Memray attach 故障分析：uprobe 撤销与 UCX 内联 hook 的冲突">
+<meta name="twitter:description" content="Memray attach 到一个运行中的 Python 进程时，在创建辅助线程的过程中触发了 SIGSEGV。沿着调用栈检查，问题落在 libc 的 mmap 入口：首字节是 libc 文件中的原始内容，紧接着的四字节却能解出一条指向 UCX 的跳转位移。 调查记录中的独立映射实验复现了这个变化。实际使用的 memleak 安装 uprobe 时，把入口首字节从 E9 改成 CC，退出时又恢复成">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://www.calvinneo.com/2026/10/19/memray-ucx-uprobe-investigation/"/>
+
+
+
+
+
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5487541356791902"
+     crossorigin="anonymous"></script>
+  <title>Memray attach 故障分析：uprobe 撤销与 UCX 内联 hook 的冲突 | Calvin's Marbles</title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Calvin's Marbles</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+        <li class="menu-item menu-item-search">
+          
+            <a href="javascript:;" class="popup-trigger">
+          
+            
+              <i class="menu-item-icon fa fa-search fa-fw"></i> <br />
+            
+            搜索
+          </a>
+        </li>
+      
+    </ul>
+  
+
+  
+    <div class="site-search">
+      
+  <div class="popup search-popup local-search-popup">
+  <div class="local-search-header clearfix">
+    <span class="search-icon">
+      <i class="fa fa-search"></i>
+    </span>
+    <span class="popup-btn-close">
+      <i class="fa fa-times-circle"></i>
+    </span>
+    <div class="local-search-input-wrapper">
+      <input autocapitalize="off" autocomplete="off" autocorrect="off"
+             placeholder="搜索..." spellcheck="false"
+             type="text" id="local-search-input">
+    </div>
+  </div>
+  <div id="local-search-result"></div>
+</div>
+
+
+
+    </div>
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://www.calvinneo.com/2026/10/19/memray-ucx-uprobe-investigation/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Calvin Neo">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/favicon.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Calvin's Marbles">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+            
+            
+              
+                Memray attach 故障分析：uprobe 撤销与 UCX 内联 hook 的冲突
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2026-10-19T00:00:00+08:00">
+                2026-10-19
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>Memray attach 到一个运行中的 Python 进程时，在创建辅助线程的过程中触发了 <code>SIGSEGV</code>。沿着调用栈检查，问题落在 libc 的 <code>mmap</code> 入口：首字节是 libc 文件中的原始内容，紧接着的四字节却能解出一条指向 UCX 的跳转位移。</p>
+<p>调查记录中的独立映射实验复现了这个变化。实际使用的 memleak 安装 uprobe 时，把入口首字节从 <code>E9</code> 改成 <code>CC</code>，退出时又恢复成 <code>F3</code>。最终留下的 16 字节与故障进程完全一致。本文围绕这段字节的来源，记录故障指令、UCX hook、内核恢复路径与对照实验之间的关系。<strong>字节损坏机制已经复现，原进程的历史写入过程没有被直接记录。</strong></p>
+<a id="more"></a>
+
+<h2 id="故障环境与-Memray-的调用路径"><a href="#故障环境与-Memray-的调用路径" class="headerlink" title="故障环境与 Memray 的调用路径"></a>故障环境与 Memray 的调用路径</h2><p>此前的<a href="/2024/08/23/use-ebpf-to-monitor-memory/">使用 eBPF 监控内存分配</a>主要讨论分配统计与 RSS 等指标的关系。这次是在一个包含 Python 和原生库的推理环境中排查内存增长，接入 Memray 时发生了异常，需要先查清辅助线程为什么创建失败。</p>
+<p>以下版本、地址和实验输出来自 2026 年 10 月 19 日的调查记录。目标是容器中的 PID 1，命令行以 <code>/usr/bin/python /usr/local/bin/torchrun --nproc_per_node 8</code> 开头，进程名为 <code>pt_elastic</code>，从 10 月 17 日起运行。这个进程负责启动和管理 worker，是 launcher。本文取证的地址与字节属于这个 launcher，其他 worker 有各自的 PID 和地址空间。</p>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>现场信息</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>架构与内核</td>
+<td>x86-64，<code>5.15.0-94-generic</code></td>
+</tr>
+<tr>
+<td>容器用户空间</td>
+<td>Ubuntu 24.04 noble</td>
+</tr>
+<tr>
+<td>Python</td>
+<td><code>3.12.3</code></td>
+</tr>
+<tr>
+<td>Memray</td>
+<td><code>1.20.0</code></td>
+</tr>
+<tr>
+<td>GDB</td>
+<td><code>15.1-1ubuntu1~24.04.1</code></td>
+</tr>
+<tr>
+<td>glibc 包</td>
+<td><code>libc6 2.39-0ubuntu8.5</code></td>
+</tr>
+<tr>
+<td>UCX 内存事件库</td>
+<td><code>/opt/hpcx/ucx/lib/libucm.so.0.0.0</code>，精确发行版本未取得</td>
+</tr>
+<tr>
+<td>实际成功运行的 memleak</td>
+<td><code>/usr/sbin/memleak</code>，日志与行为对应 libbpf-tools 实现，精确构建版本未取得</td>
+</tr>
+</tbody></table>
+<p>这里容器中的用户空间是 Ubuntu 24.04，使用的宿主机内核是 <code>5.15.0-94-generic</code>。</p>
+<p>Memray 最初只报告：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">An unexpected error occurred. Run with --verbose to debug the failure.</span><br></pre></td></tr></table></figure>
+
+<p>补充 GDB 诊断后，相关调用栈如下：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">#0  0x00007fc3785a32f0 in mmap64 () from libc.so.6</span><br><span class="line">#1  0x00007fc37851b537 in pthread_create () from libc.so.6</span><br><span class="line">#2  memray_spawn_client (...) at inject.cpp:264</span><br><span class="line">#3  &lt;function called from gdb&gt;</span><br></pre></td></tr></table></figure>
+
+<p>这条 attach 路径通过 GDB 在目标进程中执行函数，GDB 把这种操作称为 <strong>inferior call</strong>，其中 inferior 就是被调试进程。<a href="https://github.com/bloomberg/memray/blob/v1.20.0/src/memray/_memray/inject.cpp#L256" target="_blank" rel="noopener">Memray 1.20.0 的注入实现</a>在 <code>memray_spawn_client()</code> 中调用 <code>pthread_create()</code>。源码注释说明，attach 时解释器可能正在修改 GC 链表等不可重入的状态，因此创建一个辅助线程，由它取得 GIL（CPython 的全局解释器锁）后再执行 Python 代码。</p>
+<p>这次创建线程需要为线程栈建立映射。现场寄存器中的映射长度是 <code>0x801000</code>：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">0x801000 = 8 × 1024 × 1024 + 4096 字节</span><br><span class="line">         = 8 MiB + 4 KiB</span><br></pre></td></tr></table></figure>
+
+<p>这个长度与本次调用中 8 MiB 栈加一页保护空间的分配路径相符。调查记录对精确版本 libc 的离线反汇编还确认，栈中返回地址之前是一条直接调用 <code>mmap</code> 入口的指令。</p>
+<p>发生异常的是已有主线程 LWP 1，它正在执行 GDB 发起的函数调用，辅助线程尚未创建成功。这次到达故障入口的具体路径是 <code>memray_spawn_client → pthread_create → mmap</code>。</p>
+<h2 id="mmap-入口的字节与故障地址"><a href="#mmap-入口的字节与故障地址" class="headerlink" title="mmap 入口的字节与故障地址"></a>mmap 入口的字节与故障地址</h2><h3 id="内存中的入口与-libc-文件不同"><a href="#内存中的入口与-libc-文件不同" class="headerlink" title="内存中的入口与 libc 文件不同"></a>内存中的入口与 libc 文件不同</h3><p>现场停在 <code>mmap64</code> 的第一条指令：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">0x7fc3785a32f0 &lt;mmap64&gt;: repz mov -0x2(%rbx,%rdi,2),%eax</span><br></pre></td></tr></table></figure>
+
+<p>为核对这条指令，调查继续读取进程内存中的字节。GDB 会管理软件断点，部分内存读取接口会展示被断点替换之前的内容，因此这里采用调试器退出后的独立读取。</p>
+<p>在 GDB detach 之后，通过 <code>/proc/1/mem</code> 直接读取同一地址，并与目标进程根目录下的 libc 文件比较，得到：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">memory: f3 8b 44 7b fe f7 c1 ff 0f 00 00 75 33 55 48 89</span><br><span class="line">disk:   f3 0f 1e fa 41 f7 c1 ff 0f 00 00 75 33 55 48 89</span><br></pre></td></tr></table></figure>
+
+<p>这里选择读取 16 字节，是为了同时覆盖前五字节补丁和紧接着的指令。检查前还核对了 <code>/proc/1/stat</code> 的启动时间字段，避免 PID 被复用后读到另一个进程。</p>
+<p>文件中的 <code>F3 0F 1E FA</code> 是 <code>ENDBR64</code>，用于 x86 控制流保护技术 CET 中的间接分支跟踪。启用间接分支跟踪时，这条指令标记允许到达的间接分支目标。本例需要核对的是它占据的四个字节。后面的 <code>41 F7 C1 ...</code> 则是检查 <code>%r9d</code> 低位的指令。</p>
+<p>比较文件内容还需要把进程虚拟地址换算成文件偏移。现场包含故障地址的映射从 <code>0x7fc3785a3000</code> 开始，对应文件偏移 <code>0x125000</code>，因此：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">入口文件偏移 = 映射文件偏移 +（入口虚拟地址 - 映射起始地址）</span><br><span class="line">             = 0x125000 + (0x7fc3785a32f0 - 0x7fc3785a3000)</span><br><span class="line">             = 0x1252f0</span><br></pre></td></tr></table></figure>
+
+<p>诊断包记录了映射所对应的文件与目标根目录下的 libc 具有相同 inode 和 Build ID。离线取得的 Ubuntu 官方库也匹配这个 Build ID，其文件标识如下：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Build ID: 282c2c16e7b6600b0b22ea0c99010d2795752b5f</span><br><span class="line">SHA256:   de259f5276c4a991f78bf87225d6b40e56edbffe0dcbc0ffca36ec7fe30f3f77</span><br></pre></td></tr></table></figure>
+
+<p>文件身份核对确认了这些字节属于同一构建的 libc，detach 后的直接读取确认了错误字节仍留在进程内存中。</p>
+<h3 id="错误指令解释了本次-SIGSEGV"><a href="#错误指令解释了本次-SIGSEGV" class="headerlink" title="错误指令解释了本次 SIGSEGV"></a>错误指令解释了本次 SIGSEGV</h3><p>现场寄存器与信号信息为：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">rbx     = 0xfffffffffffff000  # 按有符号数解释为 -4096</span><br><span class="line">rdi     = 0</span><br><span class="line">si_addr = 0xffffffffffffeffe  # 按有符号数解释为 -4098</span><br></pre></td></tr></table></figure>
+
+<p>按这条 <code>mov</code> 的寻址方式，读取地址是：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">rbx + rdi × 2 - 2 = -4096 + 0 × 2 - 2 = -4098</span><br></pre></td></tr></table></figure>
+
+<p>结果与信号中的 <code>si_addr</code> 完全一致。这使得故障栈、实际入口字节、寄存器与非法访问地址相互对应：本次 <code>SIGSEGV</code> 就发生在错误入口的第一次内存读取处。</p>
+<h2 id="残留位移与-UCX-内联-hook"><a href="#残留位移与-UCX-内联-hook" class="headerlink" title="残留位移与 UCX 内联 hook"></a>残留位移与 UCX 内联 hook</h2><p>内存中的前五字节是 <code>F3 8B 44 7B FE</code>。如果把首字节暂时按 <code>E9</code> 解释，后面的四字节恰好能构成一条 x86-64 相对跳转。</p>
+<p><code>E9 rel32</code> 总共占五字节，<code>E9</code> 是操作码，<code>rel32</code> 是小端编码的有符号 32 位位移。跳转基准是这条指令结束后的地址，因此可以离线计算：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">候选指令：E9 8B 44 7B FE</span><br><span class="line">位移：    0xFE7B448B - 2^32 = -25,475,957</span><br><span class="line">目标：    0x7fc3785a32f0 + 5 - 25,475,957</span><br><span class="line">        = 0x7fc376d57780</span><br></pre></td></tr></table></figure>
+
+<p>候选目标位于已经加载的 <code>libucm.so.0.0.0</code> 中。根据现场映射换算到库内，位置是 <code>0xb780</code>，恰好对应：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">000000000000b780 &lt;ucm_override_mmap&gt;:</span><br><span class="line">    b780: f3 0f 1e fa    endbr64</span><br><span class="line">    b784: 41 57          push %r15</span><br><span class="line">    ...</span><br></pre></td></tr></table></figure>
+
+<p>这四字节位移恰好指向 <code>ucm_override_mmap</code> 的入口。整个计算使用已经取得的地址与字节，在离线条件下完成。</p>
+<h3 id="libucm-的内存事件机制"><a href="#libucm-的内存事件机制" class="headerlink" title="libucm 的内存事件机制"></a>libucm 的内存事件机制</h3><p>UCX 是面向高性能通信的软件框架，<code>libucm</code> 是其中负责内存事件的组件。<strong>内联 hook</strong> 指直接改写已有函数的入口，把调用转到替代实现。在这个例子中，libc 的 <code>mmap</code> 入口被改成跳转，原本进入 libc 的调用就会先到达 <code>ucm_override_mmap</code>。</p>
+<p>UCX 需要知道映射何时建立、释放或改变。例如，在 RDMA 场景中，注册一段内存需要向通信设备登记地址范围与访问权限。注册缓存保存已经完成注册的区域，后续操作可以复用它们。应用释放一段映射后，同一虚拟地址可以映射到另一组物理页，因此覆盖这段地址的旧缓存项需要失效。<code>libucm</code> 提供 <code>mmap</code>、<code>munmap</code> 等内存事件，供注册缓存处理这些变化。</p>
+<p>在 <a href="https://github.com/openucx/ucx/blob/v1.18.0/src/ucs/memory/rcache.c#L618" target="_blank" rel="noopener">UCX v1.18.0 的注册缓存实现</a>中，<code>ucs_rcache_unmapped_callback()</code> 收到 <code>UCM_EVENT_VM_UNMAPPED</code> 后，从事件中取得地址和长度，算出待失效范围。随后按锁与配置条件立即处理相交缓存项，或把这个范围放入失效队列。这就是内存事件与注册缓存之间的具体连接。</p>
+<p>在 <a href="https://github.com/openucx/ucx/blob/v1.18.0/src/ucm/mmap/install.c#L61" target="_blank" rel="noopener">UCX v1.18.0 的安装代码</a>中，内存事件表通过 <code>UCM_MMAP_RELOC_ENTRY(mmap)</code> 将 <code>mmap</code> 与 <code>ucm_override_mmap</code> 对应起来。在称为 <strong>bistro</strong> 的内联改写模式下，安装逻辑取得原函数地址，然后调用 <code>ucm_bistro_patch()</code>。<a href="https://github.com/openucx/ucx/blob/v1.18.0/src/ucm/bistro/bistro_x86_64.c#L319" target="_blank" rel="noopener">x86-64 实现</a>在位移允许且未强制远跳转时，使用上述 <code>E9 rel32</code> 补丁。</p>
+<p>实际建立映射仍然由内核完成。bistro 模式的<a href="https://github.com/openucx/ucx/blob/v1.18.0/src/ucm/util/replace.h#L100" target="_blank" rel="noopener">原始操作路径</a>可以直接发起系统调用，避免重新进入刚刚改写的 libc 入口。</p>
+<p>安装代码用 <code>installed_events</code> 记录已经安装的事件，遍历事件表时会跳过对应项。跳转写入入口后，后续调用直接执行这条跳转。本次分析的起点就是探针安装前已经存在的五字节跳转。</p>
+<blockquote>
+<p>现场没有取得 UCX 的精确发行版本，v1.18.0 用来核对实现路径。对现场库的判断依据是残留位移、进程映射以及 <code>ucm_override_mmap</code> 的符号位置。调查记录还列出了已加载的 PyTorch、Open MPI、UCC 等库，具体业务请求的通信调用栈未被采集。</p>
+</blockquote>
+<h2 id="uprobe-保存与恢复的原始指令"><a href="#uprobe-保存与恢复的原始指令" class="headerlink" title="uprobe 保存与恢复的原始指令"></a>uprobe 保存与恢复的原始指令</h2><p>接下来的问题是，谁会保留跳转的四字节位移，却把 <code>E9</code> 变回文件中的 <code>F3</code>。先前运行过的 memleak 是一条需要核查的路径。</p>
+<p>memleak 的用户态分配追踪在 <code>malloc</code>、<code>mmap</code> 等函数进入和返回时采集分配信息，再与释放事件关联。这里使用的 <strong>uprobe</strong> 是 Linux 的用户态动态探针机制，探测位置以文件 inode 和文件偏移标识，再应用到目标进程的相应映射。eBPF 程序负责探针命中后的采集逻辑，代码位置上的探针由内核安装。</p>
+<p>在本次 x86-64 路径中，内核将探测位置的首字节改成 <code>CC</code>，即一字节的 <code>INT3</code> 软件断点。执行到这里时，CPU 触发断点异常，内核识别 uprobe，调用关联处理逻辑，再执行或模拟被替换的原指令。需要异地执行时会使用 <strong>XOL（execute out of line）</strong> 指令区，即在独立位置执行保存的指令，然后继续原执行流。</p>
+<p>这里选择 <code>mmap</code> 的入口作为探测位置。原来的 <code>ENDBR64</code> 占四字节，UCX 跳转占五字节，<code>INT3</code> 占一字节。安装探针时只需用 <code>CC</code> 覆盖这条入口指令的第一个字节。</p>
+<h3 id="保存值来自文件页缓存"><a href="#保存值来自文件页缓存" class="headerlink" title="保存值来自文件页缓存"></a>保存值来自文件页缓存</h3><p>在上游 Linux v5.15 的 <a href="https://github.com/torvalds/linux/blob/v5.15/kernel/events/uprobes.c#L790" target="_blank" rel="noopener"><code>copy_insn()</code></a> 中，读取来源是：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">address_space</span> *<span class="title">mapping</span> = <span class="title">uprobe</span>-&gt;<span class="title">inode</span>-&gt;<span class="title">i_mapping</span>;</span></span><br><span class="line"><span class="keyword">loff_t</span> offs = uprobe-&gt;offset;</span><br><span class="line"><span class="keyword">void</span> *insn = &amp;uprobe-&gt;arch.insn;</span><br></pre></td></tr></table></figure>
+
+<p>它通过 <code>__copy_insn()</code>，从文件页缓存读取对应偏移的指令。对于这里的普通文件，该函数使用 <code>read_mapping_page()</code> 取得页面，然后把内容复制到 <code>uprobe-&gt;arch.insn</code>。</p>
+<p>这份保存值与进程私有代码页中当前的指令可以不同。UCX 改写的是进程中的映射，libc 文件仍以 <code>F3 0F 1E FA</code> 开头，所以内核保存的原指令也从 <code>F3</code> 开始。</p>
+<p><strong>内核在准备探针时保存文件页缓存中的指令，撤销时使用这份保存值。</strong> 文件页已经在缓存中时，读取直接使用该页。</p>
+<h3 id="写入保留了当前页面的其他字节"><a href="#写入保留了当前页面的其他字节" class="headerlink" title="写入保留了当前页面的其他字节"></a>写入保留了当前页面的其他字节</h3><p>实际修改进程代码走的是 <a href="https://github.com/torvalds/linux/blob/v5.15/kernel/events/uprobes.c#L464" target="_blank" rel="noopener"><code>uprobe_write_opcode()</code></a>。其中两个连续操作说明了新页面从哪里来，以及改多少字节：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">copy_highpage(new_page, old_page);</span><br><span class="line">copy_to_page(new_page, vaddr, &amp;opcode, UPROBE_SWBP_INSN_SIZE);</span><br></pre></td></tr></table></figure>
+
+<p>先复制进程当前的页面，再只替换断点覆盖的部分。<a href="https://github.com/torvalds/linux/blob/v5.15/arch/x86/include/asm/uprobes.h#L20" target="_blank" rel="noopener">x86 定义</a>为：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">define</span> UPROBE_SWBP_INSN       0xcc</span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">define</span> UPROBE_SWBP_INSN_SIZE     1</span></span><br></pre></td></tr></table></figure>
+
+<p>安装时写入 <code>CC</code>。撤销时，<a href="https://github.com/torvalds/linux/blob/v5.15/kernel/events/uprobes.c#L589" target="_blank" rel="noopener"><code>set_orig_insn()</code></a>传入保存的原指令起始字节，通过同一写入路径恢复。于是，读取“原始内容”的来源是文件页缓存，保留其余字节的来源却是进程当前页面。</p>
+<p>将这两个来源放到现场的五字节上，得到：</p>
+<table>
+<thead>
+<tr>
+<th>状态</th>
+<th>libc 文件中的入口</th>
+<th>进程内存中的入口</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>未改写</td>
+<td><code>F3 0F 1E FA 41</code></td>
+<td><code>F3 0F 1E FA 41</code></td>
+</tr>
+<tr>
+<td>UCX 安装跳转后</td>
+<td><code>F3 0F 1E FA 41</code></td>
+<td><code>E9 8B 44 7B FE</code></td>
+</tr>
+<tr>
+<td>uprobe 安装后</td>
+<td><code>F3 0F 1E FA 41</code></td>
+<td><code>CC 8B 44 7B FE</code></td>
+</tr>
+<tr>
+<td>uprobe 撤销后</td>
+<td><code>F3 0F 1E FA 41</code></td>
+<td><code>F3 8B 44 7B FE</code></td>
+</tr>
+</tbody></table>
+<p>内核保存的是 <code>F3</code>，安装时覆盖的却是 <code>E9</code>。撤销只恢复首字节，后面仍是 UCX 跳转的位移，最终组成了一条混合指令。</p>
+<p>撤销代码还会比较恢复后的页面与文件页缓存是否完全一致。如果一致，可以让映射回到文件页。本例保留了四字节跳转位移，整页相等的条件不成立，进程继续使用包含这些字节的私有页面。</p>
+<p>这几次写入可以严格按顺序发生：UCX 安装跳转，memleak 安装探针，再撤销探针。每一步读取和写入的内容由上表确定。即使目标始终没有执行过这个入口，完成安装与撤销也会留下 <code>F3 8B 44 7B FE</code>。</p>
+<blockquote>
+<p><a href="https://github.com/torvalds/linux/blob/v5.15/kernel/events/uprobes.c#L258" target="_blank" rel="noopener"><code>verify_opcode()</code></a>在撤销时检查当前位置是否仍是软件断点。当前位置已经被改成其他字节时，它会返回并跳过恢复。本例撤销前的字节为 <code>CC</code>，满足继续恢复的条件。上述源码来自上游 v5.15，现场 Ubuntu <code>5.15.0-94</code> 的完整补丁集尚未核对，后面的实验用于验证现场内核实际写入了什么。</p>
+</blockquote>
+<h2 id="memleak-的实现与运行记录"><a href="#memleak-的实现与运行记录" class="headerlink" title="memleak 的实现与运行记录"></a>memleak 的实现与运行记录</h2><p>调查记录中出现了两个 memleak 命令，它们的实现和运行结果不同。</p>
+<table>
+<thead>
+<tr>
+<th>命令</th>
+<th>实现</th>
+<th>记录到的结果</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>/usr/sbin/memleak-bpfcc</code></td>
+<td>BCC Python 脚本</td>
+<td>缺少 kernel headers，在编译 BPF 模块时失败</td>
+</tr>
+<tr>
+<td><code>/usr/sbin/memleak -p 1 5 3</code></td>
+<td>日志与行为对应 libbpf-tools 实现</td>
+<td>正常输出过周期统计</td>
+</tr>
+</tbody></table>
+<p>第一条命令的错误停在：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">Unable to find kernel headers.</span><br><span class="line">...</span><br><span class="line">bpf = BPF(text=bpf_source)</span><br><span class="line">Exception: Failed to compile BPF module &lt;text&gt;</span><br></pre></td></tr></table></figure>
+
+<p><a href="https://github.com/iovisor/bcc/blob/v0.29.1/tools/memleak.py#L464" target="_blank" rel="noopener">BCC v0.29.1 的 Python 实现</a>先执行 <code>BPF(text=bpf_source)</code>，成功后才依次调用 <code>attach_probes()</code>。因此，记录中的这次失败发生在 <code>mmap</code> 探针安装之前。</p>
+<p>第二条命令中的 <code>-p 1</code> 指向目标进程，<code>5</code> 是报告间隔秒数，<code>3</code> 是报告次数。这是当时的操作记录。随后用于对照实验的也是这个 <code>/usr/sbin/memleak</code>。</p>
+<p>两种实现对安装失败的处理有一处与本次调查直接相关的差异。Python 版调用 <code>attach_probes(&quot;mmap&quot;, can_fail=True)</code>，允许该探针安装失败后继续运行。<a href="https://github.com/iovisor/bcc/blob/v0.29.1/libbpf-tools/memleak.c#L1029" target="_blank" rel="noopener">libbpf-tools 的对应代码</a>则为 <code>mmap</code> 入口和返回探针使用检查错误的宏：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">ATTACH_UPROBE_CHECKED(skel, mmap, mmap_enter);</span><br><span class="line">ATTACH_URETPROBE_CHECKED(skel, mmap, mmap_exit);</span><br></pre></td></tr></table></figure>
+
+<p>在所核对的实现中，任一安装失败都会离开 <code>attach_uprobes()</code>，主程序进入清理流程。成功后才进入周期报告循环。退出时，程序释放持有的探针连接，内核据此移除相应探针。因此，正常输出周期统计提供了探针安装已通过的线索。</p>
+<p>这里引用 v0.29.1，是因为日志文本、探针逻辑，以及下一节的路径截断行为与现场相符。实际二进制的包归属、版本和哈希尚未取得，本文保留这个版本信息缺口。</p>
+<h2 id="独立映射上的对照实验"><a href="#独立映射上的对照实验" class="headerlink" title="独立映射上的对照实验"></a>独立映射上的对照实验</h2><p>实验要测量的是三个时刻的入口字节：安装之前、探针存在期间、撤销之后。为此，可以只映射 libc 副本并观察代码页，把实际函数调用留在实验之外。</p>
+<p>实验脚本可下载：<a href="/asset/memray-ucx-uprobe/verify-uprobe-restore.py">verify-uprobe-restore.py</a>。它在原容器中运行，使用现场的 libc 和 <code>/usr/sbin/memleak</code>，以脚本自身的 PID 为探测目标。</p>
+<h3 id="文件与映射的安排"><a href="#文件与映射的安排" class="headerlink" title="文件与映射的安排"></a>文件与映射的安排</h3><p>脚本先检查 libc 文件的 SHA256，再检查文件偏移 <code>0x1252f0</code> 处的 16 字节是否与现场原始入口相同。这个偏移由前面的映射换算得到，哈希检查将它限定在已核对的 libc 构建上。</p>
+<p>接着，脚本普通复制一份 libc，并检查副本与源文件的设备号、inode 组合不同。因为 uprobe 用 inode 和文件偏移定位探测位置，副本的独立 inode 能让本次安装作用于副本对应的映射。</p>
+<p>同一个副本建立两份 <code>MAP_PRIVATE</code> 映射：</p>
+<table>
+<thead>
+<tr>
+<th>映射</th>
+<th>初始入口</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>control</td>
+<td><code>F3 0F 1E FA 41 ...</code></td>
+<td>检查原始入口能否在撤销后恢复</td>
+</tr>
+<tr>
+<td>patched</td>
+<td><code>E9 8B 44 7B FE ...</code></td>
+<td>检查已有跳转在撤销后留下哪些字节</td>
+</tr>
+</tbody></table>
+<p>实验组起初以可读、可写权限映射，写入五字节补丁后，调用 <code>mprotect()</code> 改成只读、可执行，即 <code>RX</code>。这是实验成立的一个具体条件：上游 v5.15 的 <a href="https://github.com/torvalds/linux/blob/v5.15/kernel/events/uprobes.c#L121" target="_blank" rel="noopener"><code>valid_vma()</code></a>在安装探针时排除带 <code>VM_WRITE</code> 的映射。脚本会检查 <code>/proc/self/maps</code>，确认两份映射的权限均为 <code>r-xp</code> 后再启动 memleak。</p>
+<p>探针通过 <code>-p</code> 指定脚本 PID，通过 <code>-O</code> 指定 libc 副本。报告间隔设为一秒，共报告两次，以留出观察 <code>CC</code> 的时间窗口。脚本在 memleak 运行前、运行期间和退出后读取两份映射，并在结束时检查磁盘副本的内容。</p>
+<p>实验组中的跳转位移原样取自现场。由于映射地址已经改变，这份位移在实验进程中没有对应的 UCX 调用目标。脚本仅将映射中的字节作为数据读取，全程没有调用其中的代码。</p>
+<h3 id="首次运行中的对象路径截断"><a href="#首次运行中的对象路径截断" class="headerlink" title="首次运行中的对象路径截断"></a>首次运行中的对象路径截断</h3><p>首次运行没有观察到字节变化，结果为 <code>INCONCLUSIVE</code>。memleak 日志给出了安装失败的位置：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">libbpf: elf: failed to open /tmp/uprobe-restore-0b5_rgb8/li: No such file or directory</span><br><span class="line">no program attached for malloc_enter: No such file or directory</span><br><span class="line">failed to attach uprobes</span><br></pre></td></tr></table></figure>
+
+<p>传入的完整路径为：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">/tmp/uprobe-restore-0b5_rgb8/libc-copy.so</span><br></pre></td></tr></table></figure>
+
+<p>这个路径包含 41 个 ASCII 字节，日志中的路径只剩下前 31 字节。<a href="https://github.com/iovisor/bcc/blob/v0.29.1/libbpf-tools/memleak.c#L43" target="_blank" rel="noopener">libbpf-tools 的对象路径字段</a>定义为 <code>char object[32]</code>，处理 <code>-O</code> 时使用：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">strncpy</span>(env.object, arg, <span class="keyword">sizeof</span>(env.object) - <span class="number">1</span>);</span><br></pre></td></tr></table></figure>
+
+<p>最多复制 31 字节，最后一个位置留给 <code>NUL</code>。被截断的文件路径不存在，因此 memleak 在第一个 <code>malloc_enter</code> 探针处退出。这轮运行尚未到达 <code>mmap</code> 探针的安装步骤。</p>
+<p>随后把临时目录前缀缩短，得到 <code>/tmp/ur-xxxxxxxx/c.so</code> 这样的路径。其中随机目录名部分为 8 个字符，整个路径共 21 字节。脚本同时加入长度检查，再进行下一轮实验。</p>
+<h3 id="安装与撤销期间的实测字节"><a href="#安装与撤销期间的实测字节" class="headerlink" title="安装与撤销期间的实测字节"></a>安装与撤销期间的实测字节</h3><p>调查记录中，在原容器执行：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">python3 verify-uprobe-restore.py /usr/sbin/memleak</span><br></pre></td></tr></table></figure>
+
+<p>输出如下，PID、临时路径、设备号和 inode 均为这次运行的实际值：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">libc SHA256: de259f5276c4a991f78bf87225d6b40e56edbffe0dcbc0ffca36ec7fe30f3f77</span><br><span class="line">Evidence directory: /tmp/ur-gfv8n1n1</span><br><span class="line">Source/copy device+inode: (2097292, 56099800) (2051, 2398963)</span><br><span class="line">Command: /usr/sbin/memleak -p 83885 -O /tmp/ur-gfv8n1n1/c.so 1 2</span><br><span class="line">before control: f3 0f 1e fa 41 f7 c1 ff 0f 00 00 75 33 55 48 89</span><br><span class="line">before patched: e9 8b 44 7b fe f7 c1 ff 0f 00 00 75 33 55 48 89</span><br><span class="line">during control: cc 0f 1e fa 41 f7 c1 ff 0f 00 00 75 33 55 48 89</span><br><span class="line">during patched: cc 8b 44 7b fe f7 c1 ff 0f 00 00 75 33 55 48 89</span><br><span class="line">during control: f3 0f 1e fa 41 f7 c1 ff 0f 00 00 75 33 55 48 89</span><br><span class="line">during patched: f3 8b 44 7b fe f7 c1 ff 0f 00 00 75 33 55 48 89</span><br><span class="line">after  control: f3 0f 1e fa 41 f7 c1 ff 0f 00 00 75 33 55 48 89</span><br><span class="line">after  patched: f3 8b 44 7b fe f7 c1 ff 0f 00 00 75 33 55 48 89</span><br><span class="line">Result: REPRODUCED</span><br></pre></td></tr></table></figure>
+
+<p>对照组完成了 <code>F3 → CC → F3</code>。实验组完成了 <code>E9 → CC → F3</code>，后四字节一直是 <code>8B 44 7B FE</code>。最终实验组的 16 字节与 PID 1 中观察到的内容相同。</p>
+<p>脚本要求以下条件同时成立，才输出 <code>REPRODUCED</code>：观察到实验组入口为 <code>CC</code>，memleak 在超时前以状态码 0 退出，磁盘副本保持原样，对照组恢复原始 16 字节，实验组得到准确的损坏字节。这样，现场内核与实际工具怎样安装和撤销探针，就有了直接的字节观测。</p>
+<p>两份映射中都没有执行过代码，这次实验仍然得到了损坏入口。形成这些字节所需的操作已经缩小到：在已有五字节跳转的映射上安装探针，再撤销探针。</p>
+<h2 id="原进程故障与实验结果的对应"><a href="#原进程故障与实验结果的对应" class="headerlink" title="原进程故障与实验结果的对应"></a>原进程故障与实验结果的对应</h2><p>将源码与观测结果放在一起，原进程最符合现有证据的故障过程如下：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">UCX 将 mmap 入口改为 E9 8B 44 7B FE</span><br><span class="line">    ↓</span><br><span class="line">memleak 安装 uprobe，入口变为 CC 8B 44 7B FE</span><br><span class="line">    ↓</span><br><span class="line">memleak 退出，内核恢复文件原指令的首字节 F3</span><br><span class="line">    ↓</span><br><span class="line">入口留下 F3 8B 44 7B FE</span><br><span class="line">    ↓</span><br><span class="line">Memray 通过 GDB 调用 memray_spawn_client</span><br><span class="line">    ↓</span><br><span class="line">pthread_create 为线程栈调用 mmap</span><br><span class="line">    ↓</span><br><span class="line">错误的 mov 读取 0xffffffffffffeffe，触发 SIGSEGV</span><br></pre></td></tr></table></figure>
+
+<p>每个判断对应的证据可以分别列出：</p>
+<table>
+<thead>
+<tr>
+<th>判断</th>
+<th>依据</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>故障发生在错误入口的内存读取处</td>
+<td>指令的有效地址计算与 <code>si_addr</code> 相同</td>
+</tr>
+<tr>
+<td>入口中四字节位移指向 UCX hook</td>
+<td><code>E9 rel32</code> 的目标地址与现场 <code>ucm_override_mmap</code> 符号重合</td>
+</tr>
+<tr>
+<td>实际 memleak 能留下这些损坏字节</td>
+<td>独立映射实验记录了 <code>E9 → CC → F3</code>，最终 16 字节匹配</td>
+</tr>
+<tr>
+<td>业务 PID 上曾成功运行过 memleak</td>
+<td>操作记录与周期统计输出</td>
+</tr>
+<tr>
+<td>该次运行就是原进程入口损坏的写入来源</td>
+<td>根据以上事实作出的历史归因，缺少原进程改写前的快照与写入瞬间记录</td>
+</tr>
+</tbody></table>
+<p>实验直接验证了安装、撤销与字节变化之间的关系。原进程的历史归因还需要把那次成功运行的 memleak 与具体写入时刻对应起来，现有材料缺少第一次 Memray attach 之前的入口快照，也没有针对该地址的历史写入审计。因此，本文将它保留为最符合现有证据的解释。</p>
+<p>GDB 是调查中检查过的另一条写入路径。<a href="https://github.com/bloomberg/memray/blob/v1.20.0/src/memray/commands/_attach.gdb" target="_blank" rel="noopener">Memray 1.20.0 的 attach 脚本</a>在 <code>malloc</code>、<code>calloc</code>、Python 分配函数等位置设置断点，命中后删除这些断点，再加载注入库并调用 <code>memray_spawn_client()</code>。脚本没有在 <code>mmap</code> 入口设置断点，已有日志也未记录 GDB 在该地址恢复 <code>F3</code>。对 memleak 的判断则有独立映射中相同字节变化的直接支持。</p>
+<p>本次实验覆盖了上述流程中的探针安装和撤销步骤。真实 UCX 初始化、业务进程中的历史执行顺序，以及从初始化一直运行到 Memray 触发异常的完整复现，仍属于尚未完成的验证。</p>
+<h2 id="调用与调试状态补充"><a href="#调用与调试状态补充" class="headerlink" title="调用与调试状态补充"></a>调用与调试状态补充</h2><h3 id="launcher-的后续执行路径"><a href="#launcher-的后续执行路径" class="headerlink" title="launcher 的后续执行路径"></a>launcher 的后续执行路径</h3><p>损坏字节位于 launcher 的地址空间。已有线程可以继续等待，或执行不经过该入口的代码。worker 位于其他进程，它们的执行状态需要分别检查。调查前后 PID 和启动时间没有变化，说明这段观察期间未发现对应进程重启。</p>
+<p>还需要按实际调用地址区分映射路径。直接发起 <code>mmap</code> 系统调用的代码会从自己的系统调用指令进入内核，复用已有内存的分配也可以跳过这次映射。现场 libc 中的 <code>mmap</code>、<code>mmap64</code>、<code>__mmap</code> 则是同地址别名，通过这些符号进入时都会执行同一段字节。</p>
+<h3 id="错误入口的后续指令"><a href="#错误入口的后续指令" class="headerlink" title="错误入口的后续指令"></a>错误入口的后续指令</h3><p>第一次错误读取的地址由 <code>%rbx</code>、<code>%rdi</code> 决定。在本次调用中，它恰好是非法地址 <code>0xffffffffffffeffe</code>。另一组寄存器值若使读取地址落在可访问页面中，CPU 还会继续执行后面的指令。</p>
+<p>后面的字节同样需要重新解码。文件原始入口中的 <code>41</code> 是 REX 前缀，它使紧接着的 <code>F7 C1 ...</code> 使用 <code>%r9d</code>。这个前缀被五字节跳转覆盖后，从偏移 5 开始的指令变成：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">test $0xfff, %ecx</span><br></pre></td></tr></table></figure>
+
+<p>在这里的 x86-64 函数调用约定中，<code>mmap</code> 的第四个参数 flags 位于 <code>%ecx</code>，第六个参数 offset 位于 <code>%r9</code>。原始入口检查 offset 的低位，损坏入口检查的则是 flags 的低位。</p>
+<p><code>0xfff</code> 覆盖低 12 位，来自精确 libc 反汇编中的立即数。调查记录显示，随后条件跳转的目标是设置 <code>EINVAL</code> 的路径。现场 flags 为 <code>0x20022</code>，所以：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">0x20022 &amp; 0xfff = 0x22</span><br></pre></td></tr></table></figure>
+
+<p>如果执行到这条 <code>test</code>，结果非零，就会跳到该错误返回路径。本次实际执行在前一条 <code>mov</code> 已经触发 <code>SIGSEGV</code>，上述分支是根据字节与寄存器推导出的后续行为。</p>
+<h3 id="GDB-对-inferior-call-信号的处理"><a href="#GDB-对-inferior-call-信号的处理" class="headerlink" title="GDB 对 inferior call 信号的处理"></a>GDB 对 inferior call 信号的处理</h3><p>本次 attach 脚本设置了 <code>unwindonsignal</code>。在 inferior call 收到 <code>SIGSEGV</code> 后，GDB 恢复调用前的上下文，然后 detach。它恢复的是被调试调用的执行上下文，函数执行期间已经发生的内存写入、库加载，以及其他线程的动作会留在进程中。</p>
+<p>现场进程在这次调试操作后继续存活，与上述信号处理过程相符。通常未被处理的 <code>SIGSEGV</code> 会终止整个进程，因此用进程内新建线程执行同一错误入口，仍然会影响整个进程。</p>
+<h3 id="探针存在期间的执行"><a href="#探针存在期间的执行" class="headerlink" title="探针存在期间的执行"></a>探针存在期间的执行</h3><p>本次实验将映射用于字节读取，探针没有被命中。由此得到的直接观察覆盖安装与撤销期间的字节变化。探针存在期间，内核执行或模拟保存指令的行为，需要另设执行实验验证。</p>
+<p>这里保存的指令来自文件，进程原本准备执行的指令来自 UCX 补丁，两者已经不同。检查这一组合的兼容性时，还需要观察命中探针后是否按预期进入 <code>ucm_override_mmap</code>，以及后续参数和返回值是否正确。</p>
+<h2 id="处置与后续验证"><a href="#处置与后续验证" class="headerlink" title="处置与后续验证"></a>处置与后续验证</h2><p>继续调查应先保留当前进程的映射、入口字节、Build ID、工具版本和操作时间，再在独立进程中测试同一内核、UCX 与 profiler 的组合。新测试应在 UCX 安装后、探针安装后、撤销后分别读取入口，同时记录实际函数调用的结果。这样可以逐步补齐本次缺少的执行过程。</p>
+<p>已经损坏的业务入口需要结合进程恢复流程处理。在线写回 <code>E9</code> 要确认 UCX hook 仍然有效、线程当前是否正在执行被改写的区域，以及指令修改如何同步到其他线程。本次没有验证这样的在线修补流程。重建进程会重新映射库并执行初始化，恢复前还需要移除已知的触发组合，恢复后核对入口字节与服务行为。调查记录没有包含实际业务重启结果。</p>
+<p>后续选择 profiling 工具时，可以具体检查它如何接入目标：是否改写用户态函数入口、是否向目标注入代码、是否在目标中创建线程。本次 Memray 的调用栈确认了它会创建线程，memleak 的对照实验确认了它会通过内核改写入口。对同一版本组合，还应检查两个工具是否覆盖同一段代码，以及撤销探针后原有跳转的五个字节是否完整。</p>
+<h2 id="复现脚本补充"><a href="#复现脚本补充" class="headerlink" title="复现脚本补充"></a>复现脚本补充</h2><p>下载<a href="/asset/memray-ucx-uprobe/verify-uprobe-restore.py">完整实验脚本</a>后，显式指定现场实际使用的 memleak 运行：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">python3 verify-uprobe-restore.py /usr/sbin/memleak</span><br></pre></td></tr></table></figure>
+
+<p>原脚本省略命令行参数时会查找 <code>memleak-bpfcc</code>。复现实测组合时，按上面的命令显式传入 <code>/usr/sbin/memleak</code>。</p>
+<p>脚本限定 Linux x86-64，并在使用固定偏移前校验 libc 哈希。其他 libc 构建需要重新解析符号与文件偏移，再相应修改校验值。运行环境需要已经具备加载和附着用户态 BPF 探针的条件。</p>
+<p>脚本每 20 毫秒读取一次入口字节，在一秒报告间隔内多次观察探针状态。轮询以 60 秒为期限，超过期限后进入终止测试子进程的流程，依次尝试 <code>SIGINT</code>、<code>SIGTERM</code>、<code>SIGKILL</code>，每次最多等待 5 秒。这些数值都是用于控制实验时长与观察频率的参数。轮询未捕获到 <code>CC</code> 时，脚本会输出 <code>INCONCLUSIVE</code>，此时需要结合日志确认探针是否安装，以及观察窗口是否覆盖了它存在的时间。</p>
+<p>输出目录保留 <code>maps.txt</code>、<code>memleak.log</code>、<code>result.json</code> 与 libc 副本。<code>result.json</code> 记录内核版本、目标 PID、设备号与 inode、实际命令、观测字节和退出状态，便于与下一次运行比较。</p>
+<h2 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h2><ul>
+<li>Memray 1.20.0：<a href="https://github.com/bloomberg/memray/blob/v1.20.0/src/memray/commands/_attach.gdb" target="_blank" rel="noopener">GDB attach 脚本</a>、<a href="https://github.com/bloomberg/memray/blob/v1.20.0/src/memray/_memray/inject.cpp#L256" target="_blank" rel="noopener">辅助线程注入代码</a>。</li>
+<li>UCX v1.18.0：<a href="https://github.com/openucx/ucx/blob/v1.18.0/src/ucm/mmap/install.c#L61" target="_blank" rel="noopener">内存事件与 mmap hook 安装</a>、<a href="https://github.com/openucx/ucx/blob/v1.18.0/src/ucm/bistro/bistro_x86_64.c#L319" target="_blank" rel="noopener">x86-64 跳转补丁</a>、<a href="https://github.com/openucx/ucx/blob/v1.18.0/src/ucm/util/replace.h#L100" target="_blank" rel="noopener">bistro 模式的系统调用路径</a>、<a href="https://github.com/openucx/ucx/blob/v1.18.0/src/ucs/memory/rcache.c#L618" target="_blank" rel="noopener">注册缓存的映射释放回调</a>。</li>
+<li>Linux v5.15：<a href="https://github.com/torvalds/linux/blob/v5.15/kernel/events/uprobes.c#L790" target="_blank" rel="noopener">原指令读取</a>、<a href="https://github.com/torvalds/linux/blob/v5.15/kernel/events/uprobes.c#L464" target="_blank" rel="noopener">进程页改写</a>、<a href="https://github.com/torvalds/linux/blob/v5.15/kernel/events/uprobes.c#L589" target="_blank" rel="noopener">恢复入口</a>、<a href="https://github.com/torvalds/linux/blob/v5.15/kernel/events/uprobes.c#L258" target="_blank" rel="noopener">撤销前检查</a>、<a href="https://github.com/torvalds/linux/blob/v5.15/kernel/events/uprobes.c#L121" target="_blank" rel="noopener">映射条件</a>、<a href="https://github.com/torvalds/linux/blob/v5.15/arch/x86/include/asm/uprobes.h#L20" target="_blank" rel="noopener">x86 断点定义</a>。</li>
+<li>BCC v0.29.1：<a href="https://github.com/iovisor/bcc/blob/v0.29.1/tools/memleak.py#L464" target="_blank" rel="noopener">Python memleak</a>、libbpf-tools 的<a href="https://github.com/iovisor/bcc/blob/v0.29.1/libbpf-tools/memleak.c#L1029" target="_blank" rel="noopener">探针安装</a>与<a href="https://github.com/iovisor/bcc/blob/v0.29.1/libbpf-tools/memleak.c#L43" target="_blank" rel="noopener">对象路径字段</a>。</li>
+<li><a href="https://launchpad.net/ubuntu/+archive/primary/+files/libc6_2.39-0ubuntu8.5_amd64.deb" target="_blank" rel="noopener">Ubuntu libc6 2.39-0ubuntu8.5 amd64 官方包</a>，调查中用于核对现场 Build ID、符号和指令。</li>
+</ul>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+  <div style="padding: 10px 0; margin: 20px auto; width: 90%; text-align: center;">
+    <div></div>
+    <button id="rewardButton" disable="enable" onclick="var qr = document.getElementById('QR'); if (qr.style.display === 'none') {qr.style.display='block';} else {qr.style.display='none'}">
+      <span>赏</span>
+    </button>
+    <div id="QR" style="display: none;">
+      
+        <div id="wechat" style="display: inline-block">
+          <img id="wechat_qr" src="/img/fkm/wxfk.jpg" alt="Calvin Neo WeChat Pay"/>
+          <p>微信打赏</p>
+        </div>
+      
+      
+        <div id="alipay" style="display: inline-block">
+          <img id="alipay_qr" src="/img/fkm/zfbfk.jpg" alt="Calvin Neo Alipay"/>
+          <p>支付宝打赏</p>
+        </div>
+      
+    </div>
+  </div>
+
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/Linux/" rel="tag"># Linux</a>
+          
+            <a href="/tags/内存管理/" rel="tag"># 内存管理</a>
+          
+            <a href="/tags/AIGen/" rel="tag"># AIGen</a>
+          
+            <a href="/tags/profiling/" rel="tag"># profiling</a>
+          
+            <a href="/tags/RDMA/" rel="tag"># RDMA</a>
+          
+        </div>
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2026/10/14/rdma-visibility/" rel="next" title="一个 RDMA visibility 问题的讨论">
+                <i class="fa fa-chevron-left"></i> 一个 RDMA visibility 问题的讨论
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="disqus_thread">
+        <noscript>
+          Please enable JavaScript to view the
+          <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a>
+        </noscript>
+      </div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="/favicon.jpg"
+               alt="Calvin Neo" />
+          <p class="site-author-name" itemprop="name">Calvin Neo</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+          
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">282</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">157</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/CalvinNeo" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>
+                  
+                  GitHub
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="https://twitter.com/CalvinNeo0" target="_blank" title="Twitter">
+                  
+                    <i class="fa fa-fw fa-twitter"></i>
+                  
+                  Twitter
+                </a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="http://weibo.com/u/1568200035" target="_blank" title="Weibo">
+                  
+                    <i class="fa fa-fw fa-weibo"></i>
+                  
+                  Weibo
+                </a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+          <div class="links-of-blogroll motion-element links-of-blogroll-inline">
+            <div class="links-of-blogroll-title">
+              <i class="fa  fa-fw fa-globe"></i>
+              Links
+            </div>
+            <ul class="links-of-blogroll-list">
+              
+                <li class="links-of-blogroll-item">
+                  <a href="http://xqq.im/" title="xqq" target="_blank">xqq</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://www.lovelywen.com/" title="wenwen" target="_blank">wenwen</a>
+                </li>
+              
+                <li class="links-of-blogroll-item">
+                  <a href="https://smlight.github.io/blog/" title="zyyyyy" target="_blank">zyyyyy</a>
+                </li>
+              
+            </ul>
+          </div>
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#故障环境与-Memray-的调用路径"><span class="nav-number">1.</span> <span class="nav-text">故障环境与 Memray 的调用路径</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#mmap-入口的字节与故障地址"><span class="nav-number">2.</span> <span class="nav-text">mmap 入口的字节与故障地址</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#内存中的入口与-libc-文件不同"><span class="nav-number">2.1.</span> <span class="nav-text">内存中的入口与 libc 文件不同</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#错误指令解释了本次-SIGSEGV"><span class="nav-number">2.2.</span> <span class="nav-text">错误指令解释了本次 SIGSEGV</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#残留位移与-UCX-内联-hook"><span class="nav-number">3.</span> <span class="nav-text">残留位移与 UCX 内联 hook</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#libucm-的内存事件机制"><span class="nav-number">3.1.</span> <span class="nav-text">libucm 的内存事件机制</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#uprobe-保存与恢复的原始指令"><span class="nav-number">4.</span> <span class="nav-text">uprobe 保存与恢复的原始指令</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#保存值来自文件页缓存"><span class="nav-number">4.1.</span> <span class="nav-text">保存值来自文件页缓存</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#写入保留了当前页面的其他字节"><span class="nav-number">4.2.</span> <span class="nav-text">写入保留了当前页面的其他字节</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#memleak-的实现与运行记录"><span class="nav-number">5.</span> <span class="nav-text">memleak 的实现与运行记录</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#独立映射上的对照实验"><span class="nav-number">6.</span> <span class="nav-text">独立映射上的对照实验</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#文件与映射的安排"><span class="nav-number">6.1.</span> <span class="nav-text">文件与映射的安排</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#首次运行中的对象路径截断"><span class="nav-number">6.2.</span> <span class="nav-text">首次运行中的对象路径截断</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#安装与撤销期间的实测字节"><span class="nav-number">6.3.</span> <span class="nav-text">安装与撤销期间的实测字节</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#原进程故障与实验结果的对应"><span class="nav-number">7.</span> <span class="nav-text">原进程故障与实验结果的对应</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#调用与调试状态补充"><span class="nav-number">8.</span> <span class="nav-text">调用与调试状态补充</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#launcher-的后续执行路径"><span class="nav-number">8.1.</span> <span class="nav-text">launcher 的后续执行路径</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#错误入口的后续指令"><span class="nav-number">8.2.</span> <span class="nav-text">错误入口的后续指令</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#GDB-对-inferior-call-信号的处理"><span class="nav-number">8.3.</span> <span class="nav-text">GDB 对 inferior call 信号的处理</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#探针存在期间的执行"><span class="nav-number">8.4.</span> <span class="nav-text">探针存在期间的执行</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#处置与后续验证"><span class="nav-number">9.</span> <span class="nav-text">处置与后续验证</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#复现脚本补充"><span class="nav-number">10.</span> <span class="nav-text">复现脚本补充</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#参考资料"><span class="nav-number">11.</span> <span class="nav-text">参考资料</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">
+  
+  &copy;  2015 - 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Calvin Neo</span>
+  <span> &nbsp; Hosted by <a href="https://pages.coding.me" style="font-weight: bold">Coding Pages</a></span>
+</div>
+<div>
+  <span><a href="/about/yytl/">版权声明</a></span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Muse 
+  </a>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.1"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.1"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.1"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.1"></script>
+
+
+
+  
+
+
+  
+
+    
+
+    
+      <script type="text/javascript">
+        var disqus_config = function () {
+          this.page.url = 'http://www.calvinneo.com/2026/10/19/memray-ucx-uprobe-investigation/';
+          this.page.identifier = '2026/10/19/memray-ucx-uprobe-investigation/';
+          this.page.title = 'Memray attach 故障分析：uprobe 撤销与 UCX 内联 hook 的冲突';
+        };
+        var d = document, s = d.createElement('script');
+        s.src = 'https://calvinneo.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', '' + +new Date());
+        (d.head || d.body).appendChild(s);
+      </script>
+    
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+  <script type="text/javascript">
+    // Popup Window;
+    var isfetched = false;
+    // Search DB path;
+    var search_path = "search.xml";
+    if (search_path.length === 0) {
+      search_path = "search.xml";
+    }
+    var path = "/" + search_path;
+    // monitor main search box;
+
+    var onPopupClose = function (e) {
+      $('.popup').hide();
+      $('#local-search-input').val('');
+      $('.search-result-list').remove();
+      $('#no-result').remove();
+      $(".local-search-pop-overlay").remove();
+      $('body').css('overflow', '');
+    }
+
+    function proceedsearch() {
+      $("body")
+        .append('<div class="search-popup-overlay local-search-pop-overlay"></div>')
+        .css('overflow', 'hidden');
+      $('.search-popup-overlay').click(onPopupClose);
+      $('.popup').toggle();
+      $('#local-search-input').focus();
+    }
+
+    // search function;
+    var searchFunc = function(path, search_id, content_id) {
+      'use strict';
+      $.ajax({
+        url: path,
+        dataType: "xml",
+        async: true,
+        success: function( xmlResponse ) {
+          // get the contents from search data
+          isfetched = true;
+          $('.popup').detach().appendTo('.header-inner');
+          var datas = $( "entry", xmlResponse ).map(function() {
+            return {
+              title: $( "title", this ).text(),
+              content: $("content",this).text(),
+              url: $( "url" , this).text()
+            };
+          }).get();
+          var input = document.getElementById(search_id);
+          var resultContent = document.getElementById(content_id);
+          var inputEventFunction = function() {
+            var searchText = input.value.trim().toLowerCase();
+            var keywords = searchText.split(/[\s\-]+/);
+            if (keywords.length > 1) {
+              keywords.push(searchText);
+            }
+            var resultItems = [];
+            if (searchText.length > 0) {
+              // perform local searching
+              datas.forEach(function(data) {
+                var isMatch = false;
+                var hitCount = 0;
+                var searchTextCount = 0;
+                var title = data.title.trim();
+                var titleInLowerCase = title.toLowerCase();
+                var content = data.content.trim().replace(/<[^>]+>/g,"");
+                var contentInLowerCase = content.toLowerCase();
+                var articleUrl = decodeURIComponent(data.url);
+                var indexOfTitle = [];
+                var indexOfContent = [];
+                // only match articles with not empty titles
+                if(title != '') {
+                  keywords.forEach(function(keyword) {
+                    function getIndexByWord(word, text, caseSensitive) {
+                      var wordLen = word.length;
+                      if (wordLen === 0) {
+                        return [];
+                      }
+                      var startPosition = 0, position = [], index = [];
+                      if (!caseSensitive) {
+                        text = text.toLowerCase();
+                        word = word.toLowerCase();
+                      }
+                      while ((position = text.indexOf(word, startPosition)) > -1) {
+                        index.push({position: position, word: word});
+                        startPosition = position + wordLen;
+                      }
+                      return index;
+                    }
+
+                    indexOfTitle = indexOfTitle.concat(getIndexByWord(keyword, titleInLowerCase, false));
+                    indexOfContent = indexOfContent.concat(getIndexByWord(keyword, contentInLowerCase, false));
+                  });
+                  if (indexOfTitle.length > 0 || indexOfContent.length > 0) {
+                    isMatch = true;
+                    hitCount = indexOfTitle.length + indexOfContent.length;
+                  }
+                }
+
+                // show search results
+
+                if (isMatch) {
+                  // sort index by position of keyword
+
+                  [indexOfTitle, indexOfContent].forEach(function (index) {
+                    index.sort(function (itemLeft, itemRight) {
+                      if (itemRight.position !== itemLeft.position) {
+                        return itemRight.position - itemLeft.position;
+                      } else {
+                        return itemLeft.word.length - itemRight.word.length;
+                      }
+                    });
+                  });
+
+                  // merge hits into slices
+
+                  function mergeIntoSlice(text, start, end, index) {
+                    var item = index[index.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    var hits = [];
+                    var searchTextCountInSlice = 0;
+                    while (position + word.length <= end && index.length != 0) {
+                      if (word === searchText) {
+                        searchTextCountInSlice++;
+                      }
+                      hits.push({position: position, length: word.length});
+                      var wordEnd = position + word.length;
+
+                      // move to next position of hit
+
+                      index.pop();
+                      while (index.length != 0) {
+                        item = index[index.length - 1];
+                        position = item.position;
+                        word = item.word;
+                        if (wordEnd > position) {
+                          index.pop();
+                        } else {
+                          break;
+                        }
+                      }
+                    }
+                    searchTextCount += searchTextCountInSlice;
+                    return {
+                      hits: hits,
+                      start: start,
+                      end: end,
+                      searchTextCount: searchTextCountInSlice
+                    };
+                  }
+
+                  var slicesOfTitle = [];
+                  if (indexOfTitle.length != 0) {
+                    slicesOfTitle.push(mergeIntoSlice(title, 0, title.length, indexOfTitle));
+                  }
+
+                  var slicesOfContent = [];
+                  while (indexOfContent.length != 0) {
+                    var item = indexOfContent[indexOfContent.length - 1];
+                    var position = item.position;
+                    var word = item.word;
+                    // cut out 100 characters
+                    var start = position - 20;
+                    var end = position + 80;
+                    if(start < 0){
+                      start = 0;
+                    }
+                    if (end < position + word.length) {
+                      end = position + word.length;
+                    }
+                    if(end > content.length){
+                      end = content.length;
+                    }
+                    slicesOfContent.push(mergeIntoSlice(content, start, end, indexOfContent));
+                  }
+
+                  // sort slices in content by search text's count and hits' count
+
+                  slicesOfContent.sort(function (sliceLeft, sliceRight) {
+                    if (sliceLeft.searchTextCount !== sliceRight.searchTextCount) {
+                      return sliceRight.searchTextCount - sliceLeft.searchTextCount;
+                    } else if (sliceLeft.hits.length !== sliceRight.hits.length) {
+                      return sliceRight.hits.length - sliceLeft.hits.length;
+                    } else {
+                      return sliceLeft.start - sliceRight.start;
+                    }
+                  });
+
+                  // select top N slices in content
+
+                  var upperBound = parseInt('1');
+                  if (upperBound >= 0) {
+                    slicesOfContent = slicesOfContent.slice(0, upperBound);
+                  }
+
+                  // highlight title and content
+
+                  function highlightKeyword(text, slice) {
+                    var result = '';
+                    var prevEnd = slice.start;
+                    slice.hits.forEach(function (hit) {
+                      result += text.substring(prevEnd, hit.position);
+                      var end = hit.position + hit.length;
+                      result += '<b class="search-keyword">' + text.substring(hit.position, end) + '</b>';
+                      prevEnd = end;
+                    });
+                    result += text.substring(prevEnd, slice.end);
+                    return result;
+                  }
+
+                  var resultItem = '';
+
+                  if (slicesOfTitle.length != 0) {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + highlightKeyword(title, slicesOfTitle[0]) + "</a>";
+                  } else {
+                    resultItem += "<li><a href='" + articleUrl + "' class='search-result-title'>" + title + "</a>";
+                  }
+
+                  slicesOfContent.forEach(function (slice) {
+                    resultItem += "<a href='" + articleUrl + "'>" +
+                      "<p class=\"search-result\">" + highlightKeyword(content, slice) +
+                      "...</p>" + "</a>";
+                  });
+
+                  resultItem += "</li>";
+                  resultItems.push({
+                    item: resultItem,
+                    searchTextCount: searchTextCount,
+                    hitCount: hitCount,
+                    id: resultItems.length
+                  });
+                }
+              })
+            };
+            if (keywords.length === 1 && keywords[0] === "") {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-search fa-5x" /></div>'
+            } else if (resultItems.length === 0) {
+              resultContent.innerHTML = '<div id="no-result"><i class="fa fa-frown-o fa-5x" /></div>'
+            } else {
+              resultItems.sort(function (resultLeft, resultRight) {
+                if (resultLeft.searchTextCount !== resultRight.searchTextCount) {
+                  return resultRight.searchTextCount - resultLeft.searchTextCount;
+                } else if (resultLeft.hitCount !== resultRight.hitCount) {
+                  return resultRight.hitCount - resultLeft.hitCount;
+                } else {
+                  return resultRight.id - resultLeft.id;
+                }
+              });
+              var searchResultList = '<ul class=\"search-result-list\">';
+              resultItems.forEach(function (result) {
+                searchResultList += result.item;
+              })
+              searchResultList += "</ul>";
+              resultContent.innerHTML = searchResultList;
+            }
+          }
+
+          if ('auto' === 'auto') {
+            input.addEventListener('input', inputEventFunction);
+          } else {
+            $('.search-icon').click(inputEventFunction);
+            input.addEventListener('keypress', function (event) {
+              if (event.keyCode === 13) {
+                inputEventFunction();
+              }
+            });
+          }
+          proceedsearch();
+        }
+      });}
+
+    // handle and trigger popup window;
+    $('.popup-trigger').click(function(e) {
+      e.stopPropagation();
+      if (isfetched === false) {
+        searchFunc(path, 'local-search-input', 'local-search-result');
+      } else {
+        proceedsearch();
+      };
+    });
+
+    $('.popup-btn-close').click(onPopupClose);
+    $('.popup').click(function(e){
+      e.stopPropagation();
+    });
+    $(document).on('keyup', function (event) {
+      var shouldDismissSearchPopup = event.which === 27 &&
+        $('.search-popup').is(':visible');
+      if (shouldDismissSearchPopup) {
+        onPopupClose();
+      }
+    });
+  </script>
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
