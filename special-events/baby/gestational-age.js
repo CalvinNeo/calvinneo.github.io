@@ -3,6 +3,7 @@
 
   var DAY_MS = 24 * 60 * 60 * 1000;
   var STYLE_ID = 'gestational-age-component-styles';
+  var instanceCount = 0;
 
   function pad(number) {
     return String(number).padStart(2, '0');
@@ -46,6 +47,12 @@
     return result;
   }
 
+  function today() {
+    var date = new Date();
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }
+
   function formatAge(totalDays) {
     if (!Number.isFinite(totalDays)) {
       return '无法计算';
@@ -66,32 +73,34 @@
     var style = document.createElement('style');
     style.id = STYLE_ID;
     style.textContent = [
+      'gestational-age { display: block; }',
       '.gestational-age-card {',
-      '  margin: 1.5em 0;',
-      '  padding: 1.25em;',
+      '  margin: 1em 0;',
+      '  padding: 0.85em 1em;',
       '  border: 1px solid #d8e8e1;',
       '  border-radius: 8px;',
       '  background: #f8fbfa;',
+      '  font-size: 0.9em;',
       '}',
-      '.gestational-age-card h3 { margin-top: 0; }',
-      '.gestational-age-reference { color: #65756e; font-size: 0.9em; }',
+      '.gestational-age-card h3 { margin: 0 0 0.6em; font-size: 1.1em; }',
       '.gestational-age-grid {',
       '  display: grid;',
-      '  grid-template-columns: repeat(auto-fit, minmax(12em, 1fr));',
-      '  gap: 0.75em;',
-      '  margin: 1em 0;',
+      '  grid-template-columns: repeat(auto-fit, minmax(9em, 1fr));',
+      '  gap: 0.5em 0.75em;',
+      '  margin: 0.65em 0;',
       '}',
       '.gestational-age-value {',
       '  display: block;',
-      '  margin-top: 0.25em;',
+      '  margin-top: 0.15em;',
       '  color: #2b6954;',
-      '  font-size: 1.3em;',
+      '  font-size: 1.1em;',
       '  font-weight: 700;',
       '}',
-      '.gestational-age-date { color: #65756e; font-size: 0.9em; }',
+      '.gestational-age-date { color: #65756e; font-size: 0.8em; }',
       '.gestational-age-card label { display: inline-flex; align-items: center; gap: 0.5em; }',
-      '.gestational-age-card input { max-width: 11em; }',
-      '.gestational-age-selected { margin-bottom: 0.5em; }',
+      '.gestational-age-card label { font-size: 0.9em; }',
+      '.gestational-age-card input { max-width: 10em; }',
+      '.gestational-age-selected { margin: 0.55em 0 0; font-size: 0.9em; }',
       '.gestational-age-error { color: #a33a3a; }'
     ].join('\n');
     document.head.appendChild(style);
@@ -122,6 +131,7 @@
       }
 
       ensureStyles();
+      this.instanceId = 'gestational-age-' + (++instanceCount);
       this.render();
       this.update();
       this.input.addEventListener('input', this.updateSelected.bind(this));
@@ -135,14 +145,12 @@
     }
 
     render() {
-      var selectedDate = parseDate(this.getAttribute('selected-date')) || this.referenceDate;
+      var selectedDate = parseDate(this.getAttribute('selected-date')) || today();
       var dueDate = addDays(this.referenceDate, 280 - this.referenceAgeDays);
 
       this.innerHTML = [
-        '<section class="gestational-age-card" aria-labelledby="gestational-age-title">',
-        '  <h3 id="gestational-age-title">孕周</h3>',
-        '  <p class="gestational-age-reference">参考：',
-        padDate(this.referenceDate), ' = ', formatAge(this.referenceAgeDays), '</p>',
+        '<section class="gestational-age-card" aria-labelledby="', this.instanceId, '-title">',
+        '  <h3 id="', this.instanceId, '-title">孕周</h3>',
         '  <div class="gestational-age-grid">',
         '    <div>',
         '      <span>当前时间</span>',
@@ -155,8 +163,8 @@
         '      <time class="gestational-age-date" data-role="due-date-label"></time>',
         '    </div>',
         '  </div>',
-        '  <label for="gestational-age-date">查看指定日期的孕周',
-        '    <input id="gestational-age-date" data-role="selected-date" type="date" value="',
+        '  <label for="', this.instanceId, '-date">查看指定日期的孕周',
+        '    <input id="', this.instanceId, '-date" data-role="selected-date" type="date" value="',
         padDate(selectedDate), '">',
         '  </label>',
         '  <p class="gestational-age-selected" aria-live="polite" data-role="selected-output"></p>',
@@ -184,8 +192,7 @@
     }
 
     update() {
-      var currentDate = new Date();
-      currentDate.setHours(0, 0, 0, 0);
+      var currentDate = today();
       this.currentAge.textContent = formatAge(
         this.referenceAgeDays + daysBetween(this.referenceDate, currentDate)
       );
